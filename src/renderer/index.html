@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
+  <link rel="stylesheet" href="../../node_modules/@xterm/xterm/css/xterm.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>Claude Multi</title>
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="brand">
+        <div class="logo">CC</div>
+        <div>
+          <div class="brand-title">Claude Multi</div>
+          <div class="brand-sub">multi-account launcher</div>
+        </div>
+        <button id="settingsBtn" class="icon-btn" title="Settings">⚙</button>
+      </div>
+
+      <div class="section-label">
+        Project folder
+        <button id="recentBtn" class="mini-btn" title="Recent folders">▾</button>
+      </div>
+      <button id="pickProject" class="project-btn" title="Choose the folder Claude Code works in">
+        <span id="projectPath">No folder selected</span>
+      </button>
+      <div id="recentMenu" class="popup hidden"></div>
+
+      <div class="section-label">
+        Accounts <span id="availCount" class="count-pill"></span>
+        <button id="addAccount" class="mini-btn" title="Add an account">+</button>
+      </div>
+      <div id="accountList" class="account-list"></div>
+
+      <div class="hint" id="loginHint">
+        Tip: to log in an account, launch it and type <code>/login</code> in the terminal.
+      </div>
+
+      <div class="sidebar-footer">
+        <button id="restartBtn" class="ghost-btn" disabled title="Restart current session with --continue">Restart</button>
+        <button id="stopBtn" class="ghost-btn" disabled>Stop</button>
+      </div>
+
+      <div class="app-footer">
+        <div class="trust">🔒 100% free &amp; open source. Your logins stay on your machine — we never store or send your credentials.</div>
+        <div class="footer-links">
+          <a id="ghLink" class="footer-link" href="#" title="View the source on GitHub">
+            <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+            <span>GitHub</span>
+          </a>
+          <span class="footer-by">by <b>Chaman Raj</b></span>
+        </div>
+      </div>
+    </aside>
+
+    <main id="main">
+      <div id="topbar">
+        <div id="activeBadge" class="badge idle">No session</div>
+        <div class="stat" id="timerStat" title="Session duration">⏱ 00:00</div>
+        <div class="stat" id="switchStat" title="Switches this run">⇄ 0</div>
+        <div class="spacer"></div>
+        <div id="approachBanner" class="approach hidden"></div>
+        <div class="toolbar">
+          <button id="switchMenuBtn" class="tool-btn" title="Switch account now" disabled>Switch ▾</button>
+          <button id="searchBtn" class="tool-btn" title="Search (Ctrl+F)">Find</button>
+          <button id="copyBtn" class="tool-btn" title="Copy selection (Ctrl+Shift+C)">Copy</button>
+          <button id="pasteBtn" class="tool-btn" title="Paste (Ctrl+Shift+V)">Paste</button>
+          <button id="fontDownBtn" class="tool-btn" title="Smaller text (Ctrl+-)">A−</button>
+          <button id="fontUpBtn" class="tool-btn" title="Larger text (Ctrl+=)">A+</button>
+          <button id="clearBtn" class="tool-btn" title="Clear terminal (Ctrl+K)">Clear</button>
+        </div>
+      </div>
+      <div id="switchMenu" class="popup hidden"></div>
+      <div id="searchBar" class="search-bar hidden">
+        <input id="searchInput" type="text" placeholder="Search terminal…" />
+        <button id="searchPrev" class="tool-btn" title="Previous">↑</button>
+        <button id="searchNext" class="tool-btn" title="Next">↓</button>
+        <button id="searchClose" class="tool-btn" title="Close">✕</button>
+      </div>
+      <div id="terminal"></div>
+      <div id="emptyState" class="empty-state hidden">
+        <div class="empty-card">
+          <div class="empty-logo">CC</div>
+          <h2>Welcome to Claude Multi</h2>
+          <ol>
+            <li>Pick your <b>project folder</b> (top-left).</li>
+            <li>Click <b>+</b> to add an account, then <b>Launch</b> it.</li>
+            <li>Type <code>/login</code> in the terminal to sign that account in.</li>
+            <li>Repeat for each account. When one runs out, you'll be offered a switch — your conversation carries over.</li>
+          </ol>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Limit / switch dialog -->
+  <div id="overlay" class="hidden">
+    <div class="dialog">
+      <div class="dialog-icon">⚡</div>
+      <h2 id="dlgTitle">Usage limit reached</h2>
+      <p id="dlgBody"></p>
+      <div class="dialog-actions">
+        <button id="dlgCancel" class="ghost-btn">Not now</button>
+        <button id="dlgSwitch" class="primary-btn">Switch account</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings modal -->
+  <div id="settingsOverlay" class="hidden">
+    <div class="dialog settings-dialog">
+      <h2>Settings</h2>
+      <div class="setting-row">
+        <label for="setAutoSwitch"><b>Auto-switch on limit</b><span>Switch accounts automatically (with a countdown) instead of asking.</span></label>
+        <input type="checkbox" id="setAutoSwitch" class="switch" />
+      </div>
+      <div class="setting-row">
+        <label for="setDelay"><b>Auto-switch countdown</b><span>Seconds to wait before switching.</span></label>
+        <input type="number" id="setDelay" min="0" max="60" class="num" />
+      </div>
+      <div class="setting-row">
+        <label for="setNotify"><b>Desktop notifications</b><span>Notify when a limit is hit or an account switches.</span></label>
+        <input type="checkbox" id="setNotify" class="switch" />
+      </div>
+      <div class="setting-row">
+        <label for="setConfirmClose"><b>Confirm before quit</b><span>Warn if a session is live when closing the app.</span></label>
+        <input type="checkbox" id="setConfirmClose" class="switch" />
+      </div>
+      <div class="setting-row">
+        <label for="setTheme"><b>Theme</b></label>
+        <select id="setTheme" class="num">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label for="setExtraArgs"><b>Extra launch flags</b><span>Passed to <code>claude</code> on launch, e.g. <code>--model opus</code>.</span></label>
+        <input type="text" id="setExtraArgs" class="text" placeholder="(none)" />
+      </div>
+      <div class="setting-row">
+        <label><b>Claude executable</b><span id="claudePathLabel">—</span></label>
+        <button id="pickClaudeBtn" class="ghost-btn">Locate…</button>
+      </div>
+      <div id="aboutLine" class="about"></div>
+      <div class="about privacy-note">🔒 Free &amp; open source · no telemetry · your credentials never leave your device.</div>
+      <div class="about"><a id="ghLink2" class="footer-link">★ Star on GitHub — github.com/Chamanrajragu</a></div>
+      <div class="dialog-actions">
+        <button id="settingsClose" class="primary-btn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+
+  <script src="../../node_modules/@xterm/xterm/lib/xterm.js"></script>
+  <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="../../node_modules/@xterm/addon-search/lib/addon-search.js"></script>
+  <script src="../../node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

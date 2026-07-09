@@ -1,0 +1,146 @@
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { Store, DEFAULT_SETTINGS, slug } = require('../src/accounts');
+
+function tmp() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-test-'));
+  return {
+    dir,
+    file: path.join(dir, 'accounts.json'),
+    root: path.join(dir, 'roots'),
+    cleanup: () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} },
+  };
+}
+
+test('fresh store has defaults', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    assert.deepStrictEqual(s.list(), []);
+    assert.deepStrictEqual(s.getSettings(), { ...DEFAULT_SETTINGS });
+    assert.deepStrictEqual(s.get('recentProjects'), []);
+  } finally { t.cleanup(); }
+});
+
+test('add / rename / remove / byId', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    const a = s.add('Personal');
+    assert.strictEqual(a.id, 'personal');
+    assert.ok(fs.existsSync(a.configDir), 'config dir created');
+    assert.strictEqual(s.byId('personal').name, 'Personal');
+
+    s.rename('personal', 'Main');
+    assert.strictEqual(s.byId('personal').name, 'Main');
+
+    s.remove('personal');
+    assert.strictEqual(s.byId('personal'), undefined);
+    assert.deepStrictEqual(s.list(), []);
+  } finally { t.cleanup(); }
+});
+
+test('duplicate names get unique ids', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    const a = s.add('Work');
+    const b = s.add('Work');
+    const c = s.add('Work');
+    assert.strictEqual(a.id, 'work');
+    assert.strictEqual(b.id, 'work-2');
+    assert.strictEqual(c.id, 'work-3');
+  } finally { t.cleanup(); }
+});
+
+test('settings merge and persist across reload', () => {
+  const t = tmp();
+  try {
+    let s = new Store(t.file, t.root);
+    s.setSettings({ autoSwitch: true, fontSize: 16 });
+    // reload from disk
+    s = new Store(t.file, t.root);
+    const cfg = s.getSettings();
+    assert.strictEqual(cfg.autoSwitch, true);
+    assert.strictEqual(cfg.fontSize, 16);
+    // untouched keys keep defaults
+    assert.strictEqual(cfg.notify, DEFAULT_SETTINGS.notify);
+  } finally { t.cleanup(); }
+});
+
+test('recent projects dedup, cap at 8, and set lastProjectDir', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    for (let i = 0; i < 12; i++) s.addRecentProject('/proj/' + i);
+    s.addRecentProject('/proj/3'); // move to front / dedup
+    const recents = s.get('recentProjects');
+    assert.strictEqual(recents.length, 8);
+    assert.strictEqual(recents[0], '/proj/3');
+    assert.strictEqual(new Set(recents).size, recents.length, 'no dupes');
+    assert.strictEqual(s.get('lastProjectDir'), '/proj/3');
+  } finally { t.cleanup(); }
+});
+
+test('cooldown set/clear persists across reload', () => {
+  const t = tmp();
+  try {
+    let s = new Store(t.file, t.root);
+    s.add('acc');
+    const until = Date.now() + 60_000;
+    s.setCooldown('acc', until, 'resets 3pm');
+    s = new Store(t.file, t.root);
+    assert.strictEqual(s.byId('acc').cooldownUntil, until);
+    assert.strictEqual(s.byId('acc').cooldownHint, 'resets 3pm');
+    s.clearCooldown('acc');
+    assert.strictEqual(s.byId('acc').cooldownUntil, 0);
+  } finally { t.cleanup(); }
+});
+
+test('list() enriches with loggedIn=false when no .claude.json', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    s.add('x');
+    const [entry] = s.list();
+    assert.strictEqual(entry.loggedIn, false);
+    assert.strictEqual(entry.email, '');
+  } finally { t.cleanup(); }
+});
+
+test('list() reads email from a written .claude.json', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    const a = s.add('y');
+    fs.writeFileSync(
+      path.join(a.configDir, '.claude.json'),
+      JSON.stringify({ oauthAccount: { emailAddress: 'me@example.com', subscriptionType: 'max' } }),
+    );
+    const [entry] = s.list();
+    assert.strictEqual(entry.loggedIn, true);
+    assert.strictEqual(entry.email, 'me@example.com');
+    assert.strictEqual(entry.plan, 'max');
+  } finally { t.cleanup(); }
+});
+
+test('corrupt store file falls back to defaults (no throw)', () => {
+  const t = tmp();
+  try {
+    fs.mkdirSync(path.dirname(t.file), { recursive: true });
+    fs.writeFileSync(t.file, '{ this is not json');
+    let s;
+    assert.doesNotThrow(() => { s = new Store(t.file, t.root); });
+    assert.deepStrictEqual(s.list(), []);
+    assert.deepStrictEqual(s.getSettings(), { ...DEFAULT_SETTINGS });
+  } finally { t.cleanup(); }
+});
+
+test('slug helper', () => {
+  assert.strictEqual(slug('Hello World!'), 'hello-world');
+  assert.strictEqual(slug('   '), 'account');
+  assert.strictEqual(slug('A'.repeat(50)).length, 24);
+});
