@@ -11,6 +11,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Free](https://img.shields.io/badge/price-100%25%20free-brightgreen)
 ![No tracking](https://img.shields.io/badge/telemetry-none-blue)
+[![Download](https://img.shields.io/badge/download-Windows%20.exe-d97757)](https://github.com/Chamanrajragu/claude-multi/releases/latest)
 
 **A free, open-source desktop app (GUI) for Claude Code — manage up to 20 Claude accounts, pick an account per project, and auto-switch when you hit a usage limit. Runs entirely on your machine and never stores or sends your credentials.**
 
@@ -23,6 +24,12 @@
 </div>
 
 ---
+
+## ⬇️ Download
+
+**[Get the latest Windows build →](https://github.com/Chamanrajragu/claude-multi/releases/latest)**
+
+Grab `Claude-Multi-…-win-x64-portable.zip`, unzip it anywhere, and run **`Claude Multi.exe`** — no installer required. (You'll still need [Node.js](https://nodejs.org) and [Claude Code](https://claude.com/claude-code) installed.) Prefer to run from source? See [Quick start](#quick-start).
 
 ## Why?
 
