@@ -88,6 +88,28 @@
         <button id="searchClose" class="tool-btn" title="Close">✕</button>
       </div>
       <div id="terminal"></div>
+
+      <div id="composer">
+        <div class="composer-box">
+          <button id="micBtn" class="mic-btn" title="Dictate with your voice">🎤</button>
+          <textarea id="composerInput" rows="1" placeholder="Send a message to Claude…  (Enter to send · Shift+Enter for a new line)"></textarea>
+          <button id="sendBtn" class="composer-send" title="Send (Enter)">Send</button>
+        </div>
+        <div class="composer-bar">
+          <div class="cb-left">
+            <button id="modelBtn" class="chip" title="Choose the Claude model">◇ <span id="modelLabel">Default model</span> <span class="pa-caret">▾</span></button>
+            <button id="modeBtn" class="chip" title="Cycle permission mode (sends Shift+Tab)">⏵⏵ <span id="modeLabel">Mode</span></button>
+          </div>
+          <div class="cb-right">
+            <button class="chip preset" data-insert="ultrathink ">✦ ultrathink</button>
+            <button class="chip preset" data-send="/compact">/compact</button>
+            <button class="chip preset" data-send="/clear">/clear</button>
+            <button class="chip preset" data-key="esc" title="Interrupt Claude (Esc)">Esc</button>
+          </div>
+        </div>
+        <div id="modelMenu" class="popup hidden"></div>
+      </div>
+
       <div id="emptyState" class="empty-state hidden">
         <div class="empty-card">
           <div class="empty-logo">CC</div>

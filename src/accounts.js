@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS = {
   fontSize: 13,            // terminal font size
   extraArgs: '',           // extra flags passed to `claude` on launch
   confirmClose: true,      // warn before quitting during a live session
+  model: '',               // default model alias passed via --model (''=account default)
 };
 
 function slug(name) {

@@ -63,6 +63,10 @@ function renderBadge() {
   $('stopBtn').disabled = !state.running;
   $('restartBtn').disabled = !state.running;
   $('switchMenuBtn').disabled = state.accounts.filter((a) => a.loggedIn && a.id !== state.accountId).length === 0;
+  $('sendBtn').disabled = !state.running;
+  composerInput.placeholder = state.running
+    ? 'Send a message to Claude…  (Enter to send · Shift+Enter for a new line)'
+    : 'Launch an account below to start chatting…';
 }
 
 function renderProject() {
@@ -191,7 +195,7 @@ function renderEmpty() {
   $('emptyState').classList.toggle('hidden', !show);
 }
 
-function renderAll() { renderBadge(); renderProject(); renderProjectAccount(); renderAccounts(); renderStats(); renderEmpty(); }
+function renderAll() { renderBadge(); renderProject(); renderProjectAccount(); renderAccounts(); renderStats(); renderModelLabel(); renderEmpty(); }
 
 async function refreshStatus() {
   const s = await cc.status();
@@ -269,11 +273,12 @@ function closePopups() {
   $('recentMenu').classList.add('hidden');
   $('switchMenu').classList.add('hidden');
   $('projectAccountMenu').classList.add('hidden');
+  $('modelMenu').classList.add('hidden');
 }
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.popup') && !e.target.closest('#recentBtn') &&
       !e.target.closest('#switchMenuBtn') && !e.target.closest('#projectAccountBtn') &&
-      !e.target.closest('.account-actions')) {
+      !e.target.closest('#modelBtn') && !e.target.closest('.account-actions')) {
     closePopups();
   }
 });
@@ -424,6 +429,138 @@ window.addEventListener('keydown', (e) => {
   else if (ctrl && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); term.clear(); }
   else if (ctrl && (e.key === ',')) { e.preventDefault(); openSettings(); }
 });
+
+// ---- composer (Claude Code–style chat input) ----
+const composerInput = $('composerInput');
+const MODELS = [
+  { id: '', label: 'Default model' },
+  { id: 'opus', label: 'Opus 4.8' },
+  { id: 'sonnet', label: 'Sonnet 5' },
+  { id: 'haiku', label: 'Haiku 4.5' },
+];
+
+function autoGrow() {
+  composerInput.style.height = 'auto';
+  composerInput.style.height = Math.min(160, composerInput.scrollHeight) + 'px';
+}
+composerInput.addEventListener('input', autoGrow);
+
+function sendPrompt(text) {
+  if (!text) return;
+  if (!state.running) { toast('Launch an account first', 'error'); return; }
+  // Wrap multi-line text in a bracketed paste so Claude Code inserts it
+  // literally instead of submitting each line.
+  const payload = text.includes('\n') ? ('\x1b[200~' + text + '\x1b[201~') : text;
+  cc.sendInput(payload + '\r');
+}
+
+function submitComposer() {
+  const text = composerInput.value.trim();
+  if (!text) return;
+  sendPrompt(text);
+  composerInput.value = '';
+  autoGrow();
+  composerInput.focus();
+}
+
+composerInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submitComposer(); }
+});
+$('sendBtn').onclick = submitComposer;
+
+document.querySelectorAll('.chip.preset').forEach((btn) => {
+  btn.onclick = () => {
+    if (btn.dataset.insert != null) {
+      composerInput.value = btn.dataset.insert + composerInput.value;
+      autoGrow(); composerInput.focus();
+    } else if (btn.dataset.send != null) {
+      if (!state.running) { toast('Launch an account first', 'error'); return; }
+      cc.sendInput(btn.dataset.send + '\r'); term.focus();
+    } else if (btn.dataset.key === 'esc') {
+      if (state.running) cc.sendInput('\x1b');
+    }
+  };
+});
+
+$('modeBtn').onclick = () => {
+  if (!state.running) { toast('Launch an account first', 'error'); return; }
+  cc.sendInput('\x1b[Z'); // Shift+Tab cycles Claude Code's permission mode
+  toast('Cycled permission mode (Shift+Tab)', 'ok');
+};
+
+function renderModelLabel() {
+  const cur = (state.settings && state.settings.model) || '';
+  const m = MODELS.find((x) => x.id === cur) || MODELS[0];
+  $('modelLabel').textContent = m.label;
+  $('modelBtn').classList.toggle('set', !!cur);
+}
+$('modelBtn').onclick = (e) => {
+  e.stopPropagation();
+  const menu = $('modelMenu');
+  if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
+  closePopups();
+  menu.innerHTML = '';
+  const cur = (state.settings && state.settings.model) || '';
+  for (const m of MODELS) {
+    const b = document.createElement('button');
+    b.textContent = (m.id === cur ? '✓ ' : '') + m.label;
+    b.onclick = async () => {
+      menu.classList.add('hidden');
+      state.settings = await cc.setSettings({ model: m.id });
+      renderModelLabel();
+      if (state.running && m.id) cc.sendInput('/model ' + m.id + '\r');
+      toast(m.id ? `Model: ${m.label}${state.running ? '' : ' (applies on launch)'}` : 'Using account default model', 'ok');
+    };
+    menu.appendChild(b);
+  }
+  menu.classList.remove('hidden');
+};
+
+// ---- microphone / dictation ----
+let recog = null;
+let recording = false;
+function stopRecog() {
+  recording = false;
+  $('micBtn').classList.remove('recording');
+  if (recog) { try { recog.onend = null; recog.stop(); } catch {} recog = null; }
+}
+$('micBtn').onclick = () => {
+  if (recording) { stopRecog(); toast('Stopped listening', 'ok'); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  composerInput.focus();
+  if (!SR) {
+    toast('Tip: press Win+H for Windows Voice Typing — offline & no time limit.', 'error');
+    return;
+  }
+  recog = new SR();
+  recog.continuous = true;
+  recog.interimResults = true;
+  recog.lang = navigator.language || 'en-US';
+  let base = composerInput.value;
+  recording = true;
+  $('micBtn').classList.add('recording');
+  recog.onresult = (ev) => {
+    let interim = '', final = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const t = ev.results[i][0].transcript;
+      if (ev.results[i].isFinal) final += t; else interim += t;
+    }
+    if (final) base = (base ? base + ' ' : '') + final.trim();
+    composerInput.value = (base + (interim ? ' ' + interim : '')).trim();
+    autoGrow();
+  };
+  recog.onerror = (ev) => {
+    const err = ev.error;
+    stopRecog();
+    if (err === 'network') toast('Browser voice needs internet. Offline: press Win+H (Windows Voice Typing) with the box focused.', 'error');
+    else if (err === 'not-allowed' || err === 'service-not-allowed') toast('Microphone blocked. Allow mic access, or use Win+H.', 'error');
+    else if (err !== 'aborted' && err !== 'no-speech') toast('Voice error: ' + err, 'error');
+  };
+  // Auto-restart on end so recognition never cuts off after ~1 minute.
+  recog.onend = () => { if (recording) { try { recog.start(); } catch {} } };
+  try { recog.start(); toast('Listening… click the mic again to stop.', 'ok'); }
+  catch { stopRecog(); }
+};
 
 // ---- limit handling ----
 let pendingSwitch = null;

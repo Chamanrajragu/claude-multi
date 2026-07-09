@@ -189,6 +189,8 @@ function launchAccount(accountId, { continueConv = false } = {}) {
   startHost();
   const args = [];
   if (continueConv) args.push('--continue');
+  const model = store.getSettings().model;
+  if (model) args.push('--model', model);
   args.push(...parseArgs(store.getSettings().extraArgs));
   session.accountId = accountId;
   session.projectDir = projectDir;

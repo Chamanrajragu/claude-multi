@@ -34,6 +34,8 @@ No credential hacking, nothing against the rules — each account simply gets it
 
 ## Features
 
+- 💬 **A polished chat bar, not a bare terminal** — a Claude Code–style composer at the bottom with a **model picker** (Opus / Sonnet / Haiku), a **mode** button (cycles permission modes), quick **presets** (ultrathink, `/compact`, `/clear`, Esc-to-interrupt), and a **🎤 voice/dictation** button. Type, hit Enter, done.
+- 🎙️ **Voice input with no time limit** — the composer is a real text field, so OS dictation (Windows **Win+H** Voice Typing) works offline with **no ~1-minute cutoff**; browser speech is used automatically where available.
 - 🧑‍🤝‍🧑 **Up to 20 accounts, fully isolated** — each account has its own login/config directory. No interference, no errors at scale.
 - 📁 **A preferred account per project** — assign a specific Claude account to each project folder. Open project A → it uses account X; open project B → it uses account Y. Assignments are remembered per folder.
 - 🔄 **Auto-switch on limit** — detects "usage limit reached" in the terminal and rotates to the next available account. Manual "ask first" mode too.
@@ -138,6 +140,8 @@ git add .github/workflows && git commit -m "Enable GitHub Actions" && git push
 
 | Shortcut | Action |
 | --- | --- |
+| `Enter` / `Shift+Enter` | Send message / new line (in the chat bar) |
+| `Win + H` | Windows Voice Typing into the chat bar (offline, no time limit) |
 | `Ctrl/Cmd + F` | Search the terminal |
 | `Ctrl/Cmd + Shift + C` | Copy selection |
 | `Ctrl/Cmd + Shift + V` | Paste |
