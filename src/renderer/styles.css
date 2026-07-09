@@ -213,6 +213,20 @@ body {
 .popup button:hover { background: var(--panel-2); }
 .popup-empty { padding: 8px 10px; font-size: 12px; color: var(--muted); }
 #recentMenu { position: absolute; left: 16px; right: 16px; margin-top: 2px; }
+#projectAccountMenu { position: absolute; left: 16px; right: 16px; margin-top: 2px; }
+
+/* ---- per-project account selector ---- */
+.project-account { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+.pa-label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.pa-select {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; padding: 8px 11px; border-radius: 8px; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text); font-size: 12px;
+}
+.pa-select:hover { border-color: var(--accent); }
+.pa-select.assigned { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.pa-caret { color: var(--muted); font-size: 10px; }
+.proj-star { color: var(--accent); margin-left: 6px; font-size: 11px; }
 
 .hidden { display: none !important; }
 

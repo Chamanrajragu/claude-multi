@@ -195,6 +195,7 @@ function launchAccount(accountId, { continueConv = false } = {}) {
   session.scanBuf = '';
   session.limitHit = false;
   store.addRecentProject(projectDir);
+  store.setProjectAccount(projectDir, accountId); // remember which account this project uses
   sendToHost({
     t: 'spawn',
     file: claudePath,
@@ -243,6 +244,7 @@ function switchAccount(targetId) {
   }
 
   session.switchCount += 1;
+  if (projectDir) store.setProjectAccount(projectDir, targetId); // project now continues on the switched-to account
   notify('Switched account', `Now running as ${toAcc.name}` + (carried ? ' · conversation carried over' : ''));
 
   setTimeout(() => {
@@ -263,6 +265,7 @@ function statusPayload() {
   return {
     accountId: session.accountId,
     projectDir: session.projectDir,
+    projectAccount: store.getProjectAccount(session.projectDir),
     running: session.running,
     startedAt: session.startedAt,
     switchCount: session.switchCount,
@@ -314,6 +317,11 @@ function registerIpc() {
   ipcMain.handle('project:choose', (_e, dir) => {
     if (dir && fs.existsSync(dir)) { session.projectDir = dir; store.addRecentProject(dir); sendStatus(); }
     return session.projectDir;
+  });
+  ipcMain.handle('project:setAccount', (_e, dir, accountId) => {
+    store.setProjectAccount(dir || session.projectDir, accountId);
+    sendStatus();
+    return store.getProjectAccount(dir || session.projectDir);
   });
 
   ipcMain.handle('session:launch', (_e, accountId) => launchAccount(accountId, { continueConv: false }));

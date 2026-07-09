@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('cc', {
   pickProject: () => ipcRenderer.invoke('project:pick'),
   getProject: () => ipcRenderer.invoke('project:get'),
   chooseProject: (dir) => ipcRenderer.invoke('project:choose', dir),
+  setProjectAccount: (dir, accountId) => ipcRenderer.invoke('project:setAccount', dir, accountId),
 
   // session control
   launch: (accountId) => ipcRenderer.invoke('session:launch', accountId),

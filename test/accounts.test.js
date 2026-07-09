@@ -139,6 +139,50 @@ test('corrupt store file falls back to defaults (no throw)', () => {
   } finally { t.cleanup(); }
 });
 
+test('per-project account: set, get, clear, persist', () => {
+  const t = tmp();
+  try {
+    let s = new Store(t.file, t.root);
+    s.add('alpha'); s.add('beta');
+    assert.strictEqual(s.getProjectAccount('D:/proj-a'), '');
+    s.setProjectAccount('D:/proj-a', 'alpha');
+    s.setProjectAccount('D:/proj-b', 'beta');
+    // reload
+    s = new Store(t.file, t.root);
+    assert.strictEqual(s.getProjectAccount('D:/proj-a'), 'alpha');
+    assert.strictEqual(s.getProjectAccount('D:/proj-b'), 'beta');
+    s.setProjectAccount('D:/proj-a', ''); // clear
+    assert.strictEqual(s.getProjectAccount('D:/proj-a'), '');
+  } finally { t.cleanup(); }
+});
+
+test('per-project account: stale mapping to a removed account is ignored & cleaned', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    s.add('gamma');
+    s.setProjectAccount('D:/proj', 'gamma');
+    assert.strictEqual(s.getProjectAccount('D:/proj'), 'gamma');
+    s.remove('gamma');
+    // getter ignores stale mapping
+    assert.strictEqual(s.getProjectAccount('D:/proj'), '');
+    // and remove() cleaned it from disk
+    const raw = JSON.parse(fs.readFileSync(t.file, 'utf8'));
+    assert.ok(!raw.projectAccounts || raw.projectAccounts['D:/proj'] === undefined);
+  } finally { t.cleanup(); }
+});
+
+test('per-project account: 20 projects each mapped independently', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    const ids = [];
+    for (let i = 0; i < 20; i++) ids.push(s.add('acct' + i).id);
+    for (let i = 0; i < 20; i++) s.setProjectAccount('D:/p' + i, ids[i]);
+    for (let i = 0; i < 20; i++) assert.strictEqual(s.getProjectAccount('D:/p' + i), ids[i]);
+  } finally { t.cleanup(); }
+});
+
 test('slug helper', () => {
   assert.strictEqual(slug('Hello World!'), 'hello-world');
   assert.strictEqual(slug('   '), 'account');

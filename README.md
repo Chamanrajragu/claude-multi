@@ -6,13 +6,15 @@
 
 **Run [Claude Code](https://claude.com/claude-code) with several accounts in one app — and switch automatically the moment one hits its usage limit.**
 
-[![tests](https://img.shields.io/badge/tests-34%20passing-brightgreen)](test)
+[![tests](https://img.shields.io/badge/tests-37%20passing-brightgreen)](test)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Free](https://img.shields.io/badge/price-100%25%20free-brightgreen)
 ![No tracking](https://img.shields.io/badge/telemetry-none-blue)
 
-**100% free · open source · runs entirely on your machine · never stores or sends your credentials.**
+**A free, open-source desktop app (GUI) for Claude Code — manage up to 20 Claude accounts, pick an account per project, and auto-switch when you hit a usage limit. Runs entirely on your machine and never stores or sends your credentials.**
+
+<sub>Keywords: Claude Code GUI · Claude Code desktop app · multiple Claude accounts · Claude usage limit / rate limit workaround · Anthropic · multi-account account switcher · Windows · macOS · Linux</sub>
 
 <br/>
 
@@ -32,16 +34,21 @@ No credential hacking, nothing against the rules — each account simply gets it
 
 ## Features
 
-- 🧑‍🤝‍🧑 **Multiple accounts, fully isolated** — each account has its own login/config directory. No interference.
-- 🔄 **Auto-switch on limit** — detects "usage limit reached" in the terminal and rotates to the next account. Manual "ask first" mode too.
+- 🧑‍🤝‍🧑 **Up to 20 accounts, fully isolated** — each account has its own login/config directory. No interference, no errors at scale.
+- 📁 **A preferred account per project** — assign a specific Claude account to each project folder. Open project A → it uses account X; open project B → it uses account Y. Assignments are remembered per folder.
+- 🔄 **Auto-switch on limit** — detects "usage limit reached" in the terminal and rotates to the next available account. Manual "ask first" mode too.
 - 💬 **Conversation carry-over** — copies the project's transcript to the new account and resumes with `claude --continue`.
 - ⏳ **Cooldown tracking** — remembers when each account is rate-limited and when it resets, and skips accounts that are still cooling down (picking the one that frees up soonest if they're all down).
 - 🖥️ **Real embedded terminal** — full xterm.js terminal with search, clickable links, copy/paste, adjustable font, and clear.
 - 🔔 **Desktop notifications** when a limit is hit or an account switches.
 - ⚙️ **Settings** — auto-switch toggle + countdown, notifications, theme, extra launch flags, custom `claude` path.
 - 📊 **Live status** — session timer, switch count, and a "ready accounts" indicator.
-- 🌗 **Dark & light themes.**
+- 🌗 **Dark & light themes** with a clean, professional UI.
 - 🎯 **Recent project folders**, per-account menus, and a friendly first-run guide.
+
+## Why a desktop app instead of the raw terminal?
+
+Claude Code is fantastic, but juggling several accounts in a bare terminal is painful: you log out and back in by hand, you lose your place when you hit a limit, and there's no way to say "this project uses that account." Claude Multi gives you a clean, good-looking window where every account is one click away, each project remembers its account, and hitting a limit just means clicking **Switch** — your conversation comes with you.
 
 ## Screenshots
 
@@ -93,9 +100,11 @@ npm start
 Then:
 
 1. **Pick your project folder** (top-left) — the folder Claude Code will work in.
-2. Click **+** to add an account, then **Launch** it.
+2. Click **+** to add an account (add up to 20), then **Launch** it.
 3. Type `/login` in the terminal to sign that account in.
-4. Repeat for each account. When one runs out, you'll be offered a switch — your conversation carries over.
+4. Repeat for each account.
+5. *(Optional)* Use **Account for this project** to pin a specific account to the current folder. Each project remembers its own account.
+6. When one account runs out, you'll be offered a switch — your conversation carries over automatically.
 
 ## Building installers
 

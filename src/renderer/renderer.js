@@ -40,7 +40,7 @@ cc.onExit((code) => {
 
 // ---- state ----
 let state = {
-  accounts: [], accountId: null, projectDir: '', running: false,
+  accounts: [], accountId: null, projectDir: '', projectAccount: '', running: false,
   startedAt: 0, switchCount: 0, recentProjects: [], settings: {}, availableCount: 0,
 };
 let now = Date.now();
@@ -69,6 +69,17 @@ function renderProject() {
   $('projectPath').textContent = state.projectDir || 'No folder selected';
 }
 
+function renderProjectAccount() {
+  const row = $('projectAccountRow');
+  if (!state.projectDir) { row.classList.add('hidden'); return; }
+  row.classList.remove('hidden');
+  const acc = state.accounts.find((a) => a.id === state.projectAccount);
+  const nameEl = $('projectAccountName');
+  const btn = $('projectAccountBtn');
+  if (acc) { nameEl.textContent = '★ ' + acc.name; btn.classList.add('assigned'); }
+  else { nameEl.textContent = 'Choose…'; btn.classList.remove('assigned'); }
+}
+
 function fmtCountdown(ms) {
   if (ms == null || ms <= 0) return '0s';
   const t = Math.round(ms / 1000);
@@ -82,11 +93,12 @@ function accStatus(a) {
   if (!a.loggedIn) return { cls: 'off', label: 'not logged in — launch & type /login' };
   if (a.id === state.accountId && state.running) return { cls: 'active', label: 'Active session' };
   if (a.cooldownUntil && a.cooldownUntil > now) return { cls: 'cool', label: 'Cooling down · ' + fmtCountdown(a.cooldownUntil - now) };
-  return { cls: 'on', label: a.email };
+  return { cls: 'on', label: a.email + (a.plan ? ' · ' + a.plan : '') };
 }
 
 function renderAccounts() {
   const list = $('accountList');
+  const prevScroll = list.scrollTop; // preserve scroll across re-render (cooldown ticks rebuild the list)
   list.innerHTML = '';
   if (state.accounts.length === 0) {
     const empty = document.createElement('div');
@@ -105,6 +117,13 @@ function renderAccounts() {
     const name = document.createElement('div');
     name.className = 'account-name';
     name.textContent = a.name;
+    if (state.projectDir && a.id === state.projectAccount) {
+      const star = document.createElement('span');
+      star.className = 'proj-star';
+      star.textContent = '★';
+      star.title = 'Preferred account for this project';
+      name.appendChild(star);
+    }
     const dot = document.createElement('div');
     dot.className = 'dot ' + st.cls;
     dot.title = st.label;
@@ -142,6 +161,7 @@ function renderAccounts() {
     card.appendChild(actions);
     list.appendChild(card);
   }
+  list.scrollTop = prevScroll; // restore scroll after rebuild
 }
 
 function renderStats() {
@@ -171,7 +191,7 @@ function renderEmpty() {
   $('emptyState').classList.toggle('hidden', !show);
 }
 
-function renderAll() { renderBadge(); renderProject(); renderAccounts(); renderStats(); renderEmpty(); }
+function renderAll() { renderBadge(); renderProject(); renderProjectAccount(); renderAccounts(); renderStats(); renderEmpty(); }
 
 async function refreshStatus() {
   const s = await cc.status();
@@ -248,19 +268,53 @@ function closePopups() {
   document.querySelectorAll('.popup.ctx').forEach((n) => n.remove());
   $('recentMenu').classList.add('hidden');
   $('switchMenu').classList.add('hidden');
+  $('projectAccountMenu').classList.add('hidden');
 }
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.popup') && !e.target.closest('#recentBtn') &&
-      !e.target.closest('#switchMenuBtn') && !e.target.closest('.account-actions')) {
+      !e.target.closest('#switchMenuBtn') && !e.target.closest('#projectAccountBtn') &&
+      !e.target.closest('.account-actions')) {
     closePopups();
   }
 });
+
+// ---- per-project account selector ----
+$('projectAccountBtn').onclick = (e) => {
+  e.stopPropagation();
+  const menu = $('projectAccountMenu');
+  if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
+  closePopups();
+  menu.innerHTML = '';
+  if (state.accounts.length === 0) {
+    const d = document.createElement('div'); d.className = 'popup-empty';
+    d.textContent = 'Add an account first (click +)';
+    menu.appendChild(d);
+  } else {
+    const none = document.createElement('button');
+    none.textContent = state.projectAccount ? '✕ Clear assignment' : 'No account assigned';
+    none.onclick = async () => { menu.classList.add('hidden'); state.projectAccount = await cc.setProjectAccount(state.projectDir, ''); renderAll(); };
+    menu.appendChild(none);
+    for (const a of state.accounts) {
+      const b = document.createElement('button');
+      const mark = a.id === state.projectAccount ? '★ ' : '';
+      b.textContent = mark + a.name + (a.loggedIn ? '' : ' — not logged in');
+      b.onclick = async () => {
+        menu.classList.add('hidden');
+        state.projectAccount = await cc.setProjectAccount(state.projectDir, a.id);
+        renderAll();
+        toast(`"${a.name}" set for this project`, 'ok');
+      };
+      menu.appendChild(b);
+    }
+  }
+  menu.classList.remove('hidden');
+};
 
 // ---- project ----
 $('pickProject').onclick = async () => {
   const dir = await cc.pickProject();
   state.projectDir = dir;
-  renderProject();
+  await refreshStatus(); // pick up this project's preferred account
 };
 $('recentBtn').onclick = (e) => {
   e.stopPropagation();
@@ -277,7 +331,7 @@ $('recentBtn').onclick = (e) => {
       const b = document.createElement('button');
       b.textContent = dir;
       b.title = dir;
-      b.onclick = async () => { menu.classList.add('hidden'); state.projectDir = await cc.chooseProject(dir); renderProject(); };
+      b.onclick = async () => { menu.classList.add('hidden'); state.projectDir = await cc.chooseProject(dir); await refreshStatus(); };
       menu.appendChild(b);
     }
   }

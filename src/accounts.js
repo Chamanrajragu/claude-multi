@@ -33,6 +33,7 @@ class Store {
       accounts: [],
       lastProjectDir: '',
       recentProjects: [],
+      projectAccounts: {},   // { [projectDir]: accountId } — preferred account per project
       claudePath: '',
       settings: { ...DEFAULT_SETTINGS },
     };
@@ -46,6 +47,7 @@ class Store {
       this.state = Object.assign(this.state, parsed);
       if (!Array.isArray(this.state.accounts)) this.state.accounts = [];
       if (!Array.isArray(this.state.recentProjects)) this.state.recentProjects = [];
+      if (!this.state.projectAccounts || typeof this.state.projectAccounts !== 'object') this.state.projectAccounts = {};
       this.state.settings = { ...DEFAULT_SETTINGS, ...(this.state.settings || {}) };
     } catch {
       // first run: no file yet
@@ -66,6 +68,21 @@ class Store {
     this.state.settings = { ...this.getSettings(), ...(patch || {}) };
     this.save();
     return this.getSettings();
+  }
+
+  // ---- per-project account mapping ----
+  // Returns the preferred accountId for a project dir, but only if that
+  // account still exists (stale mappings are ignored).
+  getProjectAccount(dir) {
+    const id = this.state.projectAccounts[dir];
+    if (id && this.state.accounts.some((a) => a.id === id)) return id;
+    return '';
+  }
+  setProjectAccount(dir, accountId) {
+    if (!dir) return;
+    if (accountId) this.state.projectAccounts[dir] = accountId;
+    else delete this.state.projectAccounts[dir];
+    this.save();
   }
 
   // ---- recent projects ----
@@ -103,6 +120,10 @@ class Store {
 
   remove(id) {
     this.state.accounts = this.state.accounts.filter((a) => a.id !== id);
+    // Drop any project mappings that pointed at the removed account.
+    for (const dir of Object.keys(this.state.projectAccounts)) {
+      if (this.state.projectAccounts[dir] === id) delete this.state.projectAccounts[dir];
+    }
     this.save();
   }
 
