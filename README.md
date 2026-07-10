@@ -6,7 +6,7 @@
 
 **Run [Claude Code](https://claude.com/claude-code) with several accounts in one app — and switch automatically the moment one hits its usage limit.**
 
-[![tests](https://img.shields.io/badge/tests-44%20passing-brightgreen)](test)
+[![tests](https://img.shields.io/badge/tests-47%20passing-brightgreen)](test)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Free](https://img.shields.io/badge/price-100%25%20free-brightgreen)
@@ -50,8 +50,11 @@ No credential hacking, nothing against the rules — each account simply gets it
 - ⏳ **Cooldown tracking** — remembers when each account is rate-limited and when it resets, and skips accounts that are still cooling down (picking the one that frees up soonest if they're all down).
 - 🖥️ **Real embedded terminal** — full xterm.js terminal with search, clickable links, copy/paste, adjustable font, and clear.
 - 🔔 **Desktop notifications** when a limit is hit, an account switches, or a cooled-down account is **ready again**.
+- 🎨 **Command palette** — `Ctrl/Cmd + P` to fuzzy-search every action (launch/switch accounts, pick project, settings, theme, and more).
 - 🖥️ **System tray** — minimize to tray and quick-launch any account from the tray menu.
 - ⌨️ **Quick-switch shortcuts** — `Ctrl/Cmd + 1…9` to launch or switch to an account instantly.
+- 🗂️ **Reorder & color-tag accounts** — drag order via move up/down and assign color tags for quick visual ID.
+- ↕️ **Prompt history** — press `↑` / `↓` in the chat bar to reuse recent prompts.
 - 🔎 **Account filter** — a search box appears automatically once you have many accounts.
 - 📈 **Per-account usage stats** — sessions run and when each account was last used.
 - 💾 **Backup & restore** — export/import your accounts & settings (no credentials included).
@@ -70,13 +73,11 @@ Claude Code is fantastic, but juggling several accounts in a bare terminal is pa
 
 <div align="center">
 
-| Auto-switch on limit | Settings |
+| Auto-switch on limit | Command palette (Ctrl/Cmd+P) |
 | --- | --- |
-| <img src="docs/screenshot-limit.png" width="410" alt="Usage limit reached dialog" /> | <img src="docs/screenshot-settings.png" width="410" alt="Settings" /> |
-
-<img src="docs/screenshot-light.png" width="700" alt="Light theme" />
-
-*Light theme*
+| <img src="docs/screenshot-limit.png" width="410" alt="Usage limit reached dialog" /> | <img src="docs/screenshot-palette.png" width="410" alt="Command palette" /> |
+| Settings | Light theme |
+| <img src="docs/screenshot-settings.png" width="410" alt="Settings" /> | <img src="docs/screenshot-light.png" width="410" alt="Light theme" /> |
 
 </div>
 
@@ -154,7 +155,10 @@ git add .github/workflows && git commit -m "Enable GitHub Actions" && git push
 
 | Shortcut | Action |
 | --- | --- |
+| `Ctrl/Cmd + P` | Command palette (fuzzy-search all actions) |
+| `Ctrl/Cmd + 1…9` | Launch / switch to the Nth account |
 | `Enter` / `Shift+Enter` | Send message / new line (in the chat bar) |
+| `↑` / `↓` | Reuse recent prompts (in the chat bar) |
 | `Win + H` | Windows Voice Typing into the chat bar (offline, no time limit) |
 | `Ctrl/Cmd + F` | Search the terminal |
 | `Ctrl/Cmd + Shift + C` | Copy selection |

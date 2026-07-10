@@ -38,6 +38,7 @@ class Store {
       lastProjectDir: '',
       recentProjects: [],
       projectAccounts: {},   // { [projectDir]: accountId } — preferred account per project
+      promptHistory: [],     // recently sent composer prompts (newest first)
       claudePath: '',
       settings: { ...DEFAULT_SETTINGS },
     };
@@ -51,6 +52,7 @@ class Store {
       this.state = Object.assign(this.state, parsed);
       if (!Array.isArray(this.state.accounts)) this.state.accounts = [];
       if (!Array.isArray(this.state.recentProjects)) this.state.recentProjects = [];
+      if (!Array.isArray(this.state.promptHistory)) this.state.promptHistory = [];
       if (!this.state.projectAccounts || typeof this.state.projectAccounts !== 'object') this.state.projectAccounts = {};
       this.state.settings = { ...DEFAULT_SETTINGS, ...(this.state.settings || {}) };
     } catch {
@@ -116,7 +118,7 @@ class Store {
     while (taken.has(id)) id = `${base}-${n++}`;
     const configDir = path.join(this.accountsRoot, id);
     fs.mkdirSync(configDir, { recursive: true });
-    const account = { id, name: name || id, configDir, cooldownUntil: 0, lastLimitAt: 0, sessions: 0, lastUsedAt: 0 };
+    const account = { id, name: name || id, configDir, color: '', cooldownUntil: 0, lastLimitAt: 0, sessions: 0, lastUsedAt: 0 };
     this.state.accounts.push(account);
     this.save();
     return account;
@@ -136,6 +138,36 @@ class Store {
     if (a) { a.name = name; this.save(); }
   }
 
+  // Move an account up (-1) or down (+1) in the list; order drives Ctrl+1..9.
+  moveAccount(id, direction) {
+    const i = this.state.accounts.findIndex((a) => a.id === id);
+    if (i === -1) return;
+    const j = i + (direction < 0 ? -1 : 1);
+    if (j < 0 || j >= this.state.accounts.length) return;
+    const arr = this.state.accounts;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+    this.save();
+  }
+
+  // Assign a color tag (any string, '' to clear).
+  setColor(id, color) {
+    const a = this.state.accounts.find((x) => x.id === id);
+    if (a) { a.color = color || ''; this.save(); }
+  }
+
+  // ---- composer prompt history ----
+  addPrompt(text) {
+    const t = String(text || '').trim();
+    if (t) {
+      const list = this.state.promptHistory.filter((p) => p !== t);
+      list.unshift(t);
+      this.state.promptHistory = list.slice(0, 50);
+      this.save();
+    }
+    return this.state.promptHistory;
+  }
+  getPromptHistory() { return this.state.promptHistory; }
+
   // Record a launch for usage stats.
   recordLaunch(id) {
     const a = this.state.accounts.find((x) => x.id === id);
@@ -150,7 +182,7 @@ class Store {
       version: 1,
       exportedAt: Date.now(),
       accounts: this.state.accounts.map((a) => ({
-        id: a.id, name: a.name, sessions: a.sessions || 0, lastUsedAt: a.lastUsedAt || 0,
+        id: a.id, name: a.name, color: a.color || '', sessions: a.sessions || 0, lastUsedAt: a.lastUsedAt || 0,
       })),
       settings: this.getSettings(),
       projectAccounts: this.state.projectAccounts,
@@ -170,9 +202,10 @@ class Store {
       const existing = byId.get(inc.id);
       if (existing) {
         existing.name = inc.name || existing.name;
+        if (inc.color) existing.color = inc.color;
       } else {
-        const acc = { id: inc.id, name: inc.name || inc.id, configDir, cooldownUntil: 0, lastLimitAt: 0,
-          sessions: inc.sessions || 0, lastUsedAt: inc.lastUsedAt || 0 };
+        const acc = { id: inc.id, name: inc.name || inc.id, configDir, color: inc.color || '',
+          cooldownUntil: 0, lastLimitAt: 0, sessions: inc.sessions || 0, lastUsedAt: inc.lastUsedAt || 0 };
         this.state.accounts.push(acc);
         byId.set(inc.id, acc);
       }

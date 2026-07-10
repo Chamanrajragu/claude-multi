@@ -144,6 +144,7 @@ function renderAccounts() {
     const st = accStatus(a);
     const card = document.createElement('div');
     card.className = 'account' + (a.id === state.accountId ? ' active' : '');
+    if (a.color) card.style.boxShadow = `inset 4px 0 0 ${a.color}`;
 
     const top = document.createElement('div');
     top.className = 'account-top';
@@ -282,19 +283,45 @@ async function renameAccount(a) {
   renderAll();
 }
 
+const TAG_COLORS = ['#d97757', '#4ec9a3', '#5b8def', '#e0b64c', '#b478e0', '#e0645c', '#4bb8c4'];
+
 // small context menu for an account
 function accountMenu(a, ev) {
   closePopups();
   const menu = document.createElement('div');
   menu.className = 'popup ctx';
+
+  // color swatch row
+  const swatches = document.createElement('div');
+  swatches.className = 'swatch-row';
+  for (const c of TAG_COLORS) {
+    const sw = document.createElement('button');
+    sw.className = 'swatch' + (a.color === c ? ' sel' : '');
+    sw.style.background = c;
+    sw.title = 'Tag color';
+    sw.onclick = async () => { closePopups(); state.accounts = await cc.setAccountColor(a.id, a.color === c ? '' : c); renderAll(); };
+    swatches.appendChild(sw);
+  }
+  const clear = document.createElement('button');
+  clear.className = 'swatch clear' + (a.color ? '' : ' sel');
+  clear.textContent = '✕';
+  clear.title = 'No color';
+  clear.onclick = async () => { closePopups(); state.accounts = await cc.setAccountColor(a.id, ''); renderAll(); };
+  swatches.appendChild(clear);
+  menu.appendChild(swatches);
+
+  const idx = state.accounts.findIndex((x) => x.id === a.id);
   const items = [
+    ['↑ Move up', async () => { state.accounts = await cc.moveAccount(a.id, -1); renderAll(); }, idx <= 0],
+    ['↓ Move down', async () => { state.accounts = await cc.moveAccount(a.id, 1); renderAll(); }, idx >= state.accounts.length - 1],
     ['Rename', () => renameAccount(a)],
     ['Open config folder', () => cc.openConfigDir(a.id)],
     ['Remove', () => removeAccount(a)],
   ];
-  for (const [label, fn] of items) {
+  for (const [label, fn, disabled] of items) {
     const b = document.createElement('button');
     b.textContent = label;
+    b.disabled = !!disabled;
     b.onclick = () => { closePopups(); fn(); };
     menu.appendChild(b);
   }
@@ -474,6 +501,7 @@ window.addEventListener('keydown', (e) => {
   else if (ctrl && e.key === '-') { e.preventDefault(); changeFont(-1); }
   else if (ctrl && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); term.clear(); }
   else if (ctrl && (e.key === ',')) { e.preventDefault(); openSettings(); }
+  else if (ctrl && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); openPalette(); }
   else if (ctrl && !e.shiftKey && /^[1-9]$/.test(e.key)) { e.preventDefault(); quickAccount(parseInt(e.key, 10) - 1); }
 });
 
@@ -501,17 +529,36 @@ function sendPrompt(text) {
   cc.sendInput(payload + '\r');
 }
 
+let promptHist = [];
+let histIndex = -1;
+cc.listPrompts().then((h) => { promptHist = h || []; }).catch(() => {});
+
 function submitComposer() {
   const text = composerInput.value.trim();
   if (!text) return;
   sendPrompt(text);
+  cc.addPrompt(text).then((h) => { promptHist = h || promptHist; }).catch(() => {});
+  histIndex = -1;
   composerInput.value = '';
   autoGrow();
   composerInput.focus();
 }
 
 composerInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submitComposer(); }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submitComposer(); return; }
+  // ↑/↓ browse recent prompts when the caret is at the very start of the box.
+  if (e.key === 'ArrowUp' && composerInput.selectionStart === 0 && promptHist.length) {
+    e.preventDefault();
+    histIndex = Math.min(promptHist.length - 1, histIndex + 1);
+    composerInput.value = promptHist[histIndex] || '';
+    autoGrow();
+    composerInput.setSelectionRange(0, 0);
+  } else if (e.key === 'ArrowDown' && histIndex >= 0) {
+    e.preventDefault();
+    histIndex -= 1;
+    composerInput.value = histIndex >= 0 ? promptHist[histIndex] : '';
+    autoGrow();
+  }
 });
 $('sendBtn').onclick = submitComposer;
 
@@ -608,6 +655,91 @@ $('micBtn').onclick = () => {
   try { recog.start(); toast('Listening… click the mic again to stop.', 'ok'); }
   catch { stopRecog(); }
 };
+
+// ---- helpers used by palette ----
+async function toggleTheme() {
+  const next = (state.settings && state.settings.theme) === 'light' ? 'dark' : 'light';
+  applyTheme(next);
+  state.settings = await cc.setSettings({ theme: next });
+}
+function showUpdateBanner(info) {
+  const b = $('updateBanner');
+  b.textContent = `⬆ Update available: v${info.latest}`;
+  b.classList.remove('hidden');
+  b.onclick = (e) => { e.preventDefault(); cc.openExternal(info.url); };
+}
+async function checkUpdatesNow() {
+  toast('Checking for updates…', 'ok');
+  const info = await cc.checkUpdate();
+  if (info && info.isNewer) { showUpdateBanner(info); toast(`Update available: v${info.latest}`, 'ok'); }
+  else if (info) toast("You're on the latest version.", 'ok');
+  else toast('Could not check for updates.', 'error');
+}
+
+// ---- command palette (Ctrl/Cmd+P) ----
+let palFiltered = [];
+let palIndex = 0;
+function paletteActions() {
+  const acts = [];
+  state.accounts.forEach((a, i) => {
+    if (!a.loggedIn) return;
+    const verb = state.running && a.id !== state.accountId ? 'Switch to ' : 'Launch ';
+    acts.push({ label: verb + a.name + (i < 9 ? `  ·  Ctrl+${i + 1}` : ''), run: () => quickAccount(i) });
+  });
+  acts.push({ label: 'Pick project folder…', run: () => $('pickProject').click() });
+  acts.push({ label: 'Open settings', run: openSettings });
+  acts.push({ label: 'Toggle theme (dark / light)', run: toggleTheme });
+  acts.push({ label: 'Search terminal', run: openSearch });
+  acts.push({ label: 'Clear terminal', run: () => { term.clear(); term.focus(); } });
+  if (state.running) {
+    acts.push({ label: 'Restart session', run: () => cc.restart() });
+    acts.push({ label: 'Stop session', run: () => cc.stop() });
+  }
+  acts.push({ label: 'Add account…', run: addAccount });
+  acts.push({ label: 'Export config…', run: () => $('exportBtn').click() });
+  acts.push({ label: 'Import config…', run: () => $('importBtn').click() });
+  acts.push({ label: 'Check for updates', run: checkUpdatesNow });
+  return acts;
+}
+function openPalette() {
+  closePopups();
+  filterPalette('');
+  $('paletteInput').value = '';
+  $('paletteOverlay').classList.remove('hidden');
+  $('paletteInput').focus();
+}
+function closePalette() { $('paletteOverlay').classList.add('hidden'); }
+function filterPalette(q) {
+  const s = q.trim().toLowerCase();
+  const all = paletteActions();
+  palFiltered = s ? all.filter((a) => a.label.toLowerCase().includes(s)) : all;
+  palIndex = 0;
+  renderPalette();
+}
+function renderPalette() {
+  const list = $('paletteList');
+  list.innerHTML = '';
+  if (!palFiltered.length) {
+    const d = document.createElement('div'); d.className = 'palette-empty'; d.textContent = 'No matching commands';
+    list.appendChild(d); return;
+  }
+  palFiltered.forEach((a, i) => {
+    const d = document.createElement('div');
+    d.className = 'palette-item' + (i === palIndex ? ' sel' : '');
+    d.textContent = a.label;
+    d.onclick = () => runPalette(i);
+    list.appendChild(d);
+  });
+}
+function runPalette(i) { const a = palFiltered[i]; closePalette(); if (a) a.run(); }
+$('paletteInput').addEventListener('input', (e) => filterPalette(e.target.value));
+$('paletteInput').addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); palIndex = Math.min(palFiltered.length - 1, palIndex + 1); renderPalette(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); palIndex = Math.max(0, palIndex - 1); renderPalette(); }
+  else if (e.key === 'Enter') { e.preventDefault(); runPalette(palIndex); }
+  else if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+});
+$('paletteOverlay').addEventListener('click', (e) => { if (e.target === $('paletteOverlay')) closePalette(); });
 
 // ---- limit handling ----
 let pendingSwitch = null;
@@ -724,10 +856,7 @@ $('importBtn').onclick = async () => {
 // ---- update banner ----
 cc.onUpdateAvailable((info) => {
   if (!info || !info.isNewer) return;
-  const b = $('updateBanner');
-  b.textContent = `⬆ Update available: v${info.latest}`;
-  b.classList.remove('hidden');
-  b.onclick = (e) => { e.preventDefault(); cc.openExternal(info.url); };
+  showUpdateBanner(info);
   toast(`A newer version (v${info.latest}) is available — click the banner to download.`, 'ok');
 });
 

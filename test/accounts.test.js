@@ -238,6 +238,53 @@ test('import rejects invalid data', () => {
   } finally { t.cleanup(); }
 });
 
+test('moveAccount reorders and respects bounds', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    s.add('A'); s.add('B'); s.add('C');
+    assert.deepStrictEqual(s.list().map((x) => x.id), ['a', 'b', 'c']);
+    s.moveAccount('c', -1);
+    assert.deepStrictEqual(s.list().map((x) => x.id), ['a', 'c', 'b']);
+    s.moveAccount('a', 1);
+    assert.deepStrictEqual(s.list().map((x) => x.id), ['c', 'a', 'b']);
+    s.moveAccount('c', -1); // already first — no-op
+    assert.deepStrictEqual(s.list().map((x) => x.id), ['c', 'a', 'b']);
+    s.moveAccount('b', 1); // already last — no-op
+    assert.deepStrictEqual(s.list().map((x) => x.id), ['c', 'a', 'b']);
+  } finally { t.cleanup(); }
+});
+
+test('setColor persists and clears', () => {
+  const t = tmp();
+  try {
+    let s = new Store(t.file, t.root);
+    s.add('a');
+    s.setColor('a', '#4ec9a3');
+    s = new Store(t.file, t.root);
+    assert.strictEqual(s.byId('a').color, '#4ec9a3');
+    s.setColor('a', '');
+    assert.strictEqual(s.byId('a').color, '');
+  } finally { t.cleanup(); }
+});
+
+test('addPrompt dedupes, orders newest-first, caps at 50', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    s.addPrompt('first');
+    s.addPrompt('second');
+    s.addPrompt('first'); // moves to front
+    assert.deepStrictEqual(s.getPromptHistory().slice(0, 2), ['first', 'second']);
+    assert.strictEqual(s.getPromptHistory().length, 2);
+    for (let i = 0; i < 60; i++) s.addPrompt('p' + i);
+    assert.strictEqual(s.getPromptHistory().length, 50);
+    assert.strictEqual(s.getPromptHistory()[0], 'p59');
+    s.addPrompt('   '); // blank ignored
+    assert.strictEqual(s.getPromptHistory()[0], 'p59');
+  } finally { t.cleanup(); }
+});
+
 test('slug helper', () => {
   assert.strictEqual(slug('Hello World!'), 'hello-world');
   assert.strictEqual(slug('   '), 'account');

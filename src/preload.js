@@ -8,6 +8,10 @@ contextBridge.exposeInMainWorld('cc', {
   removeAccount: (id) => ipcRenderer.invoke('accounts:remove', id),
   renameAccount: (id, name) => ipcRenderer.invoke('accounts:rename', id, name),
   clearCooldown: (id) => ipcRenderer.invoke('accounts:clearCooldown', id),
+  moveAccount: (id, dir) => ipcRenderer.invoke('accounts:move', id, dir),
+  setAccountColor: (id, color) => ipcRenderer.invoke('accounts:setColor', id, color),
+  addPrompt: (text) => ipcRenderer.invoke('prompt:add', text),
+  listPrompts: () => ipcRenderer.invoke('prompt:list'),
 
   // project folder
   pickProject: () => ipcRenderer.invoke('project:pick'),

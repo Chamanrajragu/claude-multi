@@ -410,6 +410,11 @@ function registerIpc() {
   ipcMain.handle('accounts:remove', (_e, id) => { store.remove(id); return store.list(); });
   ipcMain.handle('accounts:rename', (_e, id, name) => { store.rename(id, name); return store.list(); });
   ipcMain.handle('accounts:clearCooldown', (_e, id) => { store.clearCooldown(id); sendStatus(); return store.list(); });
+  ipcMain.handle('accounts:move', (_e, id, dir) => { store.moveAccount(id, dir); sendStatus(); return store.list(); });
+  ipcMain.handle('accounts:setColor', (_e, id, color) => { store.setColor(id, color); sendStatus(); return store.list(); });
+
+  ipcMain.handle('prompt:add', (_e, text) => store.addPrompt(text));
+  ipcMain.handle('prompt:list', () => store.getPromptHistory());
 
   ipcMain.handle('project:pick', async () => {
     const res = await dialog.showOpenDialog(win, {
