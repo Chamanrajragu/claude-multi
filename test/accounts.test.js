@@ -183,6 +183,61 @@ test('per-project account: 20 projects each mapped independently', () => {
   } finally { t.cleanup(); }
 });
 
+test('recordLaunch bumps sessions and lastUsedAt', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    s.add('a');
+    assert.strictEqual(s.byId('a').sessions, 0);
+    s.recordLaunch('a');
+    s.recordLaunch('a');
+    assert.strictEqual(s.byId('a').sessions, 2);
+    assert.ok(s.byId('a').lastUsedAt > 0);
+  } finally { t.cleanup(); }
+});
+
+test('export then import round-trips accounts, settings and mappings', () => {
+  const a = tmp();
+  const b = tmp();
+  try {
+    const s1 = new Store(a.file, a.root);
+    s1.add('Work'); s1.add('Personal');
+    s1.setSettings({ autoSwitch: true, model: 'sonnet' });
+    s1.setProjectAccount('D:/proj', 'work');
+    s1.recordLaunch('work');
+    const blob = s1.exportData();
+    assert.ok(!/oauth|token|emailAddress/i.test(blob), 'export must not contain credentials');
+
+    // Import into a fresh store on a different root
+    const s2 = new Store(b.file, b.root);
+    s2.importData(blob);
+    assert.deepStrictEqual(s2.list().map((x) => x.id).sort(), ['personal', 'work']);
+    assert.strictEqual(s2.getSettings().autoSwitch, true);
+    assert.strictEqual(s2.getSettings().model, 'sonnet');
+    assert.strictEqual(s2.getProjectAccount('D:/proj'), 'work');
+    // configDir is re-based to the importing machine's root
+    assert.ok(s2.byId('work').configDir.startsWith(b.root));
+  } finally { a.cleanup(); b.cleanup(); }
+});
+
+test('import merges without clobbering existing accounts', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    s.add('existing');
+    s.importData(JSON.stringify({ accounts: [{ id: 'imported', name: 'Imported' }] }));
+    assert.deepStrictEqual(s.list().map((x) => x.id).sort(), ['existing', 'imported']);
+  } finally { t.cleanup(); }
+});
+
+test('import rejects invalid data', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    assert.throws(() => s.importData('{"nope":true}'), /Invalid backup/);
+  } finally { t.cleanup(); }
+});
+
 test('slug helper', () => {
   assert.strictEqual(slug('Hello World!'), 'hello-world');
   assert.strictEqual(slug('   '), 'account');

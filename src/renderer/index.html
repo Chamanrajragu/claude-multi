@@ -40,6 +40,7 @@
         Accounts <span id="availCount" class="count-pill"></span>
         <button id="addAccount" class="mini-btn" title="Add an account">+</button>
       </div>
+      <input id="accountFilter" class="account-filter hidden" type="text" placeholder="Filter accounts…" />
       <div id="accountList" class="account-list"></div>
 
       <div class="hint" id="loginHint">
@@ -69,6 +70,7 @@
         <div class="stat" id="timerStat" title="Session duration">⏱ 00:00</div>
         <div class="stat" id="switchStat" title="Switches this run">⇄ 0</div>
         <div class="spacer"></div>
+        <a id="updateBanner" class="update-banner hidden" href="#"></a>
         <div id="approachBanner" class="approach hidden"></div>
         <div class="toolbar">
           <button id="switchMenuBtn" class="tool-btn" title="Switch account now" disabled>Switch ▾</button>
@@ -159,6 +161,18 @@
         <input type="checkbox" id="setConfirmClose" class="switch" />
       </div>
       <div class="setting-row">
+        <label for="setMinimizeToTray"><b>Minimize to tray</b><span>Closing the window keeps the app running in the system tray.</span></label>
+        <input type="checkbox" id="setMinimizeToTray" class="switch" />
+      </div>
+      <div class="setting-row">
+        <label for="setStartOnLogin"><b>Start on login</b><span>Launch Claude Multi automatically when you sign in.</span></label>
+        <input type="checkbox" id="setStartOnLogin" class="switch" />
+      </div>
+      <div class="setting-row">
+        <label for="setCheckUpdates"><b>Check for updates</b><span>Notify me when a newer version is released.</span></label>
+        <input type="checkbox" id="setCheckUpdates" class="switch" />
+      </div>
+      <div class="setting-row">
         <label for="setTheme"><b>Theme</b></label>
         <select id="setTheme" class="num">
           <option value="dark">Dark</option>
@@ -172,6 +186,13 @@
       <div class="setting-row">
         <label><b>Claude executable</b><span id="claudePathLabel">—</span></label>
         <button id="pickClaudeBtn" class="ghost-btn">Locate…</button>
+      </div>
+      <div class="setting-row">
+        <label><b>Backup</b><span>Export or import your accounts &amp; settings (no credentials included).</span></label>
+        <div class="btn-pair">
+          <button id="exportBtn" class="ghost-btn">Export…</button>
+          <button id="importBtn" class="ghost-btn">Import…</button>
+        </div>
       </div>
       <div id="aboutLine" class="about"></div>
       <div class="about privacy-note">🔒 Free &amp; open source · no telemetry · your credentials never leave your device.</div>

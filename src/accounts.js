@@ -16,6 +16,9 @@ const DEFAULT_SETTINGS = {
   extraArgs: '',           // extra flags passed to `claude` on launch
   confirmClose: true,      // warn before quitting during a live session
   model: '',               // default model alias passed via --model (''=account default)
+  minimizeToTray: false,   // closing the window hides to the tray instead of quitting
+  startOnLogin: false,     // launch the app when the user logs in
+  checkUpdates: true,      // check GitHub for a newer release on startup
 };
 
 function slug(name) {
@@ -113,7 +116,7 @@ class Store {
     while (taken.has(id)) id = `${base}-${n++}`;
     const configDir = path.join(this.accountsRoot, id);
     fs.mkdirSync(configDir, { recursive: true });
-    const account = { id, name: name || id, configDir, cooldownUntil: 0, lastLimitAt: 0 };
+    const account = { id, name: name || id, configDir, cooldownUntil: 0, lastLimitAt: 0, sessions: 0, lastUsedAt: 0 };
     this.state.accounts.push(account);
     this.save();
     return account;
@@ -131,6 +134,58 @@ class Store {
   rename(id, name) {
     const a = this.state.accounts.find((x) => x.id === id);
     if (a) { a.name = name; this.save(); }
+  }
+
+  // Record a launch for usage stats.
+  recordLaunch(id) {
+    const a = this.state.accounts.find((x) => x.id === id);
+    if (a) { a.sessions = (a.sessions || 0) + 1; a.lastUsedAt = Date.now(); this.save(); }
+  }
+
+  // ---- backup / restore ----
+  // Exports the account list + settings + mappings. Contains NO credentials
+  // (logins live in each account's config dir, never in this file).
+  exportData() {
+    return JSON.stringify({
+      version: 1,
+      exportedAt: Date.now(),
+      accounts: this.state.accounts.map((a) => ({
+        id: a.id, name: a.name, sessions: a.sessions || 0, lastUsedAt: a.lastUsedAt || 0,
+      })),
+      settings: this.getSettings(),
+      projectAccounts: this.state.projectAccounts,
+      recentProjects: this.state.recentProjects,
+    }, null, 2);
+  }
+
+  // Merge an exported blob back in. Recreates configDir paths for THIS machine.
+  importData(json) {
+    const data = typeof json === 'string' ? JSON.parse(json) : json;
+    if (!data || !Array.isArray(data.accounts)) throw new Error('Invalid backup file');
+    const byId = new Map(this.state.accounts.map((a) => [a.id, a]));
+    for (const inc of data.accounts) {
+      if (!inc || !inc.id) continue;
+      const configDir = path.join(this.accountsRoot, inc.id);
+      fs.mkdirSync(configDir, { recursive: true });
+      const existing = byId.get(inc.id);
+      if (existing) {
+        existing.name = inc.name || existing.name;
+      } else {
+        const acc = { id: inc.id, name: inc.name || inc.id, configDir, cooldownUntil: 0, lastLimitAt: 0,
+          sessions: inc.sessions || 0, lastUsedAt: inc.lastUsedAt || 0 };
+        this.state.accounts.push(acc);
+        byId.set(inc.id, acc);
+      }
+    }
+    if (data.settings) this.state.settings = { ...DEFAULT_SETTINGS, ...data.settings };
+    if (data.projectAccounts && typeof data.projectAccounts === 'object') {
+      this.state.projectAccounts = { ...this.state.projectAccounts, ...data.projectAccounts };
+    }
+    if (Array.isArray(data.recentProjects)) {
+      this.state.recentProjects = [...new Set([...data.recentProjects, ...this.state.recentProjects])].slice(0, 8);
+    }
+    this.save();
+    return this.list();
   }
 
   setCooldown(id, until, hint) {

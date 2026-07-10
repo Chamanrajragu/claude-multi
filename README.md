@@ -6,7 +6,7 @@
 
 **Run [Claude Code](https://claude.com/claude-code) with several accounts in one app — and switch automatically the moment one hits its usage limit.**
 
-[![tests](https://img.shields.io/badge/tests-37%20passing-brightgreen)](test)
+[![tests](https://img.shields.io/badge/tests-44%20passing-brightgreen)](test)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Free](https://img.shields.io/badge/price-100%25%20free-brightgreen)
@@ -49,8 +49,15 @@ No credential hacking, nothing against the rules — each account simply gets it
 - 💬 **Conversation carry-over** — copies the project's transcript to the new account and resumes with `claude --continue`.
 - ⏳ **Cooldown tracking** — remembers when each account is rate-limited and when it resets, and skips accounts that are still cooling down (picking the one that frees up soonest if they're all down).
 - 🖥️ **Real embedded terminal** — full xterm.js terminal with search, clickable links, copy/paste, adjustable font, and clear.
-- 🔔 **Desktop notifications** when a limit is hit or an account switches.
-- ⚙️ **Settings** — auto-switch toggle + countdown, notifications, theme, extra launch flags, custom `claude` path.
+- 🔔 **Desktop notifications** when a limit is hit, an account switches, or a cooled-down account is **ready again**.
+- 🖥️ **System tray** — minimize to tray and quick-launch any account from the tray menu.
+- ⌨️ **Quick-switch shortcuts** — `Ctrl/Cmd + 1…9` to launch or switch to an account instantly.
+- 🔎 **Account filter** — a search box appears automatically once you have many accounts.
+- 📈 **Per-account usage stats** — sessions run and when each account was last used.
+- 💾 **Backup & restore** — export/import your accounts & settings (no credentials included).
+- 🔄 **Update checker** — tells you when a newer release is out.
+- 🚀 **Start on login** (optional) and a **custom `claude` path**.
+- ⚙️ **Settings** — auto-switch toggle + countdown, notifications, theme, extra launch flags.
 - 📊 **Live status** — session timer, switch count, and a "ready accounts" indicator.
 - 🌗 **Dark & light themes** with a clean, professional UI.
 - 🎯 **Recent project folders**, per-account menus, and a friendly first-run guide.

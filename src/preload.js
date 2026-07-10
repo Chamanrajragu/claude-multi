@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld('cc', {
   openConfigDir: (id) => ipcRenderer.invoke('app:openConfigDir', id),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
   appInfo: () => ipcRenderer.invoke('app:info'),
+  checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
+  exportConfig: () => ipcRenderer.invoke('app:export'),
+  importConfig: () => ipcRenderer.invoke('app:import'),
 
   // clipboard (Electron native — works in the file:// renderer)
   clipboardRead: () => clipboard.readText(),
@@ -46,4 +49,5 @@ contextBridge.exposeInMainWorld('cc', {
   onStatus: (cb) => ipcRenderer.on('status', (_e, s) => cb(s)),
   onLimitReached: (cb) => ipcRenderer.on('limit:reached', (_e, info) => cb(info)),
   onLimitApproaching: (cb) => ipcRenderer.on('limit:approaching', (_e, info) => cb(info)),
+  onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_e, info) => cb(info)),
 });

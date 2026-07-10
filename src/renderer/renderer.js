@@ -93,6 +93,17 @@ function fmtCountdown(ms) {
   return `${s}s`;
 }
 
+function fmtAgo(ts) {
+  if (!ts) return '';
+  const d = now - ts;
+  if (d < 60e3) return 'just now';
+  if (d < 3600e3) return Math.floor(d / 60e3) + 'm ago';
+  if (d < 86400e3) return Math.floor(d / 3600e3) + 'h ago';
+  return Math.floor(d / 86400e3) + 'd ago';
+}
+
+let accountFilter = '';
+
 function accStatus(a) {
   if (!a.loggedIn) return { cls: 'off', label: 'not logged in — launch & type /login' };
   if (a.id === state.accountId && state.running) return { cls: 'active', label: 'Active session' };
@@ -104,6 +115,11 @@ function renderAccounts() {
   const list = $('accountList');
   const prevScroll = list.scrollTop; // preserve scroll across re-render (cooldown ticks rebuild the list)
   list.innerHTML = '';
+
+  // Show a filter box once there are enough accounts to warrant it.
+  const showFilter = state.accounts.length > 8;
+  $('accountFilter').classList.toggle('hidden', !showFilter);
+
   if (state.accounts.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'hint';
@@ -111,7 +127,20 @@ function renderAccounts() {
     list.appendChild(empty);
     return;
   }
-  for (const a of state.accounts) {
+
+  const q = showFilter ? accountFilter.trim().toLowerCase() : '';
+  const shown = q
+    ? state.accounts.filter((a) => (a.name + ' ' + (a.email || '')).toLowerCase().includes(q))
+    : state.accounts;
+  if (shown.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'hint';
+    empty.textContent = 'No accounts match "' + accountFilter + '".';
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const a of shown) {
     const st = accStatus(a);
     const card = document.createElement('div');
     card.className = 'account' + (a.id === state.accountId ? ' active' : '');
@@ -162,6 +191,13 @@ function renderAccounts() {
 
     card.appendChild(top);
     card.appendChild(email);
+    if (a.sessions) {
+      const meta = document.createElement('div');
+      meta.className = 'account-meta';
+      meta.textContent = a.sessions + (a.sessions === 1 ? ' session' : ' sessions') +
+        (a.lastUsedAt ? ' · used ' + fmtAgo(a.lastUsedAt) : '');
+      card.appendChild(meta);
+    }
     card.appendChild(actions);
     list.appendChild(card);
   }
@@ -348,6 +384,16 @@ const REPO_URL = 'https://github.com/Chamanrajragu/claude-multi';
 $('ghLink').onclick = (e) => { e.preventDefault(); cc.openExternal(REPO_URL); };
 $('ghLink2').onclick = (e) => { e.preventDefault(); cc.openExternal(REPO_URL); };
 
+$('accountFilter').addEventListener('input', (e) => { accountFilter = e.target.value; renderAccounts(); });
+
+// Quick-switch: Ctrl/Cmd + 1..9 launches (or switches to) the Nth account.
+function quickAccount(i) {
+  const a = state.accounts[i];
+  if (!a) return;
+  if (state.running && a.id !== state.accountId && a.loggedIn) cc.switchTo(a.id);
+  else launchAccount(a.id);
+}
+
 // ---- session buttons ----
 $('addAccount').onclick = addAccount;
 $('stopBtn').onclick = () => cc.stop();
@@ -428,6 +474,7 @@ window.addEventListener('keydown', (e) => {
   else if (ctrl && e.key === '-') { e.preventDefault(); changeFont(-1); }
   else if (ctrl && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); term.clear(); }
   else if (ctrl && (e.key === ',')) { e.preventDefault(); openSettings(); }
+  else if (ctrl && !e.shiftKey && /^[1-9]$/.test(e.key)) { e.preventDefault(); quickAccount(parseInt(e.key, 10) - 1); }
 });
 
 // ---- composer (Claude Code–style chat input) ----
@@ -629,6 +676,9 @@ function openSettings() {
   $('setDelay').value = s.autoSwitchDelay ?? 6;
   $('setNotify').checked = s.notify !== false;
   $('setConfirmClose').checked = s.confirmClose !== false;
+  $('setMinimizeToTray').checked = !!s.minimizeToTray;
+  $('setStartOnLogin').checked = !!s.startOnLogin;
+  $('setCheckUpdates').checked = s.checkUpdates !== false;
   $('setTheme').value = s.theme || 'dark';
   $('setExtraArgs').value = s.extraArgs || '';
   cc.appInfo().then((info) => {
@@ -643,6 +693,9 @@ async function saveSettings() {
     autoSwitchDelay: Math.max(0, Math.min(60, parseInt($('setDelay').value, 10) || 0)),
     notify: $('setNotify').checked,
     confirmClose: $('setConfirmClose').checked,
+    minimizeToTray: $('setMinimizeToTray').checked,
+    startOnLogin: $('setStartOnLogin').checked,
+    checkUpdates: $('setCheckUpdates').checked,
     theme: $('setTheme').value,
     extraArgs: $('setExtraArgs').value.trim(),
   };
@@ -656,6 +709,27 @@ $('pickClaudeBtn').onclick = async () => {
   const p = await cc.pickClaude();
   $('claudePathLabel').textContent = p || 'not found';
 };
+$('exportBtn').onclick = async () => {
+  const r = await cc.exportConfig();
+  if (r && r.ok) toast('Exported to ' + r.path, 'ok');
+  else if (r && r.error) toast('Export failed: ' + r.error, 'error');
+};
+$('importBtn').onclick = async () => {
+  if (!confirm('Import a backup? This merges accounts & settings from the file.')) return;
+  const r = await cc.importConfig();
+  if (r && r.ok) { await refreshStatus(); toast('Config imported', 'ok'); }
+  else if (r && r.error) toast('Import failed: ' + r.error, 'error');
+};
+
+// ---- update banner ----
+cc.onUpdateAvailable((info) => {
+  if (!info || !info.isNewer) return;
+  const b = $('updateBanner');
+  b.textContent = `⬆ Update available: v${info.latest}`;
+  b.classList.remove('hidden');
+  b.onclick = (e) => { e.preventDefault(); cc.openExternal(info.url); };
+  toast(`A newer version (v${info.latest}) is available — click the banner to download.`, 'ok');
+});
 
 function applyTheme(theme) {
   const t = theme === 'light' ? 'light' : 'dark';

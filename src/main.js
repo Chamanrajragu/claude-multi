@@ -3,15 +3,21 @@
 // the output for usage limits, tracks per-account cooldowns, and performs
 // account switches (carrying the current conversation transcript to the new
 // account so `claude --continue` can resume it).
-const { app, BrowserWindow, ipcMain, dialog, Notification, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, shell, Menu, Tray, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const https = require('https');
 const { spawn, execSync } = require('child_process');
 const { Store } = require('./accounts');
 const { classify } = require('./limits');
 const cooldown = require('./cooldown');
+const { isNewer } = require('./update');
 const pkg = require('../package.json');
+
+function applyLoginItem(enabled) {
+  try { app.setLoginItemSettings({ openAtLogin: !!enabled }); } catch { /* unsupported */ }
+}
 
 const APP_ROOT = path.join(__dirname, '..');
 const DEFAULT_COOLDOWN_MS = 5 * 3600e3; // Claude session limits reset ~5h later
@@ -198,6 +204,7 @@ function launchAccount(accountId, { continueConv = false } = {}) {
   session.limitHit = false;
   store.addRecentProject(projectDir);
   store.setProjectAccount(projectDir, accountId); // remember which account this project uses
+  store.recordLaunch(accountId); // usage stats: sessions + lastUsedAt
   sendToHost({
     t: 'spawn',
     file: claudePath,
@@ -280,6 +287,7 @@ function statusPayload() {
 
 function sendStatus() {
   if (win) win.webContents.send('status', statusPayload());
+  updateTray();
 }
 
 // Poll account login state so the UI reflects a fresh /login without a restart.
@@ -292,6 +300,107 @@ function startLoginPolling() {
       sendStatus();
     }
   }, 3000);
+}
+
+// Notify once when a cooling-down account becomes usable again.
+const notifiedReady = new Set();
+function startCooldownWatcher() {
+  setInterval(() => {
+    const now = Date.now();
+    let changed = false;
+    for (const a of store.list()) {
+      if (a.lastLimitAt && a.cooldownUntil && a.cooldownUntil <= now && a.loggedIn) {
+        const key = a.id + ':' + a.cooldownUntil;
+        if (!notifiedReady.has(key)) {
+          notifiedReady.add(key);
+          changed = true;
+          notify('Account ready again', `${a.name} has cooled down and is ready to use.`);
+        }
+      }
+    }
+    if (notifiedReady.size > 200) notifiedReady.clear();
+    if (changed) { updateTray(); sendStatus(); }
+  }, 15000);
+}
+
+// ---- system tray -----------------------------------------------------------
+let tray = null;
+let isQuitting = false;
+
+function toggleWindow() {
+  if (!win) { createWindow(); return; }
+  if (win.isVisible() && !win.isMinimized()) win.hide();
+  else { win.show(); win.focus(); }
+}
+
+function buildTrayMenu() {
+  const accounts = store.list();
+  const accItems = accounts.length
+    ? accounts.map((a) => ({
+      label: `${a.id === session.accountId && session.running ? '● ' : ''}${a.name}` +
+        (a.loggedIn ? '' : ' (not logged in)'),
+      click: () => {
+        if (win) { win.show(); win.focus(); }
+        if (session.projectDir) launchAccount(a.id, { continueConv: false });
+      },
+    }))
+    : [{ label: 'No accounts yet', enabled: false }];
+
+  return Menu.buildFromTemplate([
+    { label: win && win.isVisible() ? 'Hide window' : 'Show window', click: toggleWindow },
+    { type: 'separator' },
+    { label: 'Launch account', submenu: accItems },
+    { type: 'separator' },
+    { label: 'Quit Claude Multi', click: () => { isQuitting = true; app.quit(); } },
+  ]);
+}
+
+function updateTray() {
+  if (tray) { try { tray.setContextMenu(buildTrayMenu()); } catch { /* noop */ } }
+}
+
+function createTray() {
+  try {
+    let img = nativeImage.createFromPath(path.join(__dirname, 'renderer', 'icon.png'));
+    if (!img.isEmpty()) img = img.resize({ width: 16, height: 16 });
+    tray = new Tray(img);
+    tray.setToolTip('Claude Multi');
+    tray.on('click', toggleWindow);
+    updateTray();
+  } catch (e) {
+    console.error('[tray]', e);
+  }
+}
+
+// ---- update checker --------------------------------------------------------
+function checkForUpdate() {
+  return new Promise((resolve) => {
+    const req = https.request({
+      host: 'api.github.com',
+      path: '/repos/Chamanrajragu/claude-multi/releases/latest',
+      method: 'GET',
+      headers: { 'User-Agent': 'claude-multi', Accept: 'application/vnd.github+json' },
+      timeout: 8000,
+    }, (res) => {
+      let body = '';
+      res.on('data', (c) => { body += c; });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(body);
+          const latest = json.tag_name || json.name || '';
+          if (!latest) return resolve(null);
+          resolve({
+            latest: latest.replace(/^v/i, ''),
+            url: json.html_url || 'https://github.com/Chamanrajragu/claude-multi/releases',
+            isNewer: isNewer(latest, pkg.version),
+          });
+        } catch { resolve(null); }
+      });
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.end();
+  });
 }
 
 // ---- IPC ------------------------------------------------------------------
@@ -340,6 +449,7 @@ function registerIpc() {
   ipcMain.handle('settings:get', () => store.getSettings());
   ipcMain.handle('settings:set', (_e, patch) => {
     const s = store.setSettings(patch);
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'startOnLogin')) applyLoginItem(s.startOnLogin);
     sendStatus();
     return s;
   });
@@ -369,6 +479,32 @@ function registerIpc() {
     claudePath: findClaudePath(),
     platform: process.platform,
   }));
+  ipcMain.handle('app:checkUpdate', () => checkForUpdate());
+  ipcMain.handle('app:export', async () => {
+    const res = await dialog.showSaveDialog(win, {
+      title: 'Export Claude Multi config',
+      defaultPath: path.join(os.homedir(), 'claude-multi-backup.json'),
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (res.canceled || !res.filePath) return { ok: false };
+    try { fs.writeFileSync(res.filePath, store.exportData()); return { ok: true, path: res.filePath }; }
+    catch (e) { return { ok: false, error: String(e.message || e) }; }
+  });
+  ipcMain.handle('app:import', async () => {
+    const res = await dialog.showOpenDialog(win, {
+      title: 'Import Claude Multi config',
+      properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (res.canceled || !res.filePaths[0]) return { ok: false };
+    try {
+      store.importData(fs.readFileSync(res.filePaths[0], 'utf8'));
+      loginSnapshot = '';
+      sendStatus();
+      updateTray();
+      return { ok: true };
+    } catch (e) { return { ok: false, error: String(e.message || e) }; }
+  });
 
   ipcMain.on('term:input', (_e, data) => {
     sendToHost({ t: 'input', d: Buffer.from(data, 'utf8').toString('base64') });
@@ -408,6 +544,13 @@ function createWindow() {
 
   // Warn before quitting during a live session.
   win.on('close', (e) => {
+    // Minimize to tray instead of closing, if enabled.
+    if (!isQuitting && tray && store.getSettings().minimizeToTray) {
+      e.preventDefault();
+      win.hide();
+      updateTray();
+      return;
+    }
     if (session.running && store.getSettings().confirmClose) {
       const choice = dialog.showMessageBoxSync(win, {
         type: 'question',
@@ -431,16 +574,31 @@ app.whenReady().then(() => {
   // (otherwise session:status returns '' and clobbers the renderer's value).
   session.projectDir = store.get('lastProjectDir') || '';
   Menu.setApplicationMenu(null);
+  applyLoginItem(store.getSettings().startOnLogin);
   registerIpc();
   createWindow();
+  createTray();
   startLoginPolling();
+  startCooldownWatcher();
+
+  // Check for a newer release on startup (best-effort, silent on failure).
+  if (store.getSettings().checkUpdates) {
+    checkForUpdate().then((info) => {
+      if (info && info.isNewer && win) win.webContents.send('update:available', info);
+    });
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    else if (win) { win.show(); win.focus(); }
   });
+  app.on('before-quit', () => { isQuitting = true; });
 });
 
 app.on('window-all-closed', () => {
   sendToHost({ t: 'kill' });
+  // Keep running in the tray if the user chose minimize-to-tray.
+  if (!isQuitting && store && store.getSettings().minimizeToTray && tray) return;
   if (host) { try { host.kill(); } catch { /* noop */ } }
   if (process.platform !== 'darwin') app.quit();
 });
