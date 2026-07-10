@@ -1,61 +1,47 @@
-// Secure bridge between the renderer and the main process.
+// Secure bridge between the renderer and the main process (chat rebuild).
 const { contextBridge, ipcRenderer, clipboard } = require('electron');
 
 contextBridge.exposeInMainWorld('cc', {
-  // account management
-  listAccounts: () => ipcRenderer.invoke('accounts:list'),
+  // ---- state / accounts / project / settings ----
+  getState: () => ipcRenderer.invoke('app:getState'),
   addAccount: (name) => ipcRenderer.invoke('accounts:add', name),
   removeAccount: (id) => ipcRenderer.invoke('accounts:remove', id),
   renameAccount: (id, name) => ipcRenderer.invoke('accounts:rename', id, name),
-  clearCooldown: (id) => ipcRenderer.invoke('accounts:clearCooldown', id),
-  moveAccount: (id, dir) => ipcRenderer.invoke('accounts:move', id, dir),
-  setAccountColor: (id, color) => ipcRenderer.invoke('accounts:setColor', id, color),
-  addPrompt: (text) => ipcRenderer.invoke('prompt:add', text),
-  listPrompts: () => ipcRenderer.invoke('prompt:list'),
-  addWorkspace: (ws) => ipcRenderer.invoke('workspace:add', ws),
-  removeWorkspace: (id) => ipcRenderer.invoke('workspace:remove', id),
-  openWorkspace: (id) => ipcRenderer.invoke('workspace:open', id),
-  saveLog: (text) => ipcRenderer.invoke('app:saveLog', text),
-
-  // project folder
   pickProject: () => ipcRenderer.invoke('project:pick'),
-  getProject: () => ipcRenderer.invoke('project:get'),
   chooseProject: (dir) => ipcRenderer.invoke('project:choose', dir),
-  setProjectAccount: (dir, accountId) => ipcRenderer.invoke('project:setAccount', dir, accountId),
-
-  // session control
-  launch: (accountId) => ipcRenderer.invoke('session:launch', accountId),
-  switchTo: (targetId) => ipcRenderer.invoke('session:switch', targetId),
-  stop: () => ipcRenderer.invoke('session:stop'),
-  restart: () => ipcRenderer.invoke('session:restart'),
-  status: () => ipcRenderer.invoke('session:status'),
-
-  // settings
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
-  pickClaude: () => ipcRenderer.invoke('settings:pickClaude'),
 
-  // misc
-  openConfigDir: (id) => ipcRenderer.invoke('app:openConfigDir', id),
+  // ---- chat ----
+  startChat: (accountId) => ipcRenderer.invoke('chat:start', accountId),
+  getHistory: () => ipcRenderer.invoke('chat:getHistory'),
+  saveLog: (log) => ipcRenderer.invoke('chat:saveLog', log),
+  newChat: () => ipcRenderer.invoke('chat:new'),
+  sendMessage: (text) => ipcRenderer.invoke('chat:send', text),
+  interrupt: () => ipcRenderer.invoke('chat:interrupt'),
+  respondPermission: (requestId, allow, message) => ipcRenderer.invoke('chat:permission', requestId, allow, message),
+  switchAccount: (targetId) => ipcRenderer.invoke('chat:switch', targetId),
+  stopChat: () => ipcRenderer.invoke('chat:stop'),
+
+  // ---- login (interactive terminal, one-time per account) ----
+  loginStart: (accountId) => ipcRenderer.invoke('login:start', accountId),
+  loginInput: (data) => ipcRenderer.send('login:input', data),
+  loginResize: (cols, rows) => ipcRenderer.send('login:resize', cols, rows),
+  loginStop: () => ipcRenderer.invoke('login:stop'),
+
+  // ---- misc ----
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
+  openConfigDir: (id) => ipcRenderer.invoke('app:openConfigDir', id),
   appInfo: () => ipcRenderer.invoke('app:info'),
-  checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
-  exportConfig: () => ipcRenderer.invoke('app:export'),
-  importConfig: () => ipcRenderer.invoke('app:import'),
-
-  // clipboard (Electron native — works in the file:// renderer)
   clipboardRead: () => clipboard.readText(),
   clipboardWrite: (text) => clipboard.writeText(text),
 
-  // terminal I/O
-  sendInput: (data) => ipcRenderer.send('term:input', data),
-  resize: (cols, rows) => ipcRenderer.send('term:resize', cols, rows),
-  onData: (cb) => ipcRenderer.on('term:data', (_e, d) => cb(d)),
-  onExit: (cb) => ipcRenderer.on('term:exit', (_e, code) => cb(code)),
-
-  // events
-  onStatus: (cb) => ipcRenderer.on('status', (_e, s) => cb(s)),
-  onLimitReached: (cb) => ipcRenderer.on('limit:reached', (_e, info) => cb(info)),
-  onLimitApproaching: (cb) => ipcRenderer.on('limit:approaching', (_e, info) => cb(info)),
-  onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_e, info) => cb(info)),
+  // ---- events (main -> renderer) ----
+  onChat: (cb) => ipcRenderer.on('chat:event', (_e, ev) => cb(ev)),
+  onHistory: (cb) => ipcRenderer.on('chat:history', (_e, info) => cb(info)),
+  onState: (cb) => ipcRenderer.on('app:state', (_e, s) => cb(s)),
+  onLimit: (cb) => ipcRenderer.on('chat:limit', (_e, info) => cb(info)),
+  onLoginData: (cb) => ipcRenderer.on('login:data', (_e, d) => cb(d)),
+  onLoginExit: (cb) => ipcRenderer.on('login:exit', (_e, code) => cb(code)),
+  onLoginSuccess: (cb) => ipcRenderer.on('login:success', (_e, info) => cb(info)),
 });

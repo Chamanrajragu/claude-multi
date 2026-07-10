@@ -15,7 +15,8 @@ const DEFAULT_SETTINGS = {
   fontSize: 13,            // terminal font size
   extraArgs: '',           // extra flags passed to `claude` on launch
   confirmClose: true,      // warn before quitting during a live session
-  model: '',               // default model alias passed via --model (''=account default)
+  model: '',               // model alias for the SDK (''=account default)
+  effort: 'medium',        // thinking effort: ''/low | medium | high | ultra
   minimizeToTray: false,   // closing the window hides to the tray instead of quitting
   startOnLogin: false,     // launch the app when the user logs in
   checkUpdates: true,      // check GitHub for a newer release on startup

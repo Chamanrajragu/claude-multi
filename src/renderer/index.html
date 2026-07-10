@@ -2,256 +2,169 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; font-src 'self' data:;" />
   <link rel="stylesheet" href="../../node_modules/@xterm/xterm/css/xterm.css" />
   <link rel="stylesheet" href="styles.css" />
   <title>Claude Multi</title>
 </head>
 <body>
   <div id="app">
+    <!-- ============ SIDEBAR ============ -->
     <aside id="sidebar">
       <div class="brand">
-        <div class="logo">CC</div>
-        <div>
+        <div class="brand-logo">✦</div>
+        <div class="brand-text">
           <div class="brand-title">Claude Multi</div>
-          <div class="brand-sub">multi-account launcher</div>
+          <div class="brand-sub">multi-account</div>
         </div>
-        <button id="settingsBtn" class="icon-btn" title="Settings">⚙</button>
       </div>
 
-      <div class="section-label">
-        Project folder
-        <button id="recentBtn" class="mini-btn" title="Recent folders">▾</button>
-      </div>
-      <button id="pickProject" class="project-btn" title="Choose the folder Claude Code works in">
-        <span id="projectPath">No folder selected</span>
-      </button>
-      <div id="recentMenu" class="popup hidden"></div>
+      <button id="newChatBtn" class="new-chat-btn"><span class="plus">＋</span> New chat</button>
 
-      <div id="projectAccountRow" class="project-account hidden">
-        <span class="pa-label">Account for this project</span>
-        <button id="projectAccountBtn" class="pa-select" title="Choose which account this project uses">
-          <span id="projectAccountName">Choose…</span><span class="pa-caret">▾</span>
+      <div class="side-section">
+        <div class="side-label">Project folder</div>
+        <button id="projectBtn" class="project-btn" title="Choose the folder Claude works in">
+          <span class="folder-ico">📁</span>
+          <span id="projectName">Choose a folder…</span>
         </button>
       </div>
-      <div id="projectAccountMenu" class="popup hidden"></div>
 
-      <div class="section-label" id="workspacesLabel">
-        Workspaces
-        <button id="addWorkspace" class="mini-btn" title="Save current project + account as a workspace">+</button>
-      </div>
-      <div class="sidebar-scroll">
-        <div id="workspaceList" class="workspace-list"></div>
-
-        <div class="section-label">
-          Accounts <span id="availCount" class="count-pill"></span>
-          <button id="addAccount" class="mini-btn" title="Add an account">+</button>
+      <div class="side-section accounts-section">
+        <div class="side-label">
+          <span>Accounts</span>
+          <button id="addAccountBtn" class="icon-btn" title="Add an account">＋</button>
         </div>
-        <input id="accountFilter" class="account-filter hidden" type="text" placeholder="Filter accounts…" />
         <div id="accountList" class="account-list"></div>
       </div>
 
-      <div class="sidebar-bottom">
-      <div class="hint" id="loginHint">
-        Tip: to log in an account, launch it and type <code>/login</code> in the terminal.
-      </div>
-
-      <div class="sidebar-footer">
-        <button id="restartBtn" class="ghost-btn" disabled title="Restart current session with --continue">Restart</button>
-        <button id="stopBtn" class="ghost-btn" disabled>Stop</button>
-      </div>
-
-      <div class="app-footer">
-        <div class="trust">🔒 100% free &amp; open source. Your logins stay on your machine — we never store or send your credentials.</div>
-        <div class="footer-links">
-          <a id="ghLink" class="footer-link" href="#" title="View the source on GitHub">
-            <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-            <span>GitHub</span>
-          </a>
-          <button id="shortcutsBtn" class="footer-link" title="Keyboard shortcuts (?)">⌨ Shortcuts</button>
-          <span class="footer-by">by <b>Chaman Raj</b></span>
-        </div>
-      </div>
+      <div class="side-footer">
+        <button id="settingsBtn" class="foot-btn" title="Settings">⚙ Settings</button>
+        <div class="trust">🔒 Your logins stay on your device.</div>
       </div>
     </aside>
 
+    <!-- ============ MAIN ============ -->
     <main id="main">
-      <div id="topbar">
-        <div id="activeBadge" class="badge idle">No session</div>
-        <div class="stat" id="timerStat" title="Session duration">⏱ 00:00</div>
-        <div class="stat" id="switchStat" title="Switches this run">⇄ 0</div>
-        <div class="spacer"></div>
-        <a id="updateBanner" class="update-banner hidden" href="#"></a>
-        <div id="approachBanner" class="approach hidden"></div>
-        <div class="toolbar">
-          <button id="switchMenuBtn" class="tool-btn" title="Switch account now" disabled>Switch ▾</button>
-          <button id="searchBtn" class="tool-btn" title="Search (Ctrl+F)">Find</button>
-          <button id="copyBtn" class="tool-btn" title="Copy selection (Ctrl+Shift+C)">Copy</button>
-          <button id="pasteBtn" class="tool-btn" title="Paste (Ctrl+Shift+V)">Paste</button>
-          <button id="fontDownBtn" class="tool-btn" title="Smaller text (Ctrl+-)">A−</button>
-          <button id="fontUpBtn" class="tool-btn" title="Larger text (Ctrl+=)">A+</button>
-          <button id="logBtn" class="tool-btn" title="Save session log to a file">Log</button>
-          <button id="clearBtn" class="tool-btn" title="Clear terminal (Ctrl+K)">Clear</button>
-        </div>
-      </div>
-      <div id="switchMenu" class="popup hidden"></div>
-      <div id="searchBar" class="search-bar hidden">
-        <input id="searchInput" type="text" placeholder="Search terminal…" />
-        <button id="searchPrev" class="tool-btn" title="Previous">↑</button>
-        <button id="searchNext" class="tool-btn" title="Next">↓</button>
-        <button id="searchClose" class="tool-btn" title="Close">✕</button>
-      </div>
-      <div id="terminal"></div>
-
-      <div id="composer">
-        <div class="composer-box">
-          <button id="micBtn" class="mic-btn" title="Dictate with your voice">🎤</button>
-          <textarea id="composerInput" rows="1" placeholder="Send a message to Claude…  (Enter to send · Shift+Enter for a new line)"></textarea>
-          <button id="sendBtn" class="composer-send" title="Send (Enter)">Send</button>
-        </div>
-        <div class="composer-bar">
-          <div class="cb-left">
-            <button id="modelBtn" class="chip" title="Choose the Claude model">◇ <span id="modelLabel">Default model</span> <span class="pa-caret">▾</span></button>
-            <button id="modeBtn" class="chip" title="Cycle permission mode (sends Shift+Tab)">⏵⏵ <span id="modeLabel">Mode</span></button>
-          </div>
-          <div class="cb-right">
-            <button class="chip preset" data-insert="ultrathink ">✦ ultrathink</button>
-            <button class="chip preset" data-send="/compact">/compact</button>
-            <button class="chip preset" data-send="/clear">/clear</button>
-            <button class="chip preset" data-key="esc" title="Interrupt Claude (Esc)">Esc</button>
+      <header id="topbar">
+        <div class="top-left">
+          <div id="activeDot" class="status-dot off"></div>
+          <div class="top-titles">
+            <div id="activeName" class="top-name">No account selected</div>
+            <div id="activeMeta" class="top-meta"></div>
           </div>
         </div>
-        <div id="modelMenu" class="popup hidden"></div>
-      </div>
+        <div class="top-right">
+          <button id="newChatTop" class="pill-btn" title="Start a new chat">＋ New chat</button>
+        </div>
+      </header>
 
-      <div id="emptyState" class="empty-state hidden">
-        <div class="empty-card">
-          <div class="empty-logo">CC</div>
-          <h2>Welcome to Claude Multi</h2>
-          <ol>
-            <li>Pick your <b>project folder</b> (top-left).</li>
-            <li>Click <b>+</b> to add an account, then <b>Launch</b> it.</li>
-            <li>Type <code>/login</code> in the terminal to sign that account in.</li>
-            <li>Repeat for each account. When one runs out, you'll be offered a switch — your conversation carries over.</li>
+      <div id="transcript" class="transcript">
+        <div id="welcome" class="welcome">
+          <div class="welcome-logo">✦</div>
+          <h1>Chat with Claude across your accounts</h1>
+          <ol class="welcome-steps">
+            <li><b>1.</b> Pick a <b>project folder</b> on the left.</li>
+            <li><b>2.</b> <b>Add an account</b> and click <b>Log in</b> to sign it in.</li>
+            <li><b>3.</b> Click an account to start chatting.</li>
+            <li><b>4.</b> When one runs out, we switch to the next — your chat carries over.</li>
           </ol>
         </div>
+      </div>
+
+      <div id="composer" class="composer">
+        <div id="genBar" class="gen-bar hidden">
+          <span class="gen-spinner"></span><span id="genText">Claude is working…</span>
+          <button id="stopBtn" class="stop-btn">Stop</button>
+        </div>
+        <div class="composer-box">
+          <textarea id="input" rows="1" placeholder="Message Claude…  (Enter to send · Shift+Enter for a new line)"></textarea>
+          <button id="sendBtn" class="send-btn" title="Send">➤</button>
+        </div>
+        <div class="composer-tools">
+          <button id="modelChip" class="chip" title="Choose the model">◇ <span id="modelChipLabel">Default</span> ▾</button>
+          <button id="effortChip" class="chip" title="Thinking effort">⚡ <span id="effortChipLabel">Medium</span> ▾</button>
+          <span class="composer-hint" id="composerHint"></span>
+        </div>
+        <div id="modelMenu" class="menu hidden"></div>
+        <div id="effortMenu" class="menu hidden"></div>
       </div>
     </main>
   </div>
 
-  <!-- Limit / switch dialog -->
-  <div id="overlay" class="hidden">
-    <div class="dialog">
+  <!-- ============ LOGIN MODAL ============ -->
+  <div id="loginModal" class="overlay hidden">
+    <div class="modal login-modal">
+      <div class="modal-head">
+        <h2 id="loginTitle">Sign in</h2>
+        <button id="loginClose" class="x-btn">✕</button>
+      </div>
+      <div class="login-help">
+        In the window below: choose <b>“1. Claude account with subscription”</b>, sign in when your
+        browser opens, then <b>paste the code</b> back here (right-click or <b>Ctrl+V</b>) and press Enter.
+      </div>
+      <div id="loginTerm" class="login-term"></div>
+      <div id="loginStatus" class="login-status"></div>
+    </div>
+  </div>
+
+  <!-- ============ SWITCH DIALOG ============ -->
+  <div id="switchModal" class="overlay hidden">
+    <div class="modal switch-modal">
       <div class="dialog-icon">⚡</div>
-      <h2 id="dlgTitle">Usage limit reached</h2>
-      <p id="dlgBody"></p>
-      <div class="dialog-actions">
-        <button id="dlgCancel" class="ghost-btn">Not now</button>
-        <button id="dlgSwitch" class="primary-btn">Switch account</button>
+      <h2 id="switchTitle">Usage limit reached</h2>
+      <p id="switchBody"></p>
+      <div class="modal-actions">
+        <button id="switchCancel" class="btn-ghost">Not now</button>
+        <button id="switchGo" class="btn-primary">Switch account</button>
       </div>
     </div>
   </div>
 
-  <!-- Settings modal -->
-  <div id="settingsOverlay" class="hidden">
-    <div class="dialog settings-dialog">
-      <h2>Settings</h2>
-      <div class="setting-row">
-        <label for="setAutoSwitch"><b>Auto-switch on limit</b><span>Switch accounts automatically (with a countdown) instead of asking.</span></label>
-        <input type="checkbox" id="setAutoSwitch" class="switch" />
+  <!-- ============ SETTINGS MODAL ============ -->
+  <div id="settingsModal" class="overlay hidden">
+    <div class="modal settings-modal">
+      <div class="modal-head">
+        <h2>Settings</h2>
+        <button id="settingsClose" class="x-btn">✕</button>
       </div>
       <div class="setting-row">
-        <label for="setDelay"><b>Auto-switch countdown</b><span>Seconds to wait before switching.</span></label>
-        <input type="number" id="setDelay" min="0" max="60" class="num" />
+        <div><div class="s-title">Theme</div><div class="s-sub">Appearance of the app</div></div>
+        <select id="setTheme"><option value="light">Light</option><option value="dark">Dark</option></select>
       </div>
       <div class="setting-row">
-        <label for="setNotify"><b>Desktop notifications</b><span>Notify when a limit is hit or an account switches.</span></label>
-        <input type="checkbox" id="setNotify" class="switch" />
+        <div><div class="s-title">Default model</div><div class="s-sub">Used for new chats</div></div>
+        <select id="setModel"><option value="">Account default</option><option value="opus">Opus</option><option value="sonnet">Sonnet</option><option value="haiku">Haiku</option></select>
       </div>
       <div class="setting-row">
-        <label for="setConfirmClose"><b>Confirm before quit</b><span>Warn if a session is live when closing the app.</span></label>
-        <input type="checkbox" id="setConfirmClose" class="switch" />
+        <div><div class="s-title">Auto-switch on limit</div><div class="s-sub">Switch without asking when an account runs out</div></div>
+        <label class="switch"><input type="checkbox" id="setAutoSwitch" /><span class="slider"></span></label>
       </div>
       <div class="setting-row">
-        <label for="setMinimizeToTray"><b>Minimize to tray</b><span>Closing the window keeps the app running in the system tray.</span></label>
-        <input type="checkbox" id="setMinimizeToTray" class="switch" />
+        <div><div class="s-title">Notifications</div><div class="s-sub">Desktop alerts on limit / switch</div></div>
+        <label class="switch"><input type="checkbox" id="setNotify" /><span class="slider"></span></label>
       </div>
-      <div class="setting-row">
-        <label for="setStartOnLogin"><b>Start on login</b><span>Launch Claude Multi automatically when you sign in.</span></label>
-        <input type="checkbox" id="setStartOnLogin" class="switch" />
-      </div>
-      <div class="setting-row">
-        <label for="setCheckUpdates"><b>Check for updates</b><span>Notify me when a newer version is released.</span></label>
-        <input type="checkbox" id="setCheckUpdates" class="switch" />
-      </div>
-      <div class="setting-row">
-        <label for="setTheme"><b>Theme</b></label>
-        <select id="setTheme" class="num">
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-        </select>
-      </div>
-      <div class="setting-row">
-        <label for="setExtraArgs"><b>Extra launch flags</b><span>Passed to <code>claude</code> on launch, e.g. <code>--model opus</code>.</span></label>
-        <input type="text" id="setExtraArgs" class="text" placeholder="(none)" />
-      </div>
-      <div class="setting-row">
-        <label><b>Claude executable</b><span id="claudePathLabel">—</span></label>
-        <button id="pickClaudeBtn" class="ghost-btn">Locate…</button>
-      </div>
-      <div class="setting-row">
-        <label><b>Backup</b><span>Export or import your accounts &amp; settings (no credentials included).</span></label>
-        <div class="btn-pair">
-          <button id="exportBtn" class="ghost-btn">Export…</button>
-          <button id="importBtn" class="ghost-btn">Import…</button>
-        </div>
-      </div>
-      <div id="aboutLine" class="about"></div>
-      <div class="about privacy-note">🔒 Free &amp; open source · no telemetry · your credentials never leave your device.</div>
-      <div class="about"><a id="ghLink2" class="footer-link">★ Star on GitHub — github.com/Chamanrajragu</a></div>
-      <div class="dialog-actions">
-        <button id="settingsClose" class="primary-btn">Done</button>
+      <div class="setting-foot" id="aboutLine"></div>
+    </div>
+  </div>
+
+  <!-- ============ PROMPT MODAL (name input) ============ -->
+  <div id="promptModal" class="overlay hidden">
+    <div class="modal prompt-modal">
+      <p id="promptLabel" class="prompt-label"></p>
+      <input id="promptInput" class="prompt-input" type="text" />
+      <div class="modal-actions">
+        <button id="promptCancel" class="btn-ghost">Cancel</button>
+        <button id="promptOk" class="btn-primary">OK</button>
       </div>
     </div>
   </div>
 
-  <!-- Keyboard shortcuts -->
-  <div id="shortcutsOverlay" class="hidden">
-    <div class="dialog shortcuts-dialog">
-      <h2>Keyboard shortcuts</h2>
-      <table class="shortcuts-table">
-        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>P</kbd></td><td>Command palette</td></tr>
-        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>1</kbd>…<kbd>9</kbd></td><td>Launch / switch to the Nth account</td></tr>
-        <tr><td><kbd>Enter</kbd> / <kbd>Shift</kbd> <kbd>Enter</kbd></td><td>Send message / new line (chat bar)</td></tr>
-        <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Reuse recent prompts (chat bar)</td></tr>
-        <tr><td><kbd>Win</kbd> <kbd>H</kbd></td><td>Windows Voice Typing into the chat bar</td></tr>
-        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>F</kbd></td><td>Search the terminal</td></tr>
-        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>Shift</kbd> <kbd>C</kbd> / <kbd>V</kbd></td><td>Copy / paste</td></tr>
-        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>=</kbd> / <kbd>-</kbd></td><td>Bigger / smaller text</td></tr>
-        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>K</kbd></td><td>Clear terminal</td></tr>
-        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>,</kbd></td><td>Open settings</td></tr>
-        <tr><td><kbd>?</kbd></td><td>This help</td></tr>
-      </table>
-      <div class="dialog-actions">
-        <button id="shortcutsClose" class="primary-btn">Got it</button>
-      </div>
-    </div>
-  </div>
+  <div id="toast" class="toast hidden"></div>
 
-  <!-- Command palette -->
-  <div id="paletteOverlay" class="hidden">
-    <div class="palette">
-      <input id="paletteInput" type="text" placeholder="Type a command…  (↑ ↓ to navigate · Enter to run · Esc to close)" />
-      <div id="paletteList" class="palette-list"></div>
-    </div>
-  </div>
-
-  <div id="toasts"></div>
-
+  <script src="../../node_modules/marked/lib/marked.umd.js"></script>
+  <script src="../../node_modules/dompurify/dist/purify.js"></script>
   <script src="../../node_modules/@xterm/xterm/lib/xterm.js"></script>
   <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
-  <script src="../../node_modules/@xterm/addon-search/lib/addon-search.js"></script>
-  <script src="../../node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

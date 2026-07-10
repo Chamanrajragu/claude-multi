@@ -1,6 +1,6 @@
 {
   "name": "claude-multi",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "description": "Run Claude Code with multiple accounts and auto-switch when one hits its usage limit.",
   "main": "src/main.js",
   "scripts": {
@@ -33,11 +33,14 @@
     "url": "https://github.com/Chamanrajragu/claude-multi/issues"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.206",
     "@lydell/node-pty": "^1.1.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-search": "^0.15.0",
     "@xterm/addon-web-links": "^0.11.0",
-    "@xterm/xterm": "^5.5.0"
+    "@xterm/xterm": "^5.5.0",
+    "dompurify": "^3.4.11",
+    "marked": "^18.0.6"
   },
   "devDependencies": {
     "electron": "^33.2.0",

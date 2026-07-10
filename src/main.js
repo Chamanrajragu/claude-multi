@@ -1,60 +1,46 @@
-// Electron main process: owns the window, the account store, and the pty-host
-// child. It relays terminal I/O between the renderer and the pty host, scans
-// the output for usage limits, tracks per-account cooldowns, and performs
-// account switches (carrying the current conversation transcript to the new
-// account so `claude --continue` can resume it).
-const { app, BrowserWindow, ipcMain, dialog, Notification, shell, Menu, Tray, nativeImage } = require('electron');
+// Electron main process (chat rebuild).
+// Responsibilities:
+//   - account store + settings + project folder
+//   - CHAT: drive Claude via the Agent SDK (src/chat.js), one session per
+//     active account, with in-chat permission prompts, usage-limit detection,
+//     and account switching that carries the conversation across accounts.
+//   - LOGIN: a small interactive terminal (pty-host) used only to run /login
+//     once per account (OAuth can't run in headless chat mode).
+const { app, BrowserWindow, ipcMain, dialog, Notification, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const https = require('https');
 const { spawn, execSync } = require('child_process');
-const { Store } = require('./accounts');
-const { classify } = require('./limits');
+const { Store, readAccountInfo } = require('./accounts');
 const cooldown = require('./cooldown');
-const { isNewer } = require('./update');
-const pkg = require('../package.json');
-
-function applyLoginItem(enabled) {
-  try { app.setLoginItemSettings({ openAtLogin: !!enabled }); } catch { /* unsupported */ }
-}
+const { ChatSession, extractResetAt } = require('./chat');
 
 const APP_ROOT = path.join(__dirname, '..');
-const DEFAULT_COOLDOWN_MS = 5 * 3600e3; // Claude session limits reset ~5h later
+const DEFAULT_COOLDOWN_MS = 5 * 3600e3;
 let win = null;
 let store = null;
 
-// ---- pty host management -------------------------------------------------
-let host = null;          // child_process handle
-let hostBuf = '';         // line buffer for host stdout
-
-// Current session state
-const session = {
-  accountId: null,
+// ---- runtime state --------------------------------------------------------
+const state = {
+  activeAccountId: null,
   projectDir: '',
-  running: false,
-  cols: 80,
-  rows: 24,
-  scanBuf: '',            // rolling stripped-output buffer for limit detection
-  limitHit: false,        // guard against re-firing within one session
-  startedAt: 0,           // ms timestamp of current session start
-  switchCount: 0,         // how many auto/manual switches this run
+  session: null,      // ChatSession
+  running: false,     // a chat session process is alive
+  generating: false,  // a turn is in progress
+  switchCount: 0,
+  pendingSend: null,  // message queued while a session is (re)starting
 };
 
-let loginSnapshot = '';   // to detect login changes while polling
-
+// ---- helpers --------------------------------------------------------------
 function findClaudePath() {
-  const override = store.getSettings().claudePath || store.get('claudePath');
+  const override = store.getSettings().claudePath;
   if (override && fs.existsSync(override)) return override;
   const candidates = [
     path.join(os.homedir(), '.local', 'bin', 'claude.exe'),
     path.join(os.homedir(), '.local', 'bin', 'claude'),
     path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'claude.cmd'),
-    path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'claude'),
   ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
+  for (const c of candidates) if (fs.existsSync(c)) return c;
   try {
     const cmd = process.platform === 'win32' ? 'where claude' : 'command -v claude';
     const out = execSync(cmd, { encoding: 'utf8' }).split(/\r?\n/)[0].trim();
@@ -63,165 +49,169 @@ function findClaudePath() {
   return process.platform === 'win32' ? 'claude.exe' : 'claude';
 }
 
-// Split a user-provided extra-args string into argv, honouring simple quotes.
-function parseArgs(str) {
-  if (!str) return [];
-  const out = [];
-  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
-  let m;
-  while ((m = re.exec(str)) !== null) out.push(m[1] ?? m[2] ?? m[3]);
-  return out;
+// A conversation is scoped to a PROJECT, not an account. We persist, per
+// project: the Claude session id (so any account can --resume it), which
+// account last ran it (so we know where to copy the transcript FROM when
+// switching), and the display log (so the UI shows full history on any account
+// and after a restart).
+function getProjectChat(project) {
+  const m = store.get('projectChats') || {};
+  return m[project] || { sessionId: '', lastAccount: '', log: [] };
 }
-
-function startHost() {
-  if (host) return;
-  // Run under system Node so the prebuilt pty binary (Node ABI) loads cleanly.
-  host = spawn('node', [path.join(__dirname, 'pty-host.js')], {
-    cwd: APP_ROOT,
-    shell: true, // resolve `node` from PATH on Windows
-    stdio: ['pipe', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
-  host.stdout.setEncoding('utf8');
-  host.stdout.on('data', onHostData);
-  host.stderr.setEncoding('utf8');
-  host.stderr.on('data', (d) => console.error('[pty-host]', d));
-  host.on('exit', () => {
-    host = null;
-    if (session.running) {
-      session.running = false;
-      if (win) win.webContents.send('term:data', '\r\n\x1b[31m[launcher] terminal host stopped unexpectedly\x1b[0m\r\n');
-      sendStatus();
-    }
-  });
-}
-
-function sendToHost(obj) {
-  if (host && host.stdin.writable) host.stdin.write(JSON.stringify(obj) + '\n');
-}
-
-function onHostData(chunk) {
-  hostBuf += chunk;
-  let idx;
-  while ((idx = hostBuf.indexOf('\n')) >= 0) {
-    const line = hostBuf.slice(0, idx);
-    hostBuf = hostBuf.slice(idx + 1);
-    if (!line.trim()) continue;
-    let msg;
-    try { msg = JSON.parse(line); } catch { continue; }
-    handleHostMessage(msg);
-  }
-}
-
-function handleHostMessage(msg) {
-  switch (msg.t) {
-    case 'ready':
-      session.running = true;
-      session.startedAt = Date.now();
-      updateTitle();
-      sendStatus();
-      break;
-    case 'data': {
-      const text = Buffer.from(msg.d, 'base64').toString('utf8');
-      if (win) win.webContents.send('term:data', text);
-      scanForLimit(text);
-      break;
-    }
-    case 'exit':
-      session.running = false;
-      updateTitle();
-      if (win) win.webContents.send('term:exit', msg.code);
-      sendStatus();
-      break;
-    case 'error':
-      if (win) win.webContents.send('term:data', `\r\n\x1b[31m[launcher] ${msg.message}\x1b[0m\r\n`);
-      break;
-    default:
-      break;
-  }
+function saveProjectChat(project, patch) {
+  if (!project) return;
+  const m = store.get('projectChats') || {};
+  m[project] = Object.assign({ sessionId: '', lastAccount: '', log: [] }, m[project] || {}, patch);
+  store.set('projectChats', m);
 }
 
 function notify(title, body) {
   try {
-    if (!store.getSettings().notify) return;
-    if (!Notification.isSupported()) return;
-    const n = new Notification({ title, body, silent: false });
+    if (!store.getSettings().notify || !Notification.isSupported()) return;
+    const n = new Notification({ title, body });
     n.on('click', () => { if (win) { win.show(); win.focus(); } });
     n.show();
   } catch { /* noop */ }
 }
 
-function scanForLimit(text) {
-  if (session.limitHit) return;
-  session.scanBuf = (session.scanBuf + text).slice(-6000);
-  const { kind, resetHint, resetAt } = classify(session.scanBuf);
-  if (kind === 'reached') {
-    session.limitHit = true;
-    const until = resetAt || Date.now() + DEFAULT_COOLDOWN_MS;
-    store.setCooldown(session.accountId, until, resetHint);
-    const next = cooldown.pickNext(store.list(), session.accountId);
-    const cur = store.byId(session.accountId);
-    const settings = store.getSettings();
-    notify(
-      'Usage limit reached',
-      (cur ? (cur.name) : 'Account') + ' hit its limit.' +
-      (next ? ` Switching to ${next.name}.` : ' No other account available.'),
-    );
-    if (win) {
-      win.webContents.send('limit:reached', {
-        accountId: session.accountId,
-        resetHint,
-        resetAt: until,
-        autoSwitch: settings.autoSwitch,
-        autoSwitchDelay: settings.autoSwitchDelay,
-        next: next ? { id: next.id, name: next.name, email: next.email } : null,
-      });
-    }
-    sendStatus();
-  } else if (kind === 'approaching') {
-    if (win) win.webContents.send('limit:approaching', { resetHint });
-  }
+function toRenderer(channel, payload) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }
 
-// ---- launching / switching ------------------------------------------------
-function launchAccount(accountId, { continueConv = false } = {}) {
+function statePayload() {
+  return {
+    accounts: store.list(),
+    activeAccountId: state.activeAccountId,
+    projectDir: state.projectDir,
+    running: state.running,
+    generating: state.generating,
+    switchCount: state.switchCount,
+    settings: store.getSettings(),
+    availableCount: cooldown.availableCount(store.list()),
+  };
+}
+function pushState() { toRenderer('app:state', statePayload()); }
+
+// ---- chat engine ----------------------------------------------------------
+function stopSession() {
+  if (state.session) { try { state.session.stop(); } catch { /* noop */ } state.session = null; }
+  state.running = false;
+  state.generating = false;
+}
+
+function startSession(accountId, resumeId) {
   const acc = store.byId(accountId);
   if (!acc) return { ok: false, error: 'Account not found' };
-  const projectDir = session.projectDir || store.get('lastProjectDir');
-  if (!projectDir || !fs.existsSync(projectDir)) {
-    return { ok: false, error: 'Pick a project folder first' };
-  }
-  const claudePath = findClaudePath();
-  startHost();
-  const args = [];
-  if (continueConv) args.push('--continue');
-  const model = store.getSettings().model;
-  if (model) args.push('--model', model);
-  args.push(...parseArgs(store.getSettings().extraArgs));
-  session.accountId = accountId;
-  session.projectDir = projectDir;
-  session.scanBuf = '';
-  session.limitHit = false;
-  store.addRecentProject(projectDir);
-  store.setProjectAccount(projectDir, accountId); // remember which account this project uses
-  store.recordLaunch(accountId); // usage stats: sessions + lastUsedAt
-  sendToHost({
-    t: 'spawn',
-    file: claudePath,
-    args,
-    cwd: projectDir,
-    cols: session.cols,
-    rows: session.rows,
-    env: { CLAUDE_CONFIG_DIR: acc.configDir, FORCE_COLOR: '1' },
+  if (!state.projectDir || !fs.existsSync(state.projectDir)) return { ok: false, error: 'Pick a project folder first' };
+  const info = readAccountInfo(acc.configDir);
+  if (!info.loggedIn) return { ok: false, error: 'not_logged_in' };
+
+  stopSession();
+  state.activeAccountId = accountId;
+  const s = store.getSettings();
+  const session = new ChatSession({
+    configDir: acc.configDir,
+    cwd: state.projectDir,
+    model: s.model || '',
+    effort: s.effort || '',
+    resumeId: resumeId || '',
+    permissionMode: 'default', // "ask each time" via canUseTool
+    onEvent: (ev) => onChatEvent(accountId, ev),
   });
+  state.session = session;
+  state.running = true;
+  store.recordLaunch(accountId);
+  store.setProjectAccount(state.projectDir, accountId);
+  session.start();
+  pushState();
   return { ok: true };
 }
 
-// Copy the active project's conversation transcripts from one account's config
-// dir to another, so `claude --continue` on the new account resumes the chat.
-// Claude Code stores them at <configDir>/projects/<encoded-cwd>/*.jsonl, where
-// the cwd is encoded by replacing every non-alphanumeric char with '-'.
-function syncTranscripts(fromDir, toDir, projectDir) {
+// The single entry point for "use account X for the current project chat".
+// Carries the existing conversation onto X (transcript copy + resume) so the
+// chat continues seamlessly across accounts, then tells the UI to render the
+// stored history.
+function useAccountForChat(accountId) {
+  const acc = store.byId(accountId);
+  if (!acc) return { ok: false, error: 'Account not found' };
+  if (!state.projectDir) return { ok: false, error: 'Pick a project folder first' };
+  if (!readAccountInfo(acc.configDir).loggedIn) return { ok: false, error: 'not_logged_in' };
+
+  const project = state.projectDir;
+  const chat = getProjectChat(project);
+  let resumeId = '';
+  let carried = false;
+  if (chat.sessionId) {
+    if (chat.lastAccount && chat.lastAccount !== accountId) {
+      const fromAcc = store.byId(chat.lastAccount);
+      if (fromAcc && carryTranscripts(fromAcc.configDir, acc.configDir, project)) {
+        resumeId = chat.sessionId;
+        carried = true;
+      }
+    } else {
+      resumeId = chat.sessionId; // same account — resume its own conversation
+    }
+  }
+  const res = startSession(accountId, resumeId);
+  if (!res.ok) return res;
+  saveProjectChat(project, { lastAccount: accountId });
+  toRenderer('chat:history', { log: getProjectChat(project).log || [] });
+  return { ok: true, carried };
+}
+
+function onChatEvent(accountId, ev) {
+  // Ignore late events from a session we've already switched away from.
+  if (accountId !== state.activeAccountId) return;
+  switch (ev.type) {
+    case 'ready':
+      if (ev.sessionId) saveProjectChat(state.projectDir, { sessionId: ev.sessionId, lastAccount: accountId });
+      break;
+    case 'turn_end':
+      state.generating = false;
+      if (ev.sessionId) saveProjectChat(state.projectDir, { sessionId: ev.sessionId, lastAccount: accountId });
+      pushState();
+      break;
+    case 'limit':
+      state.generating = false;
+      handleLimit(accountId, ev);
+      break;
+    case 'error':
+    case 'auth_failed':
+      state.generating = false;
+      pushState();
+      break;
+    case 'exit':
+      state.generating = false;
+      if (state.session && !state.session.alive) state.running = false;
+      pushState();
+      break;
+    default:
+      break;
+  }
+  // Forward every event to the chat UI.
+  toRenderer('chat:event', ev);
+}
+
+function handleLimit(accountId, ev) {
+  const until = ev.resetAt || (Date.now() + DEFAULT_COOLDOWN_MS);
+  store.setCooldown(accountId, until, ev.text || '');
+  const next = cooldown.pickNext(store.list(), accountId);
+  const cur = store.byId(accountId);
+  notify('Usage limit reached',
+    (cur ? cur.name : 'Account') + ' hit its limit.' + (next ? ` Switching to ${next.name}.` : ' No other account available.'));
+  toRenderer('chat:limit', {
+    accountId,
+    resetAt: until,
+    text: ev.text || '',
+    autoSwitch: store.getSettings().autoSwitch,
+    next: next ? { id: next.id, name: next.name, email: next.email } : null,
+  });
+  pushState();
+}
+
+// Copy the active project's transcripts from one account to another so the
+// switched-to account can resume the same conversation.
+function carryTranscripts(fromDir, toDir, projectDir) {
   try {
     const enc = projectDir.replace(/[^a-zA-Z0-9]/g, '-');
     const src = path.join(fromDir, 'projects', enc);
@@ -231,330 +221,182 @@ function syncTranscripts(fromDir, toDir, projectDir) {
       fs.cpSync(src, dst, { recursive: true });
       return true;
     }
-  } catch (e) {
-    console.error('[syncTranscripts]', e);
-  }
+  } catch (e) { console.error('[carryTranscripts]', e); }
   return false;
 }
 
 function switchAccount(targetId) {
-  const fromAcc = store.byId(session.accountId);
+  // Persist the live session id before we tear it down, so the carry works even
+  // if no turn has completed yet.
+  if (state.session && state.session.sessionId) {
+    saveProjectChat(state.projectDir, { sessionId: state.session.sessionId, lastAccount: state.activeAccountId });
+  }
   const toAcc = store.byId(targetId);
   if (!toAcc) return { ok: false, error: 'Target account not found' };
-
-  // Kill current session and give it a moment to release the transcript file.
-  sendToHost({ t: 'kill' });
-  session.running = false;
-
-  const projectDir = session.projectDir;
-  let carried = false;
-  if (fromAcc && toAcc && fromAcc.id !== toAcc.id) {
-    carried = syncTranscripts(fromAcc.configDir, toAcc.configDir, projectDir);
-  }
-
-  session.switchCount += 1;
-  if (projectDir) store.setProjectAccount(projectDir, targetId); // project now continues on the switched-to account
-  notify('Switched account', `Now running as ${toAcc.name}` + (carried ? ' · conversation carried over' : ''));
-
-  setTimeout(() => {
-    launchAccount(targetId, { continueConv: carried });
-  }, 500);
-
-  return { ok: true, carried };
+  state.switchCount += 1;
+  const res = useAccountForChat(targetId);
+  if (res.ok) notify('Switched account', `Now using ${toAcc.name}` + (res.carried ? ' · conversation carried over' : ''));
+  return res;
 }
 
-function updateTitle() {
-  if (!win) return;
-  const acc = store.byId(session.accountId);
-  const base = 'Claude Multi';
-  win.setTitle(session.running && acc ? `${base} — ${acc.name}` : base);
-}
+// ---- login terminal (pty-host, used only for /login) ----------------------
+let host = null;
+let hostBuf = '';
+let loginAccountId = null;
+let loginPoll = null;
 
-function statusPayload() {
-  return {
-    accountId: session.accountId,
-    projectDir: session.projectDir,
-    projectAccount: store.getProjectAccount(session.projectDir),
-    running: session.running,
-    startedAt: session.startedAt,
-    switchCount: session.switchCount,
-    accounts: store.list(),
-    recentProjects: store.get('recentProjects') || [],
-    workspaces: store.listWorkspaces(),
-    settings: store.getSettings(),
-    availableCount: cooldown.availableCount(store.list()),
-  };
-}
-
-function sendStatus() {
-  if (win) win.webContents.send('status', statusPayload());
-  updateTray();
-}
-
-// Poll account login state so the UI reflects a fresh /login without a restart.
-function startLoginPolling() {
-  setInterval(() => {
-    if (!win) return;
-    const snap = JSON.stringify(store.list().map((a) => [a.id, a.loggedIn, a.email, a.cooldownUntil]));
-    if (snap !== loginSnapshot) {
-      loginSnapshot = snap;
-      sendStatus();
-    }
-  }, 3000);
-}
-
-// Notify once when a cooling-down account becomes usable again.
-const notifiedReady = new Set();
-function startCooldownWatcher() {
-  setInterval(() => {
-    const now = Date.now();
-    let changed = false;
-    for (const a of store.list()) {
-      if (a.lastLimitAt && a.cooldownUntil && a.cooldownUntil <= now && a.loggedIn) {
-        const key = a.id + ':' + a.cooldownUntil;
-        if (!notifiedReady.has(key)) {
-          notifiedReady.add(key);
-          changed = true;
-          notify('Account ready again', `${a.name} has cooled down and is ready to use.`);
-        }
-      }
-    }
-    if (notifiedReady.size > 200) notifiedReady.clear();
-    if (changed) { updateTray(); sendStatus(); }
-  }, 15000);
-}
-
-// ---- system tray -----------------------------------------------------------
-let tray = null;
-let isQuitting = false;
-
-function toggleWindow() {
-  if (!win) { createWindow(); return; }
-  if (win.isVisible() && !win.isMinimized()) win.hide();
-  else { win.show(); win.focus(); }
-}
-
-function buildTrayMenu() {
-  const accounts = store.list();
-  const accItems = accounts.length
-    ? accounts.map((a) => ({
-      label: `${a.id === session.accountId && session.running ? '● ' : ''}${a.name}` +
-        (a.loggedIn ? '' : ' (not logged in)'),
-      click: () => {
-        if (win) { win.show(); win.focus(); }
-        if (session.projectDir) launchAccount(a.id, { continueConv: false });
-      },
-    }))
-    : [{ label: 'No accounts yet', enabled: false }];
-
-  return Menu.buildFromTemplate([
-    { label: win && win.isVisible() ? 'Hide window' : 'Show window', click: toggleWindow },
-    { type: 'separator' },
-    { label: 'Launch account', submenu: accItems },
-    { type: 'separator' },
-    { label: 'Quit Claude Multi', click: () => { isQuitting = true; app.quit(); } },
-  ]);
-}
-
-function updateTray() {
-  if (tray) { try { tray.setContextMenu(buildTrayMenu()); } catch { /* noop */ } }
-}
-
-function createTray() {
-  try {
-    let img = nativeImage.createFromPath(path.join(__dirname, 'renderer', 'icon.png'));
-    if (!img.isEmpty()) img = img.resize({ width: 16, height: 16 });
-    tray = new Tray(img);
-    tray.setToolTip('Claude Multi');
-    tray.on('click', toggleWindow);
-    updateTray();
-  } catch (e) {
-    console.error('[tray]', e);
-  }
-}
-
-// ---- update checker --------------------------------------------------------
-function checkForUpdate() {
-  return new Promise((resolve) => {
-    const req = https.request({
-      host: 'api.github.com',
-      path: '/repos/Chamanrajragu/claude-multi/releases/latest',
-      method: 'GET',
-      headers: { 'User-Agent': 'claude-multi', Accept: 'application/vnd.github+json' },
-      timeout: 8000,
-    }, (res) => {
-      let body = '';
-      res.on('data', (c) => { body += c; });
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(body);
-          const latest = json.tag_name || json.name || '';
-          if (!latest) return resolve(null);
-          resolve({
-            latest: latest.replace(/^v/i, ''),
-            url: json.html_url || 'https://github.com/Chamanrajragu/claude-multi/releases',
-            isNewer: isNewer(latest, pkg.version),
-          });
-        } catch { resolve(null); }
-      });
-    });
-    req.on('error', () => resolve(null));
-    req.on('timeout', () => { req.destroy(); resolve(null); });
-    req.end();
+function startHost() {
+  if (host) return;
+  host = spawn('node', [path.join(__dirname, 'pty-host.js')], {
+    cwd: APP_ROOT, shell: true, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
   });
+  host.stdout.setEncoding('utf8');
+  host.stdout.on('data', onHostData);
+  host.stderr.setEncoding('utf8');
+  host.stderr.on('data', (d) => console.error('[pty-host]', d));
+  host.on('exit', () => { host = null; });
 }
+function sendToHost(obj) { if (host && host.stdin.writable) host.stdin.write(JSON.stringify(obj) + '\n'); }
+function onHostData(chunk) {
+  hostBuf += chunk;
+  let i;
+  while ((i = hostBuf.indexOf('\n')) >= 0) {
+    const line = hostBuf.slice(0, i); hostBuf = hostBuf.slice(i + 1);
+    if (!line.trim()) continue;
+    let msg; try { msg = JSON.parse(line); } catch { continue; }
+    if (msg.t === 'data') toRenderer('login:data', Buffer.from(msg.d, 'base64').toString('utf8'));
+    else if (msg.t === 'exit') { toRenderer('login:exit', msg.code); stopLoginPoll(); }
+    else if (msg.t === 'error') toRenderer('login:data', `\r\n[error] ${msg.message}\r\n`);
+  }
+}
+function startLoginPoll(accountId) {
+  stopLoginPoll();
+  const acc = store.byId(accountId);
+  if (!acc) return;
+  loginPoll = setInterval(() => {
+    const info = readAccountInfo(acc.configDir);
+    if (info.loggedIn) {
+      stopLoginPoll();
+      toRenderer('login:success', { accountId, email: info.email });
+      pushState();
+    }
+  }, 1500);
+}
+function stopLoginPoll() { if (loginPoll) { clearInterval(loginPoll); loginPoll = null; } }
+
+function startLogin(accountId) {
+  const acc = store.byId(accountId);
+  if (!acc) return { ok: false, error: 'Account not found' };
+  stopSession(); // don't run chat + login at once
+  startHost();
+  loginAccountId = accountId;
+  sendToHost({
+    t: 'spawn',
+    file: findClaudePath(),
+    args: [],
+    cwd: acc.configDir, // cwd doesn't matter for /login
+    cols: 100, rows: 30,
+    env: { CLAUDE_CONFIG_DIR: acc.configDir, FORCE_COLOR: '1' },
+  });
+  startLoginPoll(accountId);
+  return { ok: true };
+}
+function stopLogin() { sendToHost({ t: 'kill' }); stopLoginPoll(); loginAccountId = null; return { ok: true }; }
 
 // ---- IPC ------------------------------------------------------------------
 function registerIpc() {
-  ipcMain.handle('accounts:list', () => store.list());
-  ipcMain.handle('accounts:add', (_e, name) => { store.add(name); return store.list(); });
-  ipcMain.handle('accounts:remove', (_e, id) => { store.remove(id); return store.list(); });
-  ipcMain.handle('accounts:rename', (_e, id, name) => { store.rename(id, name); return store.list(); });
-  ipcMain.handle('accounts:clearCooldown', (_e, id) => { store.clearCooldown(id); sendStatus(); return store.list(); });
-  ipcMain.handle('accounts:move', (_e, id, dir) => { store.moveAccount(id, dir); sendStatus(); return store.list(); });
-  ipcMain.handle('accounts:setColor', (_e, id, color) => { store.setColor(id, color); sendStatus(); return store.list(); });
-
-  ipcMain.handle('prompt:add', (_e, text) => store.addPrompt(text));
-  ipcMain.handle('prompt:list', () => store.getPromptHistory());
-
-  ipcMain.handle('workspace:add', (_e, ws) => {
-    try { const list = store.addWorkspace(ws); sendStatus(); return { ok: true, list }; }
-    catch (e) { return { ok: false, error: String(e.message || e) }; }
+  ipcMain.handle('app:getState', () => statePayload());
+  ipcMain.handle('accounts:add', (_e, name) => { store.add(name); pushState(); return statePayload(); });
+  ipcMain.handle('accounts:remove', (_e, id) => {
+    if (state.activeAccountId === id) stopSession();
+    store.remove(id); pushState(); return statePayload();
   });
-  ipcMain.handle('workspace:remove', (_e, id) => { store.removeWorkspace(id); sendStatus(); return store.listWorkspaces(); });
-  ipcMain.handle('workspace:open', (_e, id) => {
-    const ws = store.getWorkspace(id);
-    if (!ws) return { ok: false, error: 'Workspace not found' };
-    if (!fs.existsSync(ws.projectDir)) return { ok: false, error: 'Project folder no longer exists' };
-    session.projectDir = ws.projectDir;
-    store.addRecentProject(ws.projectDir);
-    const res = launchAccount(ws.accountId, { continueConv: false });
-    sendStatus();
-    return res;
-  });
-
-  ipcMain.handle('app:saveLog', async (_e, text) => {
-    const res = await dialog.showSaveDialog(win, {
-      title: 'Save session log',
-      defaultPath: path.join(os.homedir(), 'claude-session.log'),
-      filters: [{ name: 'Log', extensions: ['log', 'txt'] }],
-    });
-    if (res.canceled || !res.filePath) return { ok: false };
-    try { fs.writeFileSync(res.filePath, String(text || '')); return { ok: true, path: res.filePath }; }
-    catch (e) { return { ok: false, error: String(e.message || e) }; }
-  });
+  ipcMain.handle('accounts:rename', (_e, id, name) => { store.rename(id, name); pushState(); return statePayload(); });
 
   ipcMain.handle('project:pick', async () => {
     const res = await dialog.showOpenDialog(win, {
       title: 'Choose your project / working folder',
       properties: ['openDirectory'],
-      defaultPath: store.get('lastProjectDir') || os.homedir(),
+      defaultPath: state.projectDir || store.get('lastProjectDir') || os.homedir(),
     });
-    if (res.canceled || !res.filePaths[0]) return session.projectDir || store.get('lastProjectDir') || '';
-    const dir = res.filePaths[0];
-    store.addRecentProject(dir);
-    session.projectDir = dir;
-    sendStatus();
-    return dir;
+    if (res.canceled || !res.filePaths[0]) return state.projectDir;
+    state.projectDir = res.filePaths[0];
+    store.addRecentProject(state.projectDir);
+    pushState();
+    return state.projectDir;
   });
-  ipcMain.handle('project:get', () => session.projectDir || store.get('lastProjectDir') || '');
   ipcMain.handle('project:choose', (_e, dir) => {
-    if (dir && fs.existsSync(dir)) { session.projectDir = dir; store.addRecentProject(dir); sendStatus(); }
-    return session.projectDir;
+    if (dir && fs.existsSync(dir) && dir !== state.projectDir) {
+      stopSession();
+      state.projectDir = dir; state.activeAccountId = null;
+      store.addRecentProject(dir); pushState();
+      toRenderer('chat:history', { log: getProjectChat(dir).log || [] });
+    }
+    return state.projectDir;
   });
-  ipcMain.handle('project:setAccount', (_e, dir, accountId) => {
-    store.setProjectAccount(dir || session.projectDir, accountId);
-    sendStatus();
-    return store.getProjectAccount(dir || session.projectDir);
-  });
-
-  ipcMain.handle('session:launch', (_e, accountId) => launchAccount(accountId, { continueConv: false }));
-  ipcMain.handle('session:switch', (_e, targetId) => switchAccount(targetId));
-  ipcMain.handle('session:stop', () => { sendToHost({ t: 'kill' }); return { ok: true }; });
-  ipcMain.handle('session:restart', () => {
-    if (!session.accountId) return { ok: false, error: 'No active account' };
-    sendToHost({ t: 'kill' });
-    setTimeout(() => launchAccount(session.accountId, { continueConv: true }), 400);
-    return { ok: true };
-  });
-  ipcMain.handle('session:status', () => statusPayload());
 
   ipcMain.handle('settings:get', () => store.getSettings());
   ipcMain.handle('settings:set', (_e, patch) => {
     const s = store.setSettings(patch);
-    if (patch && Object.prototype.hasOwnProperty.call(patch, 'startOnLogin')) applyLoginItem(s.startOnLogin);
-    sendStatus();
+    // Model / effort changes take effect by restarting the live session (which
+    // resumes the same conversation).
+    const touchesEngine = patch && (Object.prototype.hasOwnProperty.call(patch, 'model') || Object.prototype.hasOwnProperty.call(patch, 'effort'));
+    if (touchesEngine && state.running && state.activeAccountId) useAccountForChat(state.activeAccountId);
+    pushState();
     return s;
   });
-  ipcMain.handle('settings:pickClaude', async () => {
-    const res = await dialog.showOpenDialog(win, {
-      title: 'Locate the claude executable',
-      properties: ['openFile'],
-      defaultPath: path.join(os.homedir(), '.local', 'bin'),
-    });
-    if (res.canceled || !res.filePaths[0]) return store.getSettings().claudePath || '';
-    store.setSettings({ claudePath: res.filePaths[0] });
-    return res.filePaths[0];
+
+  ipcMain.handle('chat:start', (_e, accountId) => useAccountForChat(accountId));
+  ipcMain.handle('chat:getHistory', () => ({ log: getProjectChat(state.projectDir).log || [] }));
+  ipcMain.handle('chat:saveLog', (_e, log) => { saveProjectChat(state.projectDir, { log: Array.isArray(log) ? log : [] }); return { ok: true }; });
+  ipcMain.handle('chat:new', () => {
+    if (!state.activeAccountId) return { ok: false, error: 'No active account' };
+    saveProjectChat(state.projectDir, { sessionId: '', log: [] });
+    const r = startSession(state.activeAccountId, '');
+    toRenderer('chat:history', { log: [] });
+    return r;
   });
-  ipcMain.handle('app:openConfigDir', (_e, id) => {
-    const acc = store.byId(id);
-    if (acc) shell.openPath(acc.configDir);
-    return true;
+  ipcMain.handle('chat:send', (_e, text) => {
+    if (!state.activeAccountId) return { ok: false, error: 'No active account' };
+    // Restart a dead session (e.g. after a recoverable error). send() queues the
+    // message even while the SDK is still loading, so no ready-gating is needed.
+    if (!state.session || !state.session.alive) {
+      const chat = getProjectChat(state.projectDir);
+      const r = startSession(state.activeAccountId, chat.sessionId || '');
+      if (!r.ok) return r;
+    }
+    state.session.send(text);
+    state.generating = true;
+    pushState();
+    return { ok: true };
   });
-  ipcMain.handle('app:openExternal', (_e, url) => {
-    if (typeof url === 'string' && /^https?:\/\//i.test(url)) shell.openExternal(url);
-    return true;
+  ipcMain.handle('chat:interrupt', () => { if (state.session) state.session.interrupt(); return { ok: true }; });
+  ipcMain.handle('chat:permission', (_e, requestId, allow, message) => {
+    if (state.session) state.session.respondPermission(requestId, allow, message);
+    return { ok: true };
   });
+  ipcMain.handle('chat:switch', (_e, targetId) => switchAccount(targetId));
+  ipcMain.handle('chat:stop', () => { stopSession(); pushState(); return { ok: true }; });
+
+  ipcMain.handle('login:start', (_e, accountId) => startLogin(accountId));
+  ipcMain.handle('login:stop', () => stopLogin());
+  ipcMain.on('login:input', (_e, data) => sendToHost({ t: 'input', d: Buffer.from(data, 'utf8').toString('base64') }));
+  ipcMain.on('login:resize', (_e, cols, rows) => sendToHost({ t: 'resize', cols, rows }));
+
+  ipcMain.handle('app:openExternal', (_e, url) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return true; });
+  ipcMain.handle('app:openConfigDir', (_e, id) => { const a = store.byId(id); if (a) shell.openPath(a.configDir); return true; });
   ipcMain.handle('app:info', () => ({
-    version: pkg.version,
+    version: require('../package.json').version,
     electron: process.versions.electron,
     node: process.versions.node,
     claudePath: findClaudePath(),
-    platform: process.platform,
   }));
-  ipcMain.handle('app:checkUpdate', () => checkForUpdate());
-  ipcMain.handle('app:export', async () => {
-    const res = await dialog.showSaveDialog(win, {
-      title: 'Export Claude Multi config',
-      defaultPath: path.join(os.homedir(), 'claude-multi-backup.json'),
-      filters: [{ name: 'JSON', extensions: ['json'] }],
-    });
-    if (res.canceled || !res.filePath) return { ok: false };
-    try { fs.writeFileSync(res.filePath, store.exportData()); return { ok: true, path: res.filePath }; }
-    catch (e) { return { ok: false, error: String(e.message || e) }; }
-  });
-  ipcMain.handle('app:import', async () => {
-    const res = await dialog.showOpenDialog(win, {
-      title: 'Import Claude Multi config',
-      properties: ['openFile'],
-      filters: [{ name: 'JSON', extensions: ['json'] }],
-    });
-    if (res.canceled || !res.filePaths[0]) return { ok: false };
-    try {
-      store.importData(fs.readFileSync(res.filePaths[0], 'utf8'));
-      loginSnapshot = '';
-      sendStatus();
-      updateTray();
-      return { ok: true };
-    } catch (e) { return { ok: false, error: String(e.message || e) }; }
-  });
-
-  ipcMain.on('term:input', (_e, data) => {
-    sendToHost({ t: 'input', d: Buffer.from(data, 'utf8').toString('base64') });
-  });
-  ipcMain.on('term:resize', (_e, cols, rows) => {
-    session.cols = cols; session.rows = rows;
-    sendToHost({ t: 'resize', cols, rows });
-  });
 }
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1220,
-    height: 800,
-    minWidth: 880,
-    minHeight: 540,
-    backgroundColor: '#12131a',
+    width: 1180, height: 800, minWidth: 900, minHeight: 560,
+    backgroundColor: '#f5f4f0',
     title: 'Claude Multi',
     icon: path.join(__dirname, 'renderer', 'icon.png'),
     webPreferences: {
@@ -565,73 +407,30 @@ function createWindow() {
   });
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-
-  // Opt-in debugging: `CM_DEBUG=1 npm start` surfaces renderer console output
-  // in the terminal and opens devtools.
   if (process.env.CM_DEBUG) {
     win.webContents.on('console-message', (_e, level, message, line, source) => {
       console.log(`[renderer:${level}] ${message} (${source}:${line})`);
     });
     win.webContents.openDevTools({ mode: 'detach' });
   }
-
-  // Warn before quitting during a live session.
-  win.on('close', (e) => {
-    // Minimize to tray instead of closing, if enabled.
-    if (!isQuitting && tray && store.getSettings().minimizeToTray) {
-      e.preventDefault();
-      win.hide();
-      updateTray();
-      return;
-    }
-    if (session.running && store.getSettings().confirmClose) {
-      const choice = dialog.showMessageBoxSync(win, {
-        type: 'question',
-        buttons: ['Quit', 'Cancel'],
-        defaultId: 1,
-        cancelId: 1,
-        title: 'Quit Claude Multi?',
-        message: 'A Claude Code session is still running.',
-        detail: 'Quitting will end the current session.',
-      });
-      if (choice === 1) { e.preventDefault(); return; }
-    }
-    sendToHost({ t: 'kill' });
-  });
   win.on('closed', () => { win = null; });
 }
 
 app.whenReady().then(() => {
   store = new Store(path.join(app.getPath('userData'), 'accounts.json'));
-  // Restore the last project folder so status/badge reflect it on boot
-  // (otherwise session:status returns '' and clobbers the renderer's value).
-  session.projectDir = store.get('lastProjectDir') || '';
+  state.projectDir = store.get('lastProjectDir') || '';
   Menu.setApplicationMenu(null);
-  applyLoginItem(store.getSettings().startOnLogin);
   registerIpc();
   createWindow();
-  createTray();
-  startLoginPolling();
-  startCooldownWatcher();
-
-  // Check for a newer release on startup (best-effort, silent on failure).
-  if (store.getSettings().checkUpdates) {
-    checkForUpdate().then((info) => {
-      if (info && info.isNewer && win) win.webContents.send('update:available', info);
-    });
-  }
-
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
     else if (win) { win.show(); win.focus(); }
   });
-  app.on('before-quit', () => { isQuitting = true; });
 });
 
 app.on('window-all-closed', () => {
+  stopSession();
   sendToHost({ t: 'kill' });
-  // Keep running in the tray if the user chose minimize-to-tray.
-  if (!isQuitting && store && store.getSettings().minimizeToTray && tray) return;
   if (host) { try { host.kill(); } catch { /* noop */ } }
   if (process.platform !== 'darwin') app.quit();
 });

@@ -1,990 +1,556 @@
-/* global Terminal, FitAddon, SearchAddon, WebLinksAddon */
+/* global marked, DOMPurify, Terminal, FitAddon */
 (() => {
 const cc = window.cc;
 const $ = (id) => document.getElementById(id);
 
-// ---- terminal ----
-const themes = {
-  dark: { background: '#0e0f16', foreground: '#e6e8ef', cursor: '#d97757', selectionBackground: '#33384a' },
-  light: { background: '#faf9f7', foreground: '#25262b', cursor: '#c2410c', selectionBackground: '#d6d3cd' },
-};
-
-const term = new Terminal({
-  fontFamily: 'Consolas, "Cascadia Mono", "Courier New", monospace',
-  fontSize: 13,
-  cursorBlink: true,
-  allowProposedApi: true,
-  scrollback: 10000,
-  theme: themes.dark,
-});
-const fit = new FitAddon.FitAddon();
-const search = new SearchAddon.SearchAddon();
-term.loadAddon(fit);
-term.loadAddon(search);
-try { term.loadAddon(new WebLinksAddon.WebLinksAddon()); } catch { /* optional */ }
-term.open($('terminal'));
-
-function doFit() {
-  try { fit.fit(); cc.resize(term.cols, term.rows); } catch { /* not ready */ }
+marked.setOptions({ gfm: true, breaks: true });
+function renderMarkdown(text) {
+  try { return DOMPurify.sanitize(marked.parse(text || '')); }
+  catch { return escapeHtml(text || ''); }
 }
-setTimeout(doFit, 50);
-window.addEventListener('resize', doFit);
-
-// terminal <-> main
-term.onData((d) => cc.sendInput(d));
-cc.onData((d) => { term.write(d); });
-cc.onExit((code) => {
-  term.write(`\r\n\x1b[90m[session ended${code != null ? ' (exit ' + code + ')' : ''}]\x1b[0m\r\n`);
-  refreshStatus();
-});
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 
 // ---- state ----
-let state = {
-  accounts: [], accountId: null, projectDir: '', projectAccount: '', running: false,
-  startedAt: 0, switchCount: 0, recentProjects: [], workspaces: [], settings: {}, availableCount: 0,
-};
-let now = Date.now();
+let state = { accounts: [], activeAccountId: null, projectDir: '', running: false, generating: false, settings: {} };
 
-function activeName() {
-  const a = state.accounts.find((x) => x.id === state.accountId);
-  return a ? (a.email || a.name) : null;
-}
-
-// ---- rendering ----
-function renderBadge() {
-  const badge = $('activeBadge');
-  if (state.running && state.accountId) {
-    badge.textContent = '● ' + activeName();
-    badge.className = 'badge live';
-  } else {
-    badge.textContent = 'No session';
-    badge.className = 'badge idle';
-  }
-  $('stopBtn').disabled = !state.running;
-  $('restartBtn').disabled = !state.running;
-  $('switchMenuBtn').disabled = state.accounts.filter((a) => a.loggedIn && a.id !== state.accountId).length === 0;
-  $('sendBtn').disabled = !state.running;
-  composerInput.placeholder = state.running
-    ? 'Send a message to Claude…  (Enter to send · Shift+Enter for a new line)'
-    : 'Launch an account below to start chatting…';
-}
-
-function renderProject() {
-  $('projectPath').textContent = state.projectDir || 'No folder selected';
-}
-
-function renderProjectAccount() {
-  const row = $('projectAccountRow');
-  if (!state.projectDir) { row.classList.add('hidden'); return; }
-  row.classList.remove('hidden');
-  const acc = state.accounts.find((a) => a.id === state.projectAccount);
-  const nameEl = $('projectAccountName');
-  const btn = $('projectAccountBtn');
-  if (acc) { nameEl.textContent = '★ ' + acc.name; btn.classList.add('assigned'); }
-  else { nameEl.textContent = 'Choose…'; btn.classList.remove('assigned'); }
-}
-
+function activeAccount() { return state.accounts.find((a) => a.id === state.activeAccountId); }
 function fmtCountdown(ms) {
-  if (ms == null || ms <= 0) return '0s';
-  const t = Math.round(ms / 1000);
-  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
-  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
-  if (m > 0) return `${m}m ${String(s).padStart(2, '0')}s`;
-  return `${s}s`;
+  const t = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(t / 3600); const m = Math.floor((t % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${t}s`;
+}
+function accView(a) {
+  const now = Date.now();
+  if (!a.loggedIn) return { dot: 'off', cls: 'out', label: 'Not signed in', canUse: false, needLogin: true };
+  if (a.id === state.activeAccountId && state.running) return { dot: 'active', cls: 'ready', label: 'Active', canUse: true };
+  if (a.cooldownUntil && a.cooldownUntil > now) return { dot: 'cool', cls: 'cool', label: 'Cooling · resets ' + fmtCountdown(a.cooldownUntil - now), canUse: true };
+  return { dot: 'ready', cls: 'ready', label: a.email || 'Ready', canUse: true };
 }
 
-function fmtAgo(ts) {
-  if (!ts) return '';
-  const d = now - ts;
-  if (d < 60e3) return 'just now';
-  if (d < 3600e3) return Math.floor(d / 60e3) + 'm ago';
-  if (d < 86400e3) return Math.floor(d / 3600e3) + 'h ago';
-  return Math.floor(d / 86400e3) + 'd ago';
+// ---- rendering: sidebar ----
+function renderProject() {
+  $('projectName').textContent = state.projectDir ? baseName(state.projectDir) : 'Choose a folder…';
+  $('projectBtn').title = state.projectDir || 'Choose the folder Claude works in';
 }
-
-let accountFilter = '';
-
-function accStatus(a) {
-  if (!a.loggedIn) return { cls: 'off', label: 'not logged in — launch & type /login' };
-  if (a.id === state.accountId && state.running) return { cls: 'active', label: 'Active session' };
-  if (a.cooldownUntil && a.cooldownUntil > now) return { cls: 'cool', label: 'Cooling down · ' + fmtCountdown(a.cooldownUntil - now) };
-  return { cls: 'on', label: a.email + (a.plan ? ' · ' + a.plan : '') };
-}
+function baseName(p) { return String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p; }
 
 function renderAccounts() {
   const list = $('accountList');
-  const prevScroll = list.scrollTop; // preserve scroll across re-render (cooldown ticks rebuild the list)
   list.innerHTML = '';
-
-  // Show a filter box once there are enough accounts to warrant it.
-  const showFilter = state.accounts.length > 8;
-  $('accountFilter').classList.toggle('hidden', !showFilter);
-
-  if (state.accounts.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'hint';
-    empty.textContent = 'No accounts yet. Click + to add your first account.';
-    list.appendChild(empty);
+  if (!state.accounts.length) {
+    const e = document.createElement('div');
+    e.style.cssText = 'font-size:12.5px;color:var(--muted);padding:8px 4px;line-height:1.5;';
+    e.textContent = 'No accounts yet. Click ＋ to add your first one.';
+    list.appendChild(e);
     return;
   }
-
-  const q = showFilter ? accountFilter.trim().toLowerCase() : '';
-  const shown = q
-    ? state.accounts.filter((a) => (a.name + ' ' + (a.email || '')).toLowerCase().includes(q))
-    : state.accounts;
-  if (shown.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'hint';
-    empty.textContent = 'No accounts match "' + accountFilter + '".';
-    list.appendChild(empty);
-    return;
-  }
-
-  for (const a of shown) {
-    const st = accStatus(a);
+  for (const a of state.accounts) {
+    const v = accView(a);
     const card = document.createElement('div');
-    card.className = 'account' + (a.id === state.accountId ? ' active' : '');
-    if (a.color) card.style.boxShadow = `inset 4px 0 0 ${a.color}`;
+    card.className = 'account-card' + (a.id === state.activeAccountId ? ' active' : '');
 
-    const top = document.createElement('div');
-    top.className = 'account-top';
-    const name = document.createElement('div');
-    name.className = 'account-name';
-    name.textContent = a.name;
-    if (state.projectDir && a.id === state.projectAccount) {
-      const star = document.createElement('span');
-      star.className = 'proj-star';
-      star.textContent = '★';
-      star.title = 'Preferred account for this project';
-      name.appendChild(star);
+    const top = document.createElement('div'); top.className = 'ac-top';
+    const av = document.createElement('div'); av.className = 'ac-avatar';
+    av.textContent = (a.name || a.email || '?').trim().charAt(0).toUpperCase();
+    const info = document.createElement('div'); info.className = 'ac-info';
+    const nm = document.createElement('div'); nm.className = 'ac-name'; nm.textContent = a.name;
+    const st = document.createElement('div'); st.className = 'ac-status ' + v.cls; st.textContent = v.label;
+    info.appendChild(nm); info.appendChild(st);
+    const dot = document.createElement('div'); dot.className = 'dot ' + v.dot;
+    top.appendChild(av); top.appendChild(info); top.appendChild(dot);
+
+    const actions = document.createElement('div'); actions.className = 'ac-actions';
+    if (v.needLogin) {
+      const login = document.createElement('button'); login.className = 'btn-login'; login.textContent = 'Log in';
+      login.onclick = (e) => { e.stopPropagation(); openLogin(a); };
+      actions.appendChild(login);
+    } else {
+      const use = document.createElement('button');
+      const isActive = a.id === state.activeAccountId && state.running;
+      use.textContent = isActive ? 'In use' : 'Use';
+      use.disabled = isActive;
+      use.onclick = (e) => { e.stopPropagation(); useAccount(a.id); };
+      actions.appendChild(use);
     }
-    const dot = document.createElement('div');
-    dot.className = 'dot ' + st.cls;
-    dot.title = st.label;
-    top.appendChild(name);
-    top.appendChild(dot);
+    const more = document.createElement('button'); more.className = 'btn-more'; more.textContent = '⋯';
+    more.onclick = (e) => { e.stopPropagation(); accountMenu(a, e.currentTarget); };
+    actions.appendChild(more);
 
-    const email = document.createElement('div');
-    email.className = 'account-email';
-    email.textContent = st.label;
-
-    const actions = document.createElement('div');
-    actions.className = 'account-actions';
-    const launch = document.createElement('button');
-    launch.className = 'launch';
-    const isActive = a.id === state.accountId && state.running;
-    launch.textContent = isActive ? 'Active' : 'Launch';
-    launch.disabled = isActive;
-    launch.onclick = (e) => { e.stopPropagation(); launchAccount(a.id); };
-    actions.appendChild(launch);
-
-    if (a.cooldownUntil && a.cooldownUntil > now) {
-      const clr = document.createElement('button');
-      clr.textContent = 'Clear cooldown';
-      clr.onclick = (e) => { e.stopPropagation(); cc.clearCooldown(a.id).then(refreshStatus); };
-      actions.appendChild(clr);
+    if (v.canUse && !(a.id === state.activeAccountId && state.running)) {
+      card.onclick = () => useAccount(a.id);
     }
-    const menu = document.createElement('button');
-    menu.textContent = '⋯';
-    menu.title = 'More';
-    menu.onclick = (e) => { e.stopPropagation(); accountMenu(a, e); };
-    actions.appendChild(menu);
-
-    card.appendChild(top);
-    card.appendChild(email);
-    if (a.sessions) {
-      const meta = document.createElement('div');
-      meta.className = 'account-meta';
-      meta.textContent = a.sessions + (a.sessions === 1 ? ' session' : ' sessions') +
-        (a.lastUsedAt ? ' · used ' + fmtAgo(a.lastUsedAt) : '');
-      card.appendChild(meta);
-    }
-    card.appendChild(actions);
+    card.appendChild(top); card.appendChild(actions);
     list.appendChild(card);
   }
-  list.scrollTop = prevScroll; // restore scroll after rebuild
 }
 
-function renderStats() {
-  const t = $('timerStat');
-  if (state.running && state.startedAt) {
-    const s = Math.max(0, Math.floor((now - state.startedAt) / 1000));
-    const mm = String(Math.floor(s / 60)).padStart(2, '0');
-    const ss = String(s % 60).padStart(2, '0');
-    const hh = Math.floor(s / 3600);
-    t.textContent = '⏱ ' + (hh > 0 ? hh + ':' : '') + mm + ':' + ss;
-    t.style.display = '';
+function renderTop() {
+  const a = activeAccount();
+  const dot = $('activeDot');
+  if (a && state.running) {
+    $('activeName').textContent = a.name;
+    $('activeMeta').textContent = (a.email || '') + (state.projectDir ? '  ·  ' + baseName(state.projectDir) : '');
+    dot.className = 'status-dot ' + (state.generating ? 'busy' : 'live');
   } else {
-    t.style.display = 'none';
+    $('activeName').textContent = a ? a.name : 'No account selected';
+    $('activeMeta').textContent = state.projectDir ? baseName(state.projectDir) : '';
+    dot.className = 'status-dot off';
   }
-  const sw = $('switchStat');
-  sw.textContent = '⇄ ' + (state.switchCount || 0);
-  sw.style.display = state.switchCount ? '' : 'none';
+  renderModelLabel();
+}
+const MODELS = [['', 'Default'], ['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku']];
+const EFFORTS = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultrathink']];
+function labelFor(list, id, fallback) { const f = list.find((x) => x[0] === id); return f ? f[1] : fallback; }
+function renderModelLabel() {
+  const m = (state.settings && state.settings.model) || '';
+  const eff = (state.settings && state.settings.effort) || 'medium';
+  const ml = $('modelChipLabel'); if (ml) ml.textContent = labelFor(MODELS, m, 'Default');
+  const el = $('effortChipLabel'); if (el) el.textContent = labelFor(EFFORTS, eff, 'Medium');
+}
+function renderAll() { renderProject(); renderAccounts(); renderTop(); updateComposer(); }
 
-  const pill = $('availCount');
-  const n = state.accounts.filter((a) => a.loggedIn && (!a.cooldownUntil || a.cooldownUntil <= now)).length;
-  const total = state.accounts.filter((a) => a.loggedIn).length;
-  pill.textContent = total ? `${n}/${total} ready` : '';
+function updateComposer() {
+  const canChat = state.running;
+  $('sendBtn').disabled = !canChat || !$('input').value.trim();
+  $('input').placeholder = canChat ? 'Message Claude…  (Enter to send · Shift+Enter for a new line)'
+    : (state.accounts.some((a) => a.loggedIn) ? 'Click an account to start chatting…' : 'Add and log in an account to start…');
+  $('genBar').classList.toggle('hidden', !state.generating);
 }
 
-function renderEmpty() {
-  const show = !state.running && state.accounts.length === 0;
-  $('emptyState').classList.toggle('hidden', !show);
+// ---- transcript ----
+// `convo` is the serialisable conversation log for the current project. It is
+// the source of truth for display, persisted to main on every turn, and
+// re-rendered whenever we switch accounts / reopen a project — so the history
+// is always shown no matter which account is active.
+const transcript = $('transcript');
+let turn = null;
+let convo = [];
+
+function clearTranscript() { transcript.innerHTML = ''; turn = null; }
+function nearBottom() { return transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 120; }
+function scrollDown(force) { if (force || nearBottom()) transcript.scrollTop = transcript.scrollHeight; }
+function wrap(el) { const w = document.createElement('div'); w.className = 'msg-wrap'; w.appendChild(el); transcript.appendChild(w); return w; }
+function hideWelcome() { const w = $('welcome'); if (w) w.classList.add('hidden'); }
+function persist() { try { cc.saveLog(convo); } catch { /* noop */ } }
+
+// throttled markdown flush
+const pending = new Set(); let rafQ = false;
+function schedule(el) { pending.add(el); if (!rafQ) { rafQ = true; requestAnimationFrame(flush); } }
+function flush() {
+  rafQ = false;
+  for (const el of pending) el.innerHTML = renderMarkdown(el._raw || '');
+  pending.clear();
+  scrollDown();
 }
 
-function renderAll() { renderBadge(); renderProject(); renderProjectAccount(); renderWorkspaces(); renderAccounts(); renderStats(); renderModelLabel(); renderEmpty(); }
-
-async function refreshStatus() {
-  const s = await cc.status();
-  state = Object.assign(state, s);
-  applyTheme(state.settings && state.settings.theme);
-  applyFontSize(state.settings && state.settings.fontSize);
-  renderAll();
+function toolSummary(name, input) {
+  if (!input) return '';
+  if (input.command) return input.command;
+  if (input.file_path) return input.file_path;
+  if (input.path) return input.path;
+  if (input.pattern) return input.pattern;
+  if (input.url) return input.url;
+  if (input.prompt) return String(input.prompt).slice(0, 80);
+  const s = JSON.stringify(input); return s === '{}' ? '' : s.slice(0, 80);
 }
+
+// ---- DOM builders (used for both live streaming and history replay) ----
+function appendUserDOM(text) {
+  hideWelcome();
+  const msg = document.createElement('div'); msg.className = 'msg user';
+  const b = document.createElement('div'); b.className = 'bubble'; b.textContent = text;
+  msg.appendChild(b); wrap(msg);
+}
+function makeToolCard(block) {
+  const card = document.createElement('div'); card.className = 'tool-card';
+  const head = document.createElement('div'); head.className = 'tool-head';
+  const stateTxt = block.state === 'running' ? 'running…' : (block.state === 'err' ? 'error' : 'done');
+  const stateCls = block.state === 'running' ? '' : (block.state === 'err' ? 'err' : 'ok');
+  head.innerHTML = `<span class="tool-ico">⚙</span><span class="tool-name">${escapeHtml(block.name)}</span>` +
+    `<span class="tool-summary">${escapeHtml(block.summary || '')}</span>` +
+    `<span class="tool-state ${stateCls}">${stateTxt}</span>`;
+  const body = document.createElement('div'); body.className = 'tool-body hidden';
+  body.textContent = block.output || '';
+  head.onclick = () => body.classList.toggle('hidden');
+  card.appendChild(head); card.appendChild(body);
+  return { card, head, body };
+}
+function appendAssistantDOM(blocks) {
+  hideWelcome();
+  const msg = document.createElement('div'); msg.className = 'msg assistant';
+  const av = document.createElement('div'); av.className = 'assistant-avatar'; av.textContent = '✦';
+  const body = document.createElement('div'); body.className = 'assistant-body';
+  for (const blk of blocks || []) {
+    if (blk.type === 'text') { const d = document.createElement('div'); d.className = 'md'; d.innerHTML = renderMarkdown(blk.text || ''); body.appendChild(d); }
+    else if (blk.type === 'tool') { body.appendChild(makeToolCard(blk).card); }
+  }
+  msg.appendChild(av); msg.appendChild(body); wrap(msg);
+}
+
+// Re-render the entire conversation from a stored log.
+function renderHistory(log) {
+  clearTranscript();
+  convo = Array.isArray(log) ? log.map((m) => ({ ...m })) : [];
+  if (!convo.length) { const w = $('welcome'); if (w) w.classList.remove('hidden'); return; }
+  for (const m of convo) {
+    if (m.role === 'user') appendUserDOM(m.text);
+    else appendAssistantDOM(m.blocks);
+  }
+  scrollDown(true);
+}
+
+// ---- live streaming ----
+function addUserMessage(text) {
+  convo.push({ role: 'user', text });
+  appendUserDOM(text);
+  persist();
+  scrollDown(true);
+}
+function ensureTurn() {
+  if (turn) return turn;
+  hideWelcome();
+  const msg = document.createElement('div'); msg.className = 'msg assistant';
+  const av = document.createElement('div'); av.className = 'assistant-avatar'; av.textContent = '✦';
+  const body = document.createElement('div'); body.className = 'assistant-body';
+  msg.appendChild(av); msg.appendChild(body); wrap(msg);
+  turn = { body, curText: null, curRaw: '', curBlock: null, tools: new Map(), thinkEl: null, blocks: [] };
+  return turn;
+}
+function newTextBlock() {
+  const t = ensureTurn();
+  const el = document.createElement('div'); el.className = 'md';
+  t.body.appendChild(el); t.curText = el; t.curRaw = '';
+  t.curBlock = { type: 'text', text: '' }; t.blocks.push(t.curBlock);
+  return el;
+}
+function onAssistantDelta(text) {
+  const t = ensureTurn();
+  if (!t.curText) newTextBlock();
+  t.curRaw += text; t.curText._raw = t.curRaw; t.curBlock.text = t.curRaw; schedule(t.curText);
+}
+function onAssistantText(text) {
+  const t = ensureTurn();
+  if (!t.curText) newTextBlock();
+  t.curText._raw = text; t.curText.innerHTML = renderMarkdown(text);
+  t.curBlock.text = text;
+  t.curText = null; t.curRaw = ''; t.curBlock = null;
+  scrollDown();
+}
+function onThinking(text) {
+  const t = ensureTurn();
+  if (!t.thinkEl) {
+    const d = document.createElement('details'); d.className = 'think';
+    const s = document.createElement('summary'); s.textContent = 'Thinking';
+    const body = document.createElement('div'); body.className = 'think-body';
+    d.appendChild(s); d.appendChild(body); t.body.appendChild(d);
+    t.thinkEl = body; t.thinkRaw = '';
+  }
+  t.thinkRaw = (t.thinkRaw || '') + text; t.thinkEl.textContent = t.thinkRaw; scrollDown();
+}
+function onToolUse(id, name, input) {
+  const t = ensureTurn();
+  t.curText = null; t.curBlock = null;
+  const block = { type: 'tool', name, summary: toolSummary(name, input), state: 'running', output: typeof input === 'object' ? JSON.stringify(input, null, 2) : String(input) };
+  t.blocks.push(block);
+  const { card, head, body } = makeToolCard(block);
+  t.body.appendChild(card);
+  t.tools.set(id, { block, head, body });
+  scrollDown();
+}
+function onToolResult(id, isError, text) {
+  const t = turn; if (!t) return;
+  const entry = t.tools.get(id); if (!entry) return;
+  entry.block.state = isError ? 'err' : 'ok';
+  const stateEl = entry.head.querySelector('.tool-state');
+  stateEl.textContent = isError ? 'error' : 'done';
+  stateEl.className = 'tool-state ' + (isError ? 'err' : 'ok');
+  if (text) { entry.block.output = (typeof text === 'string' ? text : JSON.stringify(text)).slice(0, 8000); entry.body.textContent = entry.block.output; }
+  scrollDown();
+}
+function onErrorLine(text) {
+  hideWelcome();
+  const el = document.createElement('div'); el.className = 'err-line'; el.textContent = '⚠ ' + text;
+  if (turn && turn.body) turn.body.appendChild(el);
+  else wrap(el);
+  scrollDown(true);
+}
+function endTurn() {
+  if (turn && turn.blocks.length) {
+    convo.push({ role: 'assistant', blocks: turn.blocks });
+    persist();
+  }
+  turn = null;
+}
+
+// ---- permission cards ----
+function onPermission(requestId, tool, input) {
+  const t = ensureTurn();
+  t.curText = null;
+  const card = document.createElement('div'); card.className = 'perm-card';
+  const title = document.createElement('div'); title.className = 'perm-title';
+  title.innerHTML = `Claude wants to use <span class="ptool">${escapeHtml(tool)}</span>`;
+  const detail = document.createElement('div'); detail.className = 'perm-detail';
+  detail.textContent = summarizePerm(tool, input);
+  const actions = document.createElement('div'); actions.className = 'perm-actions';
+  const allow = document.createElement('button'); allow.className = 'perm-allow'; allow.textContent = 'Allow';
+  const deny = document.createElement('button'); deny.className = 'perm-deny'; deny.textContent = 'Deny';
+  const resolve = (ok) => {
+    cc.respondPermission(requestId, ok);
+    actions.remove();
+    const r = document.createElement('div'); r.className = 'perm-resolved ' + (ok ? 'allow' : 'deny');
+    r.textContent = ok ? '✓ Allowed' : '✕ Denied';
+    card.appendChild(r);
+  };
+  allow.onclick = () => resolve(true);
+  deny.onclick = () => resolve(false);
+  actions.appendChild(allow); actions.appendChild(deny);
+  card.appendChild(title); card.appendChild(detail); card.appendChild(actions);
+  t.body.appendChild(card);
+  scrollDown(true);
+}
+function summarizePerm(tool, input) {
+  if (!input) return '';
+  if (input.command) return '$ ' + input.command;
+  if (input.file_path) return input.file_path + (input.content ? '\n\n' + String(input.content).slice(0, 600) : '');
+  return JSON.stringify(input, null, 2).slice(0, 800);
+}
+
+// ---- chat events from main ----
+cc.onChat((ev) => {
+  switch (ev.type) {
+    case 'assistant_delta': onAssistantDelta(ev.text); break;
+    case 'assistant_text': onAssistantText(ev.text); break;
+    case 'thinking': onThinking(ev.text); break;
+    case 'tool_use': onToolUse(ev.id, ev.name, ev.input); break;
+    case 'tool_result': onToolResult(ev.id, ev.isError, ev.text); break;
+    case 'permission': onPermission(ev.requestId, ev.tool, ev.input); break;
+    case 'turn_end': endTurn(); break;
+    case 'auth_failed': endTurn(); onErrorLine('This account is not signed in. Click “Log in” on the account.'); toast('Account not signed in', 'err'); break;
+    case 'error': endTurn(); onErrorLine(ev.text || 'Something went wrong.'); break;
+    case 'limit': endTurn(); break; // switch dialog handled via onLimit
+    case 'exit': endTurn(); break;
+    default: break;
+  }
+});
+cc.onHistory((info) => renderHistory(info && info.log));
 
 // ---- actions ----
-async function launchAccount(id) {
-  if (!state.projectDir) { flashProjectNeeded(); return; }
-  const res = await cc.launch(id);
+async function useAccount(id) {
+  if (!state.projectDir) { toast('Pick a project folder first', 'err'); flashProject(); return; }
+  // Do NOT clear the transcript — main sends the stored history via 'chat:history'
+  // and the conversation is carried onto this account.
+  const res = await cc.startChat(id);
   if (!res.ok) {
-    if (res.error && /project folder/i.test(res.error)) flashProjectNeeded();
-    else toast(res.error || 'Launch failed', 'error');
-    return;
+    if (res.error === 'not_logged_in') { const a = state.accounts.find((x) => x.id === id); openLogin(a); }
+    else toast(res.error || 'Could not start', 'err');
+  } else if (res.carried) {
+    toast('Conversation carried to this account', 'ok');
   }
-  term.focus();
-  setTimeout(doFit, 80);
+}
+function flashProject() { const b = $('projectBtn'); b.style.borderColor = 'var(--err)'; setTimeout(() => { b.style.borderColor = ''; }, 1400); }
+
+async function sendMessage() {
+  const inp = $('input');
+  const text = inp.value.trim();
+  if (!text) return;
+  if (!state.running) { toast('Click an account to start chatting', 'err'); return; }
+  addUserMessage(text);
+  inp.value = ''; autoGrow(); updateComposer();
+  const res = await cc.sendMessage(text);
+  if (res && !res.ok) onErrorLine(res.error || 'Could not send');
 }
 
-function flashProjectNeeded() {
-  const btn = $('pickProject');
-  btn.classList.add('flash-error');
-  $('projectPath').textContent = 'Pick a project folder first!';
-  setTimeout(() => { btn.classList.remove('flash-error'); renderProject(); }, 1600);
-}
+$('sendBtn').onclick = sendMessage;
+$('input').addEventListener('input', () => { autoGrow(); updateComposer(); });
+$('input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); }
+});
+function autoGrow() { const i = $('input'); i.style.height = 'auto'; i.style.height = Math.min(180, i.scrollHeight) + 'px'; }
+$('stopBtn').onclick = () => cc.interrupt();
+$('newChatBtn').onclick = async () => {
+  if (!state.running) { toast('Start a chat first', 'err'); return; }
+  const r = await cc.newChat(); // main clears the log and sends empty history
+  if (r && !r.ok) toast(r.error || 'Could not start new chat', 'err');
+  else toast('New chat started', 'ok');
+};
 
-async function addAccount() {
-  const name = prompt('Name this account (e.g. "Personal", "Work", "Account 2"):');
+$('projectBtn').onclick = async () => { state.projectDir = await cc.pickProject(); renderAll(); };
+$('addAccountBtn').onclick = async () => {
+  const name = await uiPrompt('Name this account (e.g. "Personal", "Work"):', '', 'Add account');
   if (name == null) return;
-  state.accounts = await cc.addAccount(name.trim() || 'Account');
-  renderAll();
-  toast('Account added — click Launch, then type /login', 'ok');
-}
+  await cc.addAccount(name.trim() || 'Account');
+  toast('Account added — click “Log in”', 'ok');
+};
 
-async function removeAccount(a) {
-  if (!confirm(`Remove "${a.name}" from the launcher?\n\n(This does NOT delete its login folder on disk.)`)) return;
-  state.accounts = await cc.removeAccount(a.id);
-  renderAll();
-}
-
-async function renameAccount(a) {
-  const name = prompt('Rename account:', a.name);
-  if (name == null || !name.trim()) return;
-  state.accounts = await cc.renameAccount(a.id, name.trim());
-  renderAll();
-}
-
-const TAG_COLORS = ['#d97757', '#4ec9a3', '#5b8def', '#e0b64c', '#b478e0', '#e0645c', '#4bb8c4'];
-
-// small context menu for an account
-function accountMenu(a, ev) {
-  closePopups();
-  const menu = document.createElement('div');
-  menu.className = 'popup ctx';
-
-  // color swatch row
-  const swatches = document.createElement('div');
-  swatches.className = 'swatch-row';
-  for (const c of TAG_COLORS) {
-    const sw = document.createElement('button');
-    sw.className = 'swatch' + (a.color === c ? ' sel' : '');
-    sw.style.background = c;
-    sw.title = 'Tag color';
-    sw.onclick = async () => { closePopups(); state.accounts = await cc.setAccountColor(a.id, a.color === c ? '' : c); renderAll(); };
-    swatches.appendChild(sw);
-  }
-  const clear = document.createElement('button');
-  clear.className = 'swatch clear' + (a.color ? '' : ' sel');
-  clear.textContent = '✕';
-  clear.title = 'No color';
-  clear.onclick = async () => { closePopups(); state.accounts = await cc.setAccountColor(a.id, ''); renderAll(); };
-  swatches.appendChild(clear);
-  menu.appendChild(swatches);
-
-  const idx = state.accounts.findIndex((x) => x.id === a.id);
+function accountMenu(a, anchor) {
+  closeMenus();
+  const m = document.createElement('div'); m.className = 'menu ctx';
   const items = [
-    ['↑ Move up', async () => { state.accounts = await cc.moveAccount(a.id, -1); renderAll(); }, idx <= 0],
-    ['↓ Move down', async () => { state.accounts = await cc.moveAccount(a.id, 1); renderAll(); }, idx >= state.accounts.length - 1],
-    ['Rename', () => renameAccount(a)],
+    ['Rename', async () => { const n = await uiPrompt('Rename account:', a.name, 'Rename'); if (n && n.trim()) await cc.renameAccount(a.id, n.trim()); }],
     ['Open config folder', () => cc.openConfigDir(a.id)],
-    ['Remove', () => removeAccount(a)],
+    ['Sign in again', () => openLogin(a)],
+    ['Remove', async () => { if (confirm(`Remove "${a.name}"? (Its login folder on disk is kept.)`)) await cc.removeAccount(a.id); }],
   ];
-  for (const [label, fn, disabled] of items) {
-    const b = document.createElement('button');
-    b.textContent = label;
-    b.disabled = !!disabled;
-    b.onclick = () => { closePopups(); fn(); };
-    menu.appendChild(b);
-  }
-  document.body.appendChild(menu);
-  const r = ev.target.getBoundingClientRect();
-  menu.style.left = Math.min(r.left, window.innerWidth - 200) + 'px';
-  menu.style.top = (r.bottom + 4) + 'px';
+  for (const [label, fn] of items) { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { closeMenus(); fn(); }; m.appendChild(b); }
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect();
+  m.style.left = Math.min(r.left, window.innerWidth - 180) + 'px';
+  m.style.top = (r.bottom + 6) + 'px';
 }
-
-function closePopups() {
-  document.querySelectorAll('.popup.ctx').forEach((n) => n.remove());
-  $('recentMenu').classList.add('hidden');
-  $('switchMenu').classList.add('hidden');
-  $('projectAccountMenu').classList.add('hidden');
+function closeMenus() {
+  document.querySelectorAll('.menu.ctx').forEach((n) => n.remove());
   $('modelMenu').classList.add('hidden');
+  $('effortMenu').classList.add('hidden');
 }
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('.popup') && !e.target.closest('#recentBtn') &&
-      !e.target.closest('#switchMenuBtn') && !e.target.closest('#projectAccountBtn') &&
-      !e.target.closest('#modelBtn') && !e.target.closest('.account-actions')) {
-    closePopups();
-  }
+  if (!e.target.closest('.menu') && !e.target.closest('#modelChip') && !e.target.closest('#effortChip') && !e.target.closest('.btn-more')) closeMenus();
 });
 
-// ---- per-project account selector ----
-$('projectAccountBtn').onclick = (e) => {
-  e.stopPropagation();
-  const menu = $('projectAccountMenu');
+// ---- model + effort chips (above the composer, like Claude) ----
+function openChipMenu(menuId, list, settingKey, onPick) {
+  const menu = $(menuId);
   if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
-  closePopups();
-  menu.innerHTML = '';
-  if (state.accounts.length === 0) {
-    const d = document.createElement('div'); d.className = 'popup-empty';
-    d.textContent = 'Add an account first (click +)';
-    menu.appendChild(d);
-  } else {
-    const none = document.createElement('button');
-    none.textContent = state.projectAccount ? '✕ Clear assignment' : 'No account assigned';
-    none.onclick = async () => { menu.classList.add('hidden'); state.projectAccount = await cc.setProjectAccount(state.projectDir, ''); renderAll(); };
-    menu.appendChild(none);
-    for (const a of state.accounts) {
-      const b = document.createElement('button');
-      const mark = a.id === state.projectAccount ? '★ ' : '';
-      b.textContent = mark + a.name + (a.loggedIn ? '' : ' — not logged in');
-      b.onclick = async () => {
-        menu.classList.add('hidden');
-        state.projectAccount = await cc.setProjectAccount(state.projectDir, a.id);
-        renderAll();
-        toast(`"${a.name}" set for this project`, 'ok');
-      };
-      menu.appendChild(b);
-    }
-  }
-  menu.classList.remove('hidden');
-};
-
-// ---- project ----
-$('pickProject').onclick = async () => {
-  const dir = await cc.pickProject();
-  state.projectDir = dir;
-  await refreshStatus(); // pick up this project's preferred account
-};
-$('recentBtn').onclick = (e) => {
-  e.stopPropagation();
-  const menu = $('recentMenu');
-  if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
-  closePopups();
-  menu.innerHTML = '';
-  const recents = (state.recentProjects || []).filter((d) => d !== state.projectDir);
-  if (!recents.length) {
-    const d = document.createElement('div'); d.className = 'popup-empty'; d.textContent = 'No recent folders';
-    menu.appendChild(d);
-  } else {
-    for (const dir of recents) {
-      const b = document.createElement('button');
-      b.textContent = dir;
-      b.title = dir;
-      b.onclick = async () => { menu.classList.add('hidden'); state.projectDir = await cc.chooseProject(dir); await refreshStatus(); };
-      menu.appendChild(b);
-    }
-  }
-  menu.classList.remove('hidden');
-};
-
-// ---- footer / links ----
-const REPO_URL = 'https://github.com/Chamanrajragu/claude-multi';
-$('ghLink').onclick = (e) => { e.preventDefault(); cc.openExternal(REPO_URL); };
-$('ghLink2').onclick = (e) => { e.preventDefault(); cc.openExternal(REPO_URL); };
-
-// ---- workspaces (saved project + account combos) ----
-function baseName(p) { return String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p; }
-
-function renderWorkspaces() {
-  const wrap = $('workspaceList');
-  wrap.innerHTML = '';
-  const list = state.workspaces || [];
-  if (!list.length) {
-    const hint = document.createElement('div');
-    hint.className = 'ws-empty';
-    hint.textContent = 'Save a project + account combo for one-click launch.';
-    wrap.appendChild(hint);
-    return;
-  }
-  for (const w of list) {
-    const acc = state.accounts.find((a) => a.id === w.accountId);
-    const row = document.createElement('div');
-    row.className = 'workspace';
-    const open = document.createElement('button');
-    open.className = 'ws-open';
-    const nm = document.createElement('span'); nm.className = 'ws-name'; nm.textContent = w.name;
-    const sub = document.createElement('span'); sub.className = 'ws-sub';
-    sub.textContent = (acc ? acc.name : '—') + ' · ' + baseName(w.projectDir);
-    if (acc && acc.color) nm.style.borderLeft = `3px solid ${acc.color}`;
-    open.appendChild(nm); open.appendChild(sub);
-    open.title = 'Open ' + w.name;
-    open.onclick = () => openWorkspace(w);
-    const del = document.createElement('button');
-    del.className = 'ws-del'; del.textContent = '✕'; del.title = 'Remove workspace';
-    del.onclick = async (e) => { e.stopPropagation(); state.workspaces = await cc.removeWorkspace(w.id); renderWorkspaces(); };
-    row.appendChild(open); row.appendChild(del);
-    wrap.appendChild(row);
-  }
-}
-
-async function openWorkspace(w) {
-  term.write(`\r\n\x1b[33m[launcher] opening workspace "${w.name}"…\x1b[0m\r\n`);
-  const res = await cc.openWorkspace(w.id);
-  if (res && res.ok === false) toast(res.error || 'Could not open workspace', 'error');
-  else { term.focus(); setTimeout(doFit, 80); }
-}
-
-async function saveWorkspace() {
-  if (!state.projectDir) { toast('Pick a project folder first', 'error'); return; }
-  const accId = state.projectAccount || state.accountId;
-  if (!accId) { toast('Assign or launch an account for this project first', 'error'); return; }
-  const acc = state.accounts.find((a) => a.id === accId);
-  const suggested = (acc ? acc.name + ' · ' : '') + baseName(state.projectDir);
-  const name = prompt('Name this workspace:', suggested);
-  if (name == null) return;
-  const r = await cc.addWorkspace({ name: name.trim() || 'Workspace', projectDir: state.projectDir, accountId: accId });
-  if (r && r.ok) { state.workspaces = r.list; renderWorkspaces(); toast('Workspace saved', 'ok'); }
-  else toast((r && r.error) || 'Could not save workspace', 'error');
-}
-$('addWorkspace').onclick = saveWorkspace;
-
-// ---- save session log ----
-function serializeTerminal() {
-  const buf = term.buffer.active;
-  const lines = [];
-  for (let i = 0; i < buf.length; i++) {
-    const line = buf.getLine(i);
-    if (line) lines.push(line.translateToString(true));
-  }
-  return lines.join('\n').replace(/\s+$/, '') + '\n';
-}
-async function saveLog() {
-  const text = serializeTerminal();
-  if (!text.trim()) { toast('Nothing in the terminal to save yet', 'error'); return; }
-  const r = await cc.saveLog(text);
-  if (r && r.ok) toast('Log saved to ' + r.path, 'ok');
-  else if (r && r.error) toast('Save failed: ' + r.error, 'error');
-}
-$('logBtn').onclick = saveLog;
-
-// ---- keyboard shortcuts help ----
-function openShortcuts() { $('shortcutsOverlay').classList.remove('hidden'); }
-$('shortcutsBtn').onclick = openShortcuts;
-$('shortcutsClose').onclick = () => $('shortcutsOverlay').classList.add('hidden');
-$('shortcutsOverlay').addEventListener('click', (e) => { if (e.target === $('shortcutsOverlay')) $('shortcutsOverlay').classList.add('hidden'); });
-
-$('accountFilter').addEventListener('input', (e) => { accountFilter = e.target.value; renderAccounts(); });
-
-// Quick-switch: Ctrl/Cmd + 1..9 launches (or switches to) the Nth account.
-function quickAccount(i) {
-  const a = state.accounts[i];
-  if (!a) return;
-  if (state.running && a.id !== state.accountId && a.loggedIn) cc.switchTo(a.id);
-  else launchAccount(a.id);
-}
-
-// ---- session buttons ----
-$('addAccount').onclick = addAccount;
-$('stopBtn').onclick = () => cc.stop();
-$('restartBtn').onclick = () => { toast('Restarting session…', 'ok'); cc.restart(); };
-
-// ---- manual switch menu ----
-$('switchMenuBtn').onclick = (e) => {
-  e.stopPropagation();
-  const menu = $('switchMenu');
-  if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
-  closePopups();
-  menu.innerHTML = '';
-  const targets = state.accounts.filter((a) => a.loggedIn && a.id !== state.accountId);
-  if (!targets.length) {
-    const d = document.createElement('div'); d.className = 'popup-empty'; d.textContent = 'No other logged-in account';
-    menu.appendChild(d);
-  } else {
-    for (const a of targets) {
-      const b = document.createElement('button');
-      const cool = a.cooldownUntil && a.cooldownUntil > now;
-      b.textContent = a.name + (cool ? ' · cooling ' + fmtCountdown(a.cooldownUntil - now) : '');
-      b.onclick = async () => {
-        menu.classList.add('hidden');
-        term.write('\r\n\x1b[33m[launcher] switching account…\x1b[0m\r\n');
-        await cc.switchTo(a.id);
-      };
-      menu.appendChild(b);
-    }
-  }
-  const r = e.target.getBoundingClientRect();
-  menu.style.right = (window.innerWidth - r.right) + 'px';
-  menu.style.top = (r.bottom + 6) + 'px';
-  menu.classList.remove('hidden');
-};
-
-// ---- terminal toolbar ----
-$('clearBtn').onclick = () => { term.clear(); term.focus(); };
-$('copyBtn').onclick = () => {
-  const sel = term.getSelection();
-  if (sel) { cc.clipboardWrite(sel); toast('Copied', 'ok'); }
-  else toast('Nothing selected', 'error');
-};
-$('pasteBtn').onclick = () => { const t = cc.clipboardRead(); if (t) cc.sendInput(t); term.focus(); };
-$('fontUpBtn').onclick = () => changeFont(1);
-$('fontDownBtn').onclick = () => changeFont(-1);
-
-function changeFont(delta) {
-  const size = Math.max(8, Math.min(28, (term.options.fontSize || 13) + delta));
-  applyFontSize(size);
-  cc.setSettings({ fontSize: size });
-}
-function applyFontSize(size) {
-  if (!size) return;
-  term.options.fontSize = size;
-  setTimeout(doFit, 20);
-}
-
-// ---- search ----
-$('searchBtn').onclick = openSearch;
-$('searchClose').onclick = closeSearch;
-$('searchNext').onclick = () => search.findNext($('searchInput').value);
-$('searchPrev').onclick = () => search.findPrevious($('searchInput').value);
-$('searchInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.shiftKey ? search.findPrevious(e.target.value) : search.findNext(e.target.value); }
-  if (e.key === 'Escape') closeSearch();
-});
-$('searchInput').addEventListener('input', (e) => { if (e.target.value) search.findNext(e.target.value); });
-function openSearch() { $('searchBar').classList.remove('hidden'); $('searchInput').focus(); $('searchInput').select(); }
-function closeSearch() { $('searchBar').classList.add('hidden'); try { search.clearDecorations(); } catch {} term.focus(); }
-
-// ---- keyboard shortcuts ----
-window.addEventListener('keydown', (e) => {
-  const ctrl = e.ctrlKey || e.metaKey;
-  if (ctrl && e.key === 'f') { e.preventDefault(); openSearch(); }
-  else if (ctrl && e.shiftKey && (e.key === 'C' || e.key === 'c')) { e.preventDefault(); $('copyBtn').click(); }
-  else if (ctrl && e.shiftKey && (e.key === 'V' || e.key === 'v')) { e.preventDefault(); $('pasteBtn').click(); }
-  else if (ctrl && (e.key === '=' || e.key === '+')) { e.preventDefault(); changeFont(1); }
-  else if (ctrl && e.key === '-') { e.preventDefault(); changeFont(-1); }
-  else if (ctrl && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); term.clear(); }
-  else if (ctrl && (e.key === ',')) { e.preventDefault(); openSettings(); }
-  else if (ctrl && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); openPalette(); }
-  else if (ctrl && !e.shiftKey && /^[1-9]$/.test(e.key)) { e.preventDefault(); quickAccount(parseInt(e.key, 10) - 1); }
-  else if (e.key === '?' && !ctrl && !/^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || '')) {
-    e.preventDefault(); openShortcuts();
-  }
-});
-
-// ---- composer (Claude Code–style chat input) ----
-const composerInput = $('composerInput');
-const MODELS = [
-  { id: '', label: 'Default model' },
-  { id: 'opus', label: 'Opus 4.8' },
-  { id: 'sonnet', label: 'Sonnet 5' },
-  { id: 'haiku', label: 'Haiku 4.5' },
-];
-
-function autoGrow() {
-  composerInput.style.height = 'auto';
-  composerInput.style.height = Math.min(160, composerInput.scrollHeight) + 'px';
-}
-composerInput.addEventListener('input', autoGrow);
-
-function sendPrompt(text) {
-  if (!text) return;
-  if (!state.running) { toast('Launch an account first', 'error'); return; }
-  // Wrap multi-line text in a bracketed paste so Claude Code inserts it
-  // literally instead of submitting each line.
-  const payload = text.includes('\n') ? ('\x1b[200~' + text + '\x1b[201~') : text;
-  cc.sendInput(payload + '\r');
-}
-
-let promptHist = [];
-let histIndex = -1;
-cc.listPrompts().then((h) => { promptHist = h || []; }).catch(() => {});
-
-function submitComposer() {
-  const text = composerInput.value.trim();
-  if (!text) return;
-  sendPrompt(text);
-  cc.addPrompt(text).then((h) => { promptHist = h || promptHist; }).catch(() => {});
-  histIndex = -1;
-  composerInput.value = '';
-  autoGrow();
-  composerInput.focus();
-}
-
-composerInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submitComposer(); return; }
-  // ↑/↓ browse recent prompts when the caret is at the very start of the box.
-  if (e.key === 'ArrowUp' && composerInput.selectionStart === 0 && promptHist.length) {
-    e.preventDefault();
-    histIndex = Math.min(promptHist.length - 1, histIndex + 1);
-    composerInput.value = promptHist[histIndex] || '';
-    autoGrow();
-    composerInput.setSelectionRange(0, 0);
-  } else if (e.key === 'ArrowDown' && histIndex >= 0) {
-    e.preventDefault();
-    histIndex -= 1;
-    composerInput.value = histIndex >= 0 ? promptHist[histIndex] : '';
-    autoGrow();
-  }
-});
-$('sendBtn').onclick = submitComposer;
-
-document.querySelectorAll('.chip.preset').forEach((btn) => {
-  btn.onclick = () => {
-    if (btn.dataset.insert != null) {
-      composerInput.value = btn.dataset.insert + composerInput.value;
-      autoGrow(); composerInput.focus();
-    } else if (btn.dataset.send != null) {
-      if (!state.running) { toast('Launch an account first', 'error'); return; }
-      cc.sendInput(btn.dataset.send + '\r'); term.focus();
-    } else if (btn.dataset.key === 'esc') {
-      if (state.running) cc.sendInput('\x1b');
-    }
-  };
-});
-
-$('modeBtn').onclick = () => {
-  if (!state.running) { toast('Launch an account first', 'error'); return; }
-  cc.sendInput('\x1b[Z'); // Shift+Tab cycles Claude Code's permission mode
-  toast('Cycled permission mode (Shift+Tab)', 'ok');
-};
-
-function renderModelLabel() {
-  const cur = (state.settings && state.settings.model) || '';
-  const m = MODELS.find((x) => x.id === cur) || MODELS[0];
-  $('modelLabel').textContent = m.label;
-  $('modelBtn').classList.toggle('set', !!cur);
-}
-$('modelBtn').onclick = (e) => {
-  e.stopPropagation();
-  const menu = $('modelMenu');
-  if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
-  closePopups();
-  menu.innerHTML = '';
-  const cur = (state.settings && state.settings.model) || '';
-  for (const m of MODELS) {
+  closeMenus(); menu.innerHTML = '';
+  const cur = (state.settings && state.settings[settingKey]) || '';
+  for (const [id, label] of list) {
     const b = document.createElement('button');
-    b.textContent = (m.id === cur ? '✓ ' : '') + m.label;
-    b.onclick = async () => {
-      menu.classList.add('hidden');
-      state.settings = await cc.setSettings({ model: m.id });
-      renderModelLabel();
-      if (state.running && m.id) cc.sendInput('/model ' + m.id + '\r');
-      toast(m.id ? `Model: ${m.label}${state.running ? '' : ' (applies on launch)'}` : 'Using account default model', 'ok');
-    };
+    b.textContent = (id === cur ? '✓ ' : '') + label;
+    b.onclick = async () => { menu.classList.add('hidden'); state.settings = await cc.setSettings({ [settingKey]: id }); renderModelLabel(); onPick && onPick(label); };
     menu.appendChild(b);
   }
   menu.classList.remove('hidden');
+}
+$('modelChip').onclick = (e) => {
+  e.stopPropagation();
+  openChipMenu('modelMenu', MODELS, 'model', (l) => toast('Model: ' + l, 'ok'));
+  const r = e.currentTarget.getBoundingClientRect();
+  const m = $('modelMenu'); m.style.left = r.left + 'px'; m.style.bottom = (window.innerHeight - r.top + 6) + 'px';
 };
-
-// ---- microphone / dictation ----
-let recog = null;
-let recording = false;
-function stopRecog() {
-  recording = false;
-  $('micBtn').classList.remove('recording');
-  if (recog) { try { recog.onend = null; recog.stop(); } catch {} recog = null; }
-}
-$('micBtn').onclick = () => {
-  if (recording) { stopRecog(); toast('Stopped listening', 'ok'); return; }
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  composerInput.focus();
-  if (!SR) {
-    toast('Tip: press Win+H for Windows Voice Typing — offline & no time limit.', 'error');
-    return;
-  }
-  recog = new SR();
-  recog.continuous = true;
-  recog.interimResults = true;
-  recog.lang = navigator.language || 'en-US';
-  let base = composerInput.value;
-  recording = true;
-  $('micBtn').classList.add('recording');
-  recog.onresult = (ev) => {
-    let interim = '', final = '';
-    for (let i = ev.resultIndex; i < ev.results.length; i++) {
-      const t = ev.results[i][0].transcript;
-      if (ev.results[i].isFinal) final += t; else interim += t;
-    }
-    if (final) base = (base ? base + ' ' : '') + final.trim();
-    composerInput.value = (base + (interim ? ' ' + interim : '')).trim();
-    autoGrow();
-  };
-  recog.onerror = (ev) => {
-    const err = ev.error;
-    stopRecog();
-    if (err === 'network') toast('Browser voice needs internet. Offline: press Win+H (Windows Voice Typing) with the box focused.', 'error');
-    else if (err === 'not-allowed' || err === 'service-not-allowed') toast('Microphone blocked. Allow mic access, or use Win+H.', 'error');
-    else if (err !== 'aborted' && err !== 'no-speech') toast('Voice error: ' + err, 'error');
-  };
-  // Auto-restart on end so recognition never cuts off after ~1 minute.
-  recog.onend = () => { if (recording) { try { recog.start(); } catch {} } };
-  try { recog.start(); toast('Listening… click the mic again to stop.', 'ok'); }
-  catch { stopRecog(); }
+$('effortChip').onclick = (e) => {
+  e.stopPropagation();
+  openChipMenu('effortMenu', EFFORTS, 'effort', (l) => toast('Effort: ' + l, 'ok'));
+  const r = e.currentTarget.getBoundingClientRect();
+  const m = $('effortMenu'); m.style.left = r.left + 'px'; m.style.bottom = (window.innerHeight - r.top + 6) + 'px';
 };
+const newChatTop = $('newChatTop'); if (newChatTop) newChatTop.onclick = () => $('newChatBtn').click();
 
-// ---- helpers used by palette ----
-async function toggleTheme() {
-  const next = (state.settings && state.settings.theme) === 'light' ? 'dark' : 'light';
-  applyTheme(next);
-  state.settings = await cc.setSettings({ theme: next });
-}
-function showUpdateBanner(info) {
-  const b = $('updateBanner');
-  b.textContent = `⬆ Update available: v${info.latest}`;
-  b.classList.remove('hidden');
-  b.onclick = (e) => { e.preventDefault(); cc.openExternal(info.url); };
-}
-async function checkUpdatesNow() {
-  toast('Checking for updates…', 'ok');
-  const info = await cc.checkUpdate();
-  if (info && info.isNewer) { showUpdateBanner(info); toast(`Update available: v${info.latest}`, 'ok'); }
-  else if (info) toast("You're on the latest version.", 'ok');
-  else toast('Could not check for updates.', 'error');
-}
-
-// ---- command palette (Ctrl/Cmd+P) ----
-let palFiltered = [];
-let palIndex = 0;
-function paletteActions() {
-  const acts = [];
-  state.accounts.forEach((a, i) => {
-    if (!a.loggedIn) return;
-    const verb = state.running && a.id !== state.accountId ? 'Switch to ' : 'Launch ';
-    acts.push({ label: verb + a.name + (i < 9 ? `  ·  Ctrl+${i + 1}` : ''), run: () => quickAccount(i) });
-  });
-  (state.workspaces || []).forEach((w) => {
-    acts.push({ label: 'Open workspace: ' + w.name, run: () => openWorkspace(w) });
-  });
-  acts.push({ label: 'Pick project folder…', run: () => $('pickProject').click() });
-  acts.push({ label: 'Save current as workspace…', run: saveWorkspace });
-  acts.push({ label: 'Save session log…', run: saveLog });
-  acts.push({ label: 'Keyboard shortcuts', run: openShortcuts });
-  acts.push({ label: 'Open settings', run: openSettings });
-  acts.push({ label: 'Toggle theme (dark / light)', run: toggleTheme });
-  acts.push({ label: 'Search terminal', run: openSearch });
-  acts.push({ label: 'Clear terminal', run: () => { term.clear(); term.focus(); } });
-  if (state.running) {
-    acts.push({ label: 'Restart session', run: () => cc.restart() });
-    acts.push({ label: 'Stop session', run: () => cc.stop() });
+// ---- login modal (interactive terminal) ----
+let loginTerm = null, loginFit = null, loginAcc = null;
+function openLogin(a) {
+  if (!a) return;
+  loginAcc = a;
+  $('loginTitle').textContent = 'Sign in — ' + a.name;
+  $('loginStatus').textContent = '';
+  $('loginModal').classList.remove('hidden');
+  if (!loginTerm) {
+    loginTerm = new Terminal({ fontFamily: 'Cascadia Mono, Consolas, monospace', fontSize: 13, cursorBlink: true, theme: { background: '#12100e', foreground: '#e6e2da', cursor: '#d9795a' } });
+    loginFit = new FitAddon.FitAddon(); loginTerm.loadAddon(loginFit);
+    loginTerm.open($('loginTerm'));
+    loginTerm.onData((d) => cc.loginInput(d));
+  } else {
+    loginTerm.clear();
   }
-  acts.push({ label: 'Add account…', run: addAccount });
-  acts.push({ label: 'Export config…', run: () => $('exportBtn').click() });
-  acts.push({ label: 'Import config…', run: () => $('importBtn').click() });
-  acts.push({ label: 'Check for updates', run: checkUpdatesNow });
-  return acts;
+  setTimeout(() => { try { loginFit.fit(); cc.loginResize(loginTerm.cols, loginTerm.rows); loginTerm.focus(); } catch {} }, 60);
+  cc.loginStart(a.id);
 }
-function openPalette() {
-  closePopups();
-  filterPalette('');
-  $('paletteInput').value = '';
-  $('paletteOverlay').classList.remove('hidden');
-  $('paletteInput').focus();
-}
-function closePalette() { $('paletteOverlay').classList.add('hidden'); }
-function filterPalette(q) {
-  const s = q.trim().toLowerCase();
-  const all = paletteActions();
-  palFiltered = s ? all.filter((a) => a.label.toLowerCase().includes(s)) : all;
-  palIndex = 0;
-  renderPalette();
-}
-function renderPalette() {
-  const list = $('paletteList');
-  list.innerHTML = '';
-  if (!palFiltered.length) {
-    const d = document.createElement('div'); d.className = 'palette-empty'; d.textContent = 'No matching commands';
-    list.appendChild(d); return;
-  }
-  palFiltered.forEach((a, i) => {
-    const d = document.createElement('div');
-    d.className = 'palette-item' + (i === palIndex ? ' sel' : '');
-    d.textContent = a.label;
-    d.onclick = () => runPalette(i);
-    list.appendChild(d);
-  });
-}
-function runPalette(i) { const a = palFiltered[i]; closePalette(); if (a) a.run(); }
-$('paletteInput').addEventListener('input', (e) => filterPalette(e.target.value));
-$('paletteInput').addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowDown') { e.preventDefault(); palIndex = Math.min(palFiltered.length - 1, palIndex + 1); renderPalette(); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); palIndex = Math.max(0, palIndex - 1); renderPalette(); }
-  else if (e.key === 'Enter') { e.preventDefault(); runPalette(palIndex); }
-  else if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+function closeLogin() { cc.loginStop(); $('loginModal').classList.add('hidden'); }
+$('loginClose').onclick = closeLogin;
+cc.onLoginData((d) => { if (loginTerm) loginTerm.write(d); });
+cc.onLoginExit(() => { if (loginTerm) loginTerm.write('\r\n[session ended]\r\n'); });
+cc.onLoginSuccess((info) => {
+  $('loginStatus').textContent = '✓ Signed in as ' + (info.email || 'your account') + '. You can close this and start chatting.';
+  toast('Signed in: ' + (info.email || ''), 'ok');
+  setTimeout(() => { if (!$('loginModal').classList.contains('hidden')) closeLogin(); }, 2200);
 });
-$('paletteOverlay').addEventListener('click', (e) => { if (e.target === $('paletteOverlay')) closePalette(); });
+// paste into the login terminal (native Ctrl+V is disabled without an app menu)
+$('loginTerm').addEventListener('contextmenu', (e) => { e.preventDefault(); const t = cc.clipboardRead(); if (t) cc.loginInput(t); });
+window.addEventListener('keydown', (e) => {
+  if ($('loginModal').classList.contains('hidden')) return;
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && !e.shiftKey && (e.key === 'v' || e.key === 'V')) { e.preventDefault(); const t = cc.clipboardRead(); if (t) cc.loginInput(t); }
+  else if (e.key === 'Escape') closeLogin();
+}, true);
 
-// ---- limit handling ----
+// ---- switch (limit) dialog ----
 let pendingSwitch = null;
-let countdownTimer = null;
-
-cc.onLimitReached((info) => {
-  clearInterval(countdownTimer);
-  const overlay = $('overlay');
-  const body = $('dlgBody');
+cc.onLimit((info) => {
   const cur = state.accounts.find((x) => x.id === info.accountId);
-  const curLabel = cur ? (cur.email || cur.name) : 'This account';
-  const reset = info.resetHint ? ` It resets around <b>${escapeHtml(info.resetHint)}</b>.` : '';
-
+  const curName = cur ? cur.name : 'This account';
+  if (info.autoSwitch && info.next) { doSwitch(info.next.id); return; }
   if (info.next) {
     pendingSwitch = info.next.id;
-    body.innerHTML =
-      `<b>${escapeHtml(curLabel)}</b> hit its usage limit.${reset}<br><br>` +
-      `Switch to <b>${escapeHtml(info.next.email || info.next.name)}</b> and continue this conversation?`;
-    $('dlgSwitch').classList.remove('hidden');
-
-    if (info.autoSwitch) {
-      let left = Math.max(0, info.autoSwitchDelay || 6);
-      const btn = $('dlgSwitch');
-      const tick = () => {
-        btn.textContent = left > 0 ? `Switching in ${left}…` : 'Switching…';
-        if (left <= 0) { clearInterval(countdownTimer); doSwitch(); }
-        left -= 1;
-      };
-      tick();
-      countdownTimer = setInterval(tick, 1000);
-    } else {
-      $('dlgSwitch').textContent = 'Switch account';
-    }
+    $('switchBody').innerHTML = `<b>${escapeHtml(curName)}</b> hit its usage limit.<br><br>Switch to <b>${escapeHtml(info.next.name)}</b> and continue this conversation?`;
+    $('switchGo').classList.remove('hidden');
   } else {
     pendingSwitch = null;
-    body.innerHTML =
-      `<b>${escapeHtml(curLabel)}</b> hit its usage limit.${reset}<br><br>` +
-      `No other logged-in account is available. Add or log into another account, then switch.`;
-    $('dlgSwitch').classList.add('hidden');
+    $('switchBody').innerHTML = `<b>${escapeHtml(curName)}</b> hit its usage limit.<br><br>No other signed-in account is available. Add or log into another account.`;
+    $('switchGo').classList.add('hidden');
   }
-  overlay.classList.remove('hidden');
-  refreshStatus();
+  $('switchModal').classList.remove('hidden');
 });
-
-cc.onLimitApproaching((info) => {
-  const b = $('approachBanner');
-  b.textContent = 'Approaching usage limit' + (info.resetHint ? ` · resets ~${info.resetHint}` : '');
-  b.classList.remove('hidden');
-  setTimeout(() => b.classList.add('hidden'), 12000);
-});
-
-function closeDialog() { clearInterval(countdownTimer); $('overlay').classList.add('hidden'); $('dlgSwitch').textContent = 'Switch account'; }
-async function doSwitch() {
-  closeDialog();
-  if (!pendingSwitch) return;
-  term.write('\r\n\x1b[33m[launcher] switching account…\x1b[0m\r\n');
-  await cc.switchTo(pendingSwitch);
+$('switchCancel').onclick = () => $('switchModal').classList.add('hidden');
+$('switchGo').onclick = () => { $('switchModal').classList.add('hidden'); if (pendingSwitch) doSwitch(pendingSwitch); };
+async function doSwitch(id) {
+  onErrorLine('Switching account…');
+  const r = await cc.switchAccount(id);
+  if (r && !r.ok) toast(r.error === 'not_logged_in' ? 'That account is not signed in' : (r.error || 'Switch failed'), 'err');
+  else toast('Switched account' + (r && r.carried ? ' · conversation carried over' : ''), 'ok');
 }
-$('dlgCancel').onclick = closeDialog;
-$('dlgSwitch').onclick = doSwitch;
 
 // ---- settings ----
-function openSettings() {
+$('settingsBtn').onclick = () => {
   const s = state.settings || {};
+  $('setTheme').value = s.theme || 'light';
+  $('setModel').value = s.model || '';
   $('setAutoSwitch').checked = !!s.autoSwitch;
-  $('setDelay').value = s.autoSwitchDelay ?? 6;
   $('setNotify').checked = s.notify !== false;
-  $('setConfirmClose').checked = s.confirmClose !== false;
-  $('setMinimizeToTray').checked = !!s.minimizeToTray;
-  $('setStartOnLogin').checked = !!s.startOnLogin;
-  $('setCheckUpdates').checked = s.checkUpdates !== false;
-  $('setTheme').value = s.theme || 'dark';
-  $('setExtraArgs').value = s.extraArgs || '';
-  cc.appInfo().then((info) => {
-    $('claudePathLabel').textContent = info.claudePath || 'not found';
-    $('aboutLine').textContent = `Claude Multi v${info.version} · Electron ${info.electron} · Node ${info.node}`;
+  cc.appInfo().then((i) => { $('aboutLine').textContent = `Claude Multi v${i.version} · Electron ${i.electron}`; }).catch(() => {});
+  $('settingsModal').classList.remove('hidden');
+};
+$('settingsClose').onclick = () => $('settingsModal').classList.add('hidden');
+$('setTheme').onchange = async (e) => { applyTheme(e.target.value); state.settings = await cc.setSettings({ theme: e.target.value }); };
+$('setModel').onchange = async (e) => { state.settings = await cc.setSettings({ model: e.target.value }); renderModelLabel(); };
+$('setAutoSwitch').onchange = async (e) => { state.settings = await cc.setSettings({ autoSwitch: e.target.checked }); };
+$('setNotify').onchange = async (e) => { state.settings = await cc.setSettings({ notify: e.target.checked }); };
+
+function applyTheme(theme) { document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light'); }
+
+// ---- prompt modal (Electron has no window.prompt) ----
+function uiPrompt(label, def, okLabel) {
+  return new Promise((resolve) => {
+    $('promptLabel').textContent = label;
+    const inp = $('promptInput'); inp.value = def || '';
+    $('promptOk').textContent = okLabel || 'OK';
+    $('promptModal').classList.remove('hidden');
+    setTimeout(() => { inp.focus(); inp.select(); }, 30);
+    const done = (val) => { $('promptModal').classList.add('hidden'); cleanup(); resolve(val); };
+    const onOk = () => done(inp.value);
+    const onCancel = () => done(null);
+    const onKey = (e) => { if (e.key === 'Enter') { e.preventDefault(); onOk(); } else if (e.key === 'Escape') { e.preventDefault(); onCancel(); } };
+    function cleanup() { $('promptOk').onclick = null; $('promptCancel').onclick = null; inp.removeEventListener('keydown', onKey); }
+    $('promptOk').onclick = onOk; $('promptCancel').onclick = onCancel; inp.addEventListener('keydown', onKey);
   });
-  $('settingsOverlay').classList.remove('hidden');
-}
-async function saveSettings() {
-  const patch = {
-    autoSwitch: $('setAutoSwitch').checked,
-    autoSwitchDelay: Math.max(0, Math.min(60, parseInt($('setDelay').value, 10) || 0)),
-    notify: $('setNotify').checked,
-    confirmClose: $('setConfirmClose').checked,
-    minimizeToTray: $('setMinimizeToTray').checked,
-    startOnLogin: $('setStartOnLogin').checked,
-    checkUpdates: $('setCheckUpdates').checked,
-    theme: $('setTheme').value,
-    extraArgs: $('setExtraArgs').value.trim(),
-  };
-  state.settings = await cc.setSettings(patch);
-  applyTheme(patch.theme);
-}
-$('settingsBtn').onclick = openSettings;
-$('settingsClose').onclick = () => { saveSettings(); $('settingsOverlay').classList.add('hidden'); };
-$('setTheme').onchange = (e) => applyTheme(e.target.value);
-$('pickClaudeBtn').onclick = async () => {
-  const p = await cc.pickClaude();
-  $('claudePathLabel').textContent = p || 'not found';
-};
-$('exportBtn').onclick = async () => {
-  const r = await cc.exportConfig();
-  if (r && r.ok) toast('Exported to ' + r.path, 'ok');
-  else if (r && r.error) toast('Export failed: ' + r.error, 'error');
-};
-$('importBtn').onclick = async () => {
-  if (!confirm('Import a backup? This merges accounts & settings from the file.')) return;
-  const r = await cc.importConfig();
-  if (r && r.ok) { await refreshStatus(); toast('Config imported', 'ok'); }
-  else if (r && r.error) toast('Import failed: ' + r.error, 'error');
-};
-
-// ---- update banner ----
-cc.onUpdateAvailable((info) => {
-  if (!info || !info.isNewer) return;
-  showUpdateBanner(info);
-  toast(`A newer version (v${info.latest}) is available — click the banner to download.`, 'ok');
-});
-
-function applyTheme(theme) {
-  const t = theme === 'light' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', t);
-  term.options.theme = themes[t];
 }
 
-// ---- toasts ----
-function toast(msg, kind = 'ok') {
-  const t = document.createElement('div');
-  t.className = 'toast ' + kind;
-  t.textContent = msg;
-  $('toasts').appendChild(t);
-  requestAnimationFrame(() => t.classList.add('show'));
-  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3200);
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[c]));
-}
-
-// ---- ticking clock (timers/cooldowns) ----
-setInterval(() => { now = Date.now(); renderStats(); if (hasVisibleCooldown()) renderAccounts(); }, 1000);
-function hasVisibleCooldown() {
-  return state.accounts.some((a) => a.cooldownUntil && a.cooldownUntil > now - 2000);
+// ---- toast ----
+let toastTimer = null;
+function toast(msg, kind) {
+  const el = $('toast'); el.textContent = msg; el.className = 'toast' + (kind === 'err' ? ' err' : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.add('hidden'), 2600);
 }
 
 // ---- boot ----
-cc.onStatus((s) => { state = Object.assign(state, s); applyTheme(state.settings && state.settings.theme); renderAll(); });
+cc.onState((s) => { state = Object.assign(state, s); if (s.settings) applyTheme(s.settings.theme); renderAll(); });
 (async () => {
-  state.projectDir = await cc.getProject();
-  await refreshStatus();
+  state = await cc.getState();
+  applyTheme(state.settings && state.settings.theme);
   renderAll();
+  // Show the last conversation for this project (if any) even before a session starts.
+  if (state.projectDir) { try { const h = await cc.getHistory(); if (h && h.log && h.log.length) renderHistory(h.log); } catch { /* noop */ } }
+  setInterval(() => { if (state.accounts.some((a) => a.cooldownUntil && a.cooldownUntil > Date.now())) renderAccounts(); }, 30000);
 })();
-
-window.__cmReady = true;
 })();
