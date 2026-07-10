@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld('cc', {
   setAccountColor: (id, color) => ipcRenderer.invoke('accounts:setColor', id, color),
   addPrompt: (text) => ipcRenderer.invoke('prompt:add', text),
   listPrompts: () => ipcRenderer.invoke('prompt:list'),
+  addWorkspace: (ws) => ipcRenderer.invoke('workspace:add', ws),
+  removeWorkspace: (id) => ipcRenderer.invoke('workspace:remove', id),
+  openWorkspace: (id) => ipcRenderer.invoke('workspace:open', id),
+  saveLog: (text) => ipcRenderer.invoke('app:saveLog', text),
 
   // project folder
   pickProject: () => ipcRenderer.invoke('project:pick'),

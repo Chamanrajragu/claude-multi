@@ -36,13 +36,22 @@
       </div>
       <div id="projectAccountMenu" class="popup hidden"></div>
 
-      <div class="section-label">
-        Accounts <span id="availCount" class="count-pill"></span>
-        <button id="addAccount" class="mini-btn" title="Add an account">+</button>
+      <div class="section-label" id="workspacesLabel">
+        Workspaces
+        <button id="addWorkspace" class="mini-btn" title="Save current project + account as a workspace">+</button>
       </div>
-      <input id="accountFilter" class="account-filter hidden" type="text" placeholder="Filter accounts…" />
-      <div id="accountList" class="account-list"></div>
+      <div class="sidebar-scroll">
+        <div id="workspaceList" class="workspace-list"></div>
 
+        <div class="section-label">
+          Accounts <span id="availCount" class="count-pill"></span>
+          <button id="addAccount" class="mini-btn" title="Add an account">+</button>
+        </div>
+        <input id="accountFilter" class="account-filter hidden" type="text" placeholder="Filter accounts…" />
+        <div id="accountList" class="account-list"></div>
+      </div>
+
+      <div class="sidebar-bottom">
       <div class="hint" id="loginHint">
         Tip: to log in an account, launch it and type <code>/login</code> in the terminal.
       </div>
@@ -59,8 +68,10 @@
             <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
             <span>GitHub</span>
           </a>
+          <button id="shortcutsBtn" class="footer-link" title="Keyboard shortcuts (?)">⌨ Shortcuts</button>
           <span class="footer-by">by <b>Chaman Raj</b></span>
         </div>
+      </div>
       </div>
     </aside>
 
@@ -79,6 +90,7 @@
           <button id="pasteBtn" class="tool-btn" title="Paste (Ctrl+Shift+V)">Paste</button>
           <button id="fontDownBtn" class="tool-btn" title="Smaller text (Ctrl+-)">A−</button>
           <button id="fontUpBtn" class="tool-btn" title="Larger text (Ctrl+=)">A+</button>
+          <button id="logBtn" class="tool-btn" title="Save session log to a file">Log</button>
           <button id="clearBtn" class="tool-btn" title="Clear terminal (Ctrl+K)">Clear</button>
         </div>
       </div>
@@ -199,6 +211,29 @@
       <div class="about"><a id="ghLink2" class="footer-link">★ Star on GitHub — github.com/Chamanrajragu</a></div>
       <div class="dialog-actions">
         <button id="settingsClose" class="primary-btn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard shortcuts -->
+  <div id="shortcutsOverlay" class="hidden">
+    <div class="dialog shortcuts-dialog">
+      <h2>Keyboard shortcuts</h2>
+      <table class="shortcuts-table">
+        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>P</kbd></td><td>Command palette</td></tr>
+        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>1</kbd>…<kbd>9</kbd></td><td>Launch / switch to the Nth account</td></tr>
+        <tr><td><kbd>Enter</kbd> / <kbd>Shift</kbd> <kbd>Enter</kbd></td><td>Send message / new line (chat bar)</td></tr>
+        <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Reuse recent prompts (chat bar)</td></tr>
+        <tr><td><kbd>Win</kbd> <kbd>H</kbd></td><td>Windows Voice Typing into the chat bar</td></tr>
+        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>F</kbd></td><td>Search the terminal</td></tr>
+        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>Shift</kbd> <kbd>C</kbd> / <kbd>V</kbd></td><td>Copy / paste</td></tr>
+        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>=</kbd> / <kbd>-</kbd></td><td>Bigger / smaller text</td></tr>
+        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>K</kbd></td><td>Clear terminal</td></tr>
+        <tr><td><kbd>Ctrl/⌘</kbd> <kbd>,</kbd></td><td>Open settings</td></tr>
+        <tr><td><kbd>?</kbd></td><td>This help</td></tr>
+      </table>
+      <div class="dialog-actions">
+        <button id="shortcutsClose" class="primary-btn">Got it</button>
       </div>
     </div>
   </div>

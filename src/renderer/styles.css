@@ -56,7 +56,22 @@ body {
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
   padding: 16px; gap: 8px;
+  overflow: hidden;
 }
+/* Fixed top + fixed bottom, with only the middle scrolling. Without this the
+   footer gets pushed off-screen (20 accounts) or the project button squashed. */
+#sidebar > * { flex-shrink: 0; }
+/* A shrinkable group, NOT a scroller: the account list inside is the scroller,
+   and nesting the two clipped its last card. Needs id specificity to beat
+   `#sidebar > *` above. */
+#sidebar > .sidebar-scroll {
+  display: flex; flex-direction: column; gap: 8px;
+  flex: 1 1 auto; flex-shrink: 1; min-height: 0; overflow: visible;
+}
+/* Near the 540px minimum the bottom block would eat the whole sidebar, so drop
+   the two purely informational lines and tighten the workspace list. */
+/* (short-window overrides live at the end of this file, after the base rules
+   they need to beat) */
 .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .logo {
   width: 38px; height: 38px; border-radius: 10px;
@@ -98,6 +113,32 @@ body {
 .project-btn:hover { border-color: var(--accent); }
 .project-btn.flash-error { border-color: var(--red); }
 
+/* ---- workspaces ---- */
+/* Capped so a long workspace list can never starve the account list below it. */
+.workspace-list {
+  display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px;
+  max-height: 148px; overflow-y: auto; flex: 0 0 auto; padding-right: 2px;
+}
+.workspace-list::-webkit-scrollbar { width: 8px; }
+.workspace-list::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
+.workspace-list::-webkit-scrollbar-track { background: transparent; }
+.ws-empty { font-size: 11px; color: var(--muted); line-height: 1.5; padding: 2px 0 4px; }
+.workspace { display: flex; gap: 6px; align-items: stretch; }
+.ws-open {
+  flex: 1; text-align: left; display: flex; flex-direction: column; gap: 2px; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 7px 10px;
+  transition: border-color .15s, transform .1s;
+}
+.ws-open:hover { border-color: var(--accent); }
+.ws-open:active { transform: scale(.99); }
+.ws-name { font-size: 12.5px; font-weight: 600; color: var(--text); padding-left: 2px; }
+.ws-sub { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-del {
+  flex: 0 0 28px; border: 1px solid var(--border); background: transparent; color: var(--muted);
+  border-radius: 9px; cursor: pointer; font-size: 11px;
+}
+.ws-del:hover { color: var(--red); border-color: var(--red); }
+
 .account-filter {
   width: 100%; padding: 7px 10px; border-radius: 8px; margin-bottom: 8px;
   background: var(--panel-2); border: 1px solid var(--border); color: var(--text); font-size: 12px; outline: none;
@@ -105,7 +146,9 @@ body {
 .account-filter:focus { border-color: var(--accent); }
 .account-filter::placeholder { color: var(--muted); }
 .account-meta { font-size: 10.5px; color: var(--muted); margin-top: 4px; opacity: .85; }
-.account-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1 1 auto; min-height: 0; padding-right: 2px; }
+/* Sole scroller in the sidebar. The floor fits one whole 107px card so the
+   first card is never shaved; it is relaxed in the short-window media query. */
+.account-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1 1 auto; min-height: 116px; padding-right: 2px; }
 .account-list::-webkit-scrollbar { width: 8px; }
 .account-list::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
 .account-list::-webkit-scrollbar-track { background: transparent; }
@@ -113,7 +156,8 @@ body {
   border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
   background: var(--panel-2); transition: border-color .15s, background .15s;
 }
-.account:hover { border-color: var(--border-2); }
+.account { transition: border-color .15s, transform .1s, background .15s; }
+.account:hover { border-color: var(--border-2); transform: translateY(-1px); }
 .account.active { border-color: var(--accent); background: var(--active-bg); }
 .account-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .account-name { font-weight: 600; font-size: 13px; }
@@ -142,7 +186,9 @@ body {
 /* ---- app footer (trust + credit) ---- */
 .app-footer { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .trust { font-size: 10.5px; color: var(--muted); line-height: 1.55; }
-.footer-links { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+.footer-links { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.footer-links .footer-by { margin-left: auto; }
+.footer-link { font-family: inherit; }
 .footer-link {
   display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted);
   text-decoration: none; cursor: pointer; padding: 5px 10px; border: 1px solid var(--border); border-radius: 8px;
@@ -303,14 +349,28 @@ body {
 .empty-card code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; color: var(--accent-2); }
 
 /* ---- overlay dialogs ---- */
-#overlay, #settingsOverlay {
+#overlay, #settingsOverlay, #shortcutsOverlay {
   position: fixed; inset: 0; background: rgba(8,9,13,.72);
   display: grid; place-items: center; z-index: 100; backdrop-filter: blur(3px);
+  animation: overlayIn .16s ease;
 }
+@keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
 .dialog {
   width: 440px; max-width: 92vw; background: var(--panel);
   border: 1px solid var(--border); border-radius: 16px; padding: 26px; text-align: center;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow); animation: dialogIn .18s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes dialogIn { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+
+/* ---- shortcuts ---- */
+.shortcuts-dialog { width: 480px; text-align: left; }
+.shortcuts-dialog h2 { margin-bottom: 14px; }
+.shortcuts-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.shortcuts-table td { padding: 7px 6px; border-top: 1px solid var(--border); color: var(--muted); }
+.shortcuts-table td:first-child { width: 46%; white-space: nowrap; }
+kbd {
+  display: inline-block; background: var(--panel-2); border: 1px solid var(--border-2); border-bottom-width: 2px;
+  border-radius: 5px; padding: 1px 6px; font-size: 11px; font-family: inherit; color: var(--text); margin: 1px;
 }
 .dialog-icon {
   width: 52px; height: 52px; margin: 0 auto 14px; border-radius: 14px;
@@ -385,3 +445,15 @@ input.switch:checked::after { left: 20px; background: var(--accent-ink); }
 .toast.show { opacity: 1; transform: translateY(0); }
 .toast.ok { border-left: 3px solid var(--green); }
 .toast.error { border-left: 3px solid var(--red); }
+
+/* ---- short windows (near the 540px minimum) ----
+   Placed last so these beat the base rules above at equal specificity.
+   The sidebar's bottom block would otherwise eat the whole column. */
+@media (max-height: 640px) {
+  #loginHint { display: none; }
+  .app-footer .trust { display: none; }
+  /* There is only ~100px of middle here. Accounts are the primary control, so
+     they get it; workspaces stay reachable from the command palette (Ctrl+P). */
+  #workspacesLabel, .workspace-list { display: none; }
+  .account-list { min-height: 88px; }
+}

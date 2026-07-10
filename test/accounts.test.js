@@ -285,6 +285,51 @@ test('addPrompt dedupes, orders newest-first, caps at 50', () => {
   } finally { t.cleanup(); }
 });
 
+test('workspaces: add, unique ids, get, remove', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    s.add('Work');
+    s.addWorkspace({ name: 'Site', projectDir: 'D:/site', accountId: 'work' });
+    s.addWorkspace({ name: 'Site', projectDir: 'D:/site2', accountId: 'work' });
+    const list = s.listWorkspaces();
+    assert.strictEqual(list.length, 2);
+    assert.strictEqual(list[0].id, 'site');
+    assert.strictEqual(list[1].id, 'site-2');
+    assert.strictEqual(s.getWorkspace('site').projectDir, 'D:/site');
+    s.removeWorkspace('site');
+    assert.strictEqual(s.listWorkspaces().length, 1);
+    assert.strictEqual(s.getWorkspace('site'), undefined);
+  } finally { t.cleanup(); }
+});
+
+test('workspaces: require project + account', () => {
+  const t = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    assert.throws(() => s.addWorkspace({ name: 'x', projectDir: '', accountId: 'a' }), /project folder and an account/);
+    assert.throws(() => s.addWorkspace({ name: 'x', projectDir: 'D:/p', accountId: '' }), /project folder and an account/);
+  } finally { t.cleanup(); }
+});
+
+test('workspaces: removed with their account and survive export/import', () => {
+  const t = tmp();
+  const b = tmp();
+  try {
+    const s = new Store(t.file, t.root);
+    s.add('Work'); s.add('Extra');
+    s.addWorkspace({ name: 'WS1', projectDir: 'D:/p1', accountId: 'work' });
+    s.addWorkspace({ name: 'WS2', projectDir: 'D:/p2', accountId: 'extra' });
+    // export/import carries workspaces
+    const s2 = new Store(b.file, b.root);
+    s2.importData(s.exportData());
+    assert.strictEqual(s2.listWorkspaces().length, 2);
+    // removing an account drops its workspaces
+    s.remove('work');
+    assert.deepStrictEqual(s.listWorkspaces().map((w) => w.id), ['ws2']);
+  } finally { t.cleanup(); b.cleanup(); }
+});
+
 test('slug helper', () => {
   assert.strictEqual(slug('Hello World!'), 'hello-world');
   assert.strictEqual(slug('   '), 'account');

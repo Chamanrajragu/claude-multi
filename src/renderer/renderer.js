@@ -41,7 +41,7 @@ cc.onExit((code) => {
 // ---- state ----
 let state = {
   accounts: [], accountId: null, projectDir: '', projectAccount: '', running: false,
-  startedAt: 0, switchCount: 0, recentProjects: [], settings: {}, availableCount: 0,
+  startedAt: 0, switchCount: 0, recentProjects: [], workspaces: [], settings: {}, availableCount: 0,
 };
 let now = Date.now();
 
@@ -232,7 +232,7 @@ function renderEmpty() {
   $('emptyState').classList.toggle('hidden', !show);
 }
 
-function renderAll() { renderBadge(); renderProject(); renderProjectAccount(); renderAccounts(); renderStats(); renderModelLabel(); renderEmpty(); }
+function renderAll() { renderBadge(); renderProject(); renderProjectAccount(); renderWorkspaces(); renderAccounts(); renderStats(); renderModelLabel(); renderEmpty(); }
 
 async function refreshStatus() {
   const s = await cc.status();
@@ -411,6 +411,87 @@ const REPO_URL = 'https://github.com/Chamanrajragu/claude-multi';
 $('ghLink').onclick = (e) => { e.preventDefault(); cc.openExternal(REPO_URL); };
 $('ghLink2').onclick = (e) => { e.preventDefault(); cc.openExternal(REPO_URL); };
 
+// ---- workspaces (saved project + account combos) ----
+function baseName(p) { return String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p; }
+
+function renderWorkspaces() {
+  const wrap = $('workspaceList');
+  wrap.innerHTML = '';
+  const list = state.workspaces || [];
+  if (!list.length) {
+    const hint = document.createElement('div');
+    hint.className = 'ws-empty';
+    hint.textContent = 'Save a project + account combo for one-click launch.';
+    wrap.appendChild(hint);
+    return;
+  }
+  for (const w of list) {
+    const acc = state.accounts.find((a) => a.id === w.accountId);
+    const row = document.createElement('div');
+    row.className = 'workspace';
+    const open = document.createElement('button');
+    open.className = 'ws-open';
+    const nm = document.createElement('span'); nm.className = 'ws-name'; nm.textContent = w.name;
+    const sub = document.createElement('span'); sub.className = 'ws-sub';
+    sub.textContent = (acc ? acc.name : '—') + ' · ' + baseName(w.projectDir);
+    if (acc && acc.color) nm.style.borderLeft = `3px solid ${acc.color}`;
+    open.appendChild(nm); open.appendChild(sub);
+    open.title = 'Open ' + w.name;
+    open.onclick = () => openWorkspace(w);
+    const del = document.createElement('button');
+    del.className = 'ws-del'; del.textContent = '✕'; del.title = 'Remove workspace';
+    del.onclick = async (e) => { e.stopPropagation(); state.workspaces = await cc.removeWorkspace(w.id); renderWorkspaces(); };
+    row.appendChild(open); row.appendChild(del);
+    wrap.appendChild(row);
+  }
+}
+
+async function openWorkspace(w) {
+  term.write(`\r\n\x1b[33m[launcher] opening workspace "${w.name}"…\x1b[0m\r\n`);
+  const res = await cc.openWorkspace(w.id);
+  if (res && res.ok === false) toast(res.error || 'Could not open workspace', 'error');
+  else { term.focus(); setTimeout(doFit, 80); }
+}
+
+async function saveWorkspace() {
+  if (!state.projectDir) { toast('Pick a project folder first', 'error'); return; }
+  const accId = state.projectAccount || state.accountId;
+  if (!accId) { toast('Assign or launch an account for this project first', 'error'); return; }
+  const acc = state.accounts.find((a) => a.id === accId);
+  const suggested = (acc ? acc.name + ' · ' : '') + baseName(state.projectDir);
+  const name = prompt('Name this workspace:', suggested);
+  if (name == null) return;
+  const r = await cc.addWorkspace({ name: name.trim() || 'Workspace', projectDir: state.projectDir, accountId: accId });
+  if (r && r.ok) { state.workspaces = r.list; renderWorkspaces(); toast('Workspace saved', 'ok'); }
+  else toast((r && r.error) || 'Could not save workspace', 'error');
+}
+$('addWorkspace').onclick = saveWorkspace;
+
+// ---- save session log ----
+function serializeTerminal() {
+  const buf = term.buffer.active;
+  const lines = [];
+  for (let i = 0; i < buf.length; i++) {
+    const line = buf.getLine(i);
+    if (line) lines.push(line.translateToString(true));
+  }
+  return lines.join('\n').replace(/\s+$/, '') + '\n';
+}
+async function saveLog() {
+  const text = serializeTerminal();
+  if (!text.trim()) { toast('Nothing in the terminal to save yet', 'error'); return; }
+  const r = await cc.saveLog(text);
+  if (r && r.ok) toast('Log saved to ' + r.path, 'ok');
+  else if (r && r.error) toast('Save failed: ' + r.error, 'error');
+}
+$('logBtn').onclick = saveLog;
+
+// ---- keyboard shortcuts help ----
+function openShortcuts() { $('shortcutsOverlay').classList.remove('hidden'); }
+$('shortcutsBtn').onclick = openShortcuts;
+$('shortcutsClose').onclick = () => $('shortcutsOverlay').classList.add('hidden');
+$('shortcutsOverlay').addEventListener('click', (e) => { if (e.target === $('shortcutsOverlay')) $('shortcutsOverlay').classList.add('hidden'); });
+
 $('accountFilter').addEventListener('input', (e) => { accountFilter = e.target.value; renderAccounts(); });
 
 // Quick-switch: Ctrl/Cmd + 1..9 launches (or switches to) the Nth account.
@@ -503,6 +584,9 @@ window.addEventListener('keydown', (e) => {
   else if (ctrl && (e.key === ',')) { e.preventDefault(); openSettings(); }
   else if (ctrl && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); openPalette(); }
   else if (ctrl && !e.shiftKey && /^[1-9]$/.test(e.key)) { e.preventDefault(); quickAccount(parseInt(e.key, 10) - 1); }
+  else if (e.key === '?' && !ctrl && !/^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || '')) {
+    e.preventDefault(); openShortcuts();
+  }
 });
 
 // ---- composer (Claude Code–style chat input) ----
@@ -686,7 +770,13 @@ function paletteActions() {
     const verb = state.running && a.id !== state.accountId ? 'Switch to ' : 'Launch ';
     acts.push({ label: verb + a.name + (i < 9 ? `  ·  Ctrl+${i + 1}` : ''), run: () => quickAccount(i) });
   });
+  (state.workspaces || []).forEach((w) => {
+    acts.push({ label: 'Open workspace: ' + w.name, run: () => openWorkspace(w) });
+  });
   acts.push({ label: 'Pick project folder…', run: () => $('pickProject').click() });
+  acts.push({ label: 'Save current as workspace…', run: saveWorkspace });
+  acts.push({ label: 'Save session log…', run: saveLog });
+  acts.push({ label: 'Keyboard shortcuts', run: openShortcuts });
   acts.push({ label: 'Open settings', run: openSettings });
   acts.push({ label: 'Toggle theme (dark / light)', run: toggleTheme });
   acts.push({ label: 'Search terminal', run: openSearch });

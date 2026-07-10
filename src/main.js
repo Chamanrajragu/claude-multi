@@ -280,6 +280,7 @@ function statusPayload() {
     switchCount: session.switchCount,
     accounts: store.list(),
     recentProjects: store.get('recentProjects') || [],
+    workspaces: store.listWorkspaces(),
     settings: store.getSettings(),
     availableCount: cooldown.availableCount(store.list()),
   };
@@ -415,6 +416,33 @@ function registerIpc() {
 
   ipcMain.handle('prompt:add', (_e, text) => store.addPrompt(text));
   ipcMain.handle('prompt:list', () => store.getPromptHistory());
+
+  ipcMain.handle('workspace:add', (_e, ws) => {
+    try { const list = store.addWorkspace(ws); sendStatus(); return { ok: true, list }; }
+    catch (e) { return { ok: false, error: String(e.message || e) }; }
+  });
+  ipcMain.handle('workspace:remove', (_e, id) => { store.removeWorkspace(id); sendStatus(); return store.listWorkspaces(); });
+  ipcMain.handle('workspace:open', (_e, id) => {
+    const ws = store.getWorkspace(id);
+    if (!ws) return { ok: false, error: 'Workspace not found' };
+    if (!fs.existsSync(ws.projectDir)) return { ok: false, error: 'Project folder no longer exists' };
+    session.projectDir = ws.projectDir;
+    store.addRecentProject(ws.projectDir);
+    const res = launchAccount(ws.accountId, { continueConv: false });
+    sendStatus();
+    return res;
+  });
+
+  ipcMain.handle('app:saveLog', async (_e, text) => {
+    const res = await dialog.showSaveDialog(win, {
+      title: 'Save session log',
+      defaultPath: path.join(os.homedir(), 'claude-session.log'),
+      filters: [{ name: 'Log', extensions: ['log', 'txt'] }],
+    });
+    if (res.canceled || !res.filePath) return { ok: false };
+    try { fs.writeFileSync(res.filePath, String(text || '')); return { ok: true, path: res.filePath }; }
+    catch (e) { return { ok: false, error: String(e.message || e) }; }
+  });
 
   ipcMain.handle('project:pick', async () => {
     const res = await dialog.showOpenDialog(win, {

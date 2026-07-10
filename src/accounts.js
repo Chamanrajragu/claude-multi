@@ -39,6 +39,7 @@ class Store {
       recentProjects: [],
       projectAccounts: {},   // { [projectDir]: accountId } — preferred account per project
       promptHistory: [],     // recently sent composer prompts (newest first)
+      workspaces: [],        // saved { id, name, projectDir, accountId } combos
       claudePath: '',
       settings: { ...DEFAULT_SETTINGS },
     };
@@ -53,6 +54,7 @@ class Store {
       if (!Array.isArray(this.state.accounts)) this.state.accounts = [];
       if (!Array.isArray(this.state.recentProjects)) this.state.recentProjects = [];
       if (!Array.isArray(this.state.promptHistory)) this.state.promptHistory = [];
+      if (!Array.isArray(this.state.workspaces)) this.state.workspaces = [];
       if (!this.state.projectAccounts || typeof this.state.projectAccounts !== 'object') this.state.projectAccounts = {};
       this.state.settings = { ...DEFAULT_SETTINGS, ...(this.state.settings || {}) };
     } catch {
@@ -130,6 +132,8 @@ class Store {
     for (const dir of Object.keys(this.state.projectAccounts)) {
       if (this.state.projectAccounts[dir] === id) delete this.state.projectAccounts[dir];
     }
+    // Drop workspaces bound to the removed account.
+    this.state.workspaces = this.state.workspaces.filter((w) => w.accountId !== id);
     this.save();
   }
 
@@ -154,6 +158,27 @@ class Store {
     const a = this.state.accounts.find((x) => x.id === id);
     if (a) { a.color = color || ''; this.save(); }
   }
+
+  // ---- saved workspaces (project + account combos) ----
+  listWorkspaces() { return this.state.workspaces; }
+  addWorkspace({ name, projectDir, accountId }) {
+    if (!projectDir || !accountId) throw new Error('Workspace needs a project folder and an account');
+    const base = slug(name || 'workspace');
+    let id = base;
+    let n = 2;
+    const taken = new Set(this.state.workspaces.map((w) => w.id));
+    while (taken.has(id)) id = `${base}-${n++}`;
+    const ws = { id, name: name || id, projectDir, accountId };
+    this.state.workspaces.push(ws);
+    this.save();
+    return this.state.workspaces;
+  }
+  removeWorkspace(id) {
+    this.state.workspaces = this.state.workspaces.filter((w) => w.id !== id);
+    this.save();
+    return this.state.workspaces;
+  }
+  getWorkspace(id) { return this.state.workspaces.find((w) => w.id === id); }
 
   // ---- composer prompt history ----
   addPrompt(text) {
@@ -187,6 +212,7 @@ class Store {
       settings: this.getSettings(),
       projectAccounts: this.state.projectAccounts,
       recentProjects: this.state.recentProjects,
+      workspaces: this.state.workspaces,
     }, null, 2);
   }
 
@@ -216,6 +242,10 @@ class Store {
     }
     if (Array.isArray(data.recentProjects)) {
       this.state.recentProjects = [...new Set([...data.recentProjects, ...this.state.recentProjects])].slice(0, 8);
+    }
+    if (Array.isArray(data.workspaces)) {
+      const have = new Set(this.state.workspaces.map((w) => w.id));
+      for (const w of data.workspaces) if (w && w.id && !have.has(w.id)) this.state.workspaces.push(w);
     }
     this.save();
     return this.list();

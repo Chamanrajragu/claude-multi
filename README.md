@@ -45,6 +45,7 @@ No credential hacking, nothing against the rules — each account simply gets it
 - 🎙️ **Voice input with no time limit** — the composer is a real text field, so OS dictation (Windows **Win+H** Voice Typing) works offline with **no ~1-minute cutoff**; browser speech is used automatically where available.
 - 🧑‍🤝‍🧑 **Up to 20 accounts, fully isolated** — each account has its own login/config directory. No interference, no errors at scale.
 - 📁 **A preferred account per project** — assign a specific Claude account to each project folder. Open project A → it uses account X; open project B → it uses account Y. Assignments are remembered per folder.
+- ⭐ **Saved workspaces** — save a project folder + account as a named workspace and relaunch the pair with one click (or from the command palette).
 - 🔄 **Auto-switch on limit** — detects "usage limit reached" in the terminal and rotates to the next available account. Manual "ask first" mode too.
 - 💬 **Conversation carry-over** — copies the project's transcript to the new account and resumes with `claude --continue`.
 - ⏳ **Cooldown tracking** — remembers when each account is rate-limited and when it resets, and skips accounts that are still cooling down (picking the one that frees up soonest if they're all down).
@@ -56,6 +57,8 @@ No credential hacking, nothing against the rules — each account simply gets it
 - 🗂️ **Reorder & color-tag accounts** — drag order via move up/down and assign color tags for quick visual ID.
 - ↕️ **Prompt history** — press `↑` / `↓` in the chat bar to reuse recent prompts.
 - 🔎 **Account filter** — a search box appears automatically once you have many accounts.
+- 📝 **Session log export** — save the terminal transcript of a session to a `.log` file.
+- ❓ **Shortcuts cheatsheet** — press `?` (or the footer button) for every keyboard shortcut at a glance.
 - 📈 **Per-account usage stats** — sessions run and when each account was last used.
 - 💾 **Backup & restore** — export/import your accounts & settings (no credentials included).
 - 🔄 **Update checker** — tells you when a newer release is out.
@@ -166,6 +169,7 @@ git add .github/workflows && git commit -m "Enable GitHub Actions" && git push
 | `Ctrl/Cmd + =` / `-` | Bigger / smaller text |
 | `Ctrl/Cmd + K` | Clear terminal |
 | `Ctrl/Cmd + ,` | Open settings |
+| `?` | Keyboard shortcuts cheatsheet |
 
 ## Tests
 
