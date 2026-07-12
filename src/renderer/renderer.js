@@ -508,6 +508,8 @@ $('settingsBtn').onclick = () => {
   $('setModel').value = s.model || '';
   $('setAutoSwitch').checked = !!s.autoSwitch;
   $('setNotify').checked = s.notify !== false;
+  $('setTray').checked = !!s.minimizeToTray;
+  $('setStartup').checked = !!s.startOnLogin;
   cc.appInfo().then((i) => { $('aboutLine').textContent = `Claude Multi v${i.version} · Electron ${i.electron}`; }).catch(() => {});
   $('settingsModal').classList.remove('hidden');
 };
@@ -516,6 +518,8 @@ $('setTheme').onchange = async (e) => { applyTheme(e.target.value); state.settin
 $('setModel').onchange = async (e) => { state.settings = await cc.setSettings({ model: e.target.value }); renderModelLabel(); };
 $('setAutoSwitch').onchange = async (e) => { state.settings = await cc.setSettings({ autoSwitch: e.target.checked }); };
 $('setNotify').onchange = async (e) => { state.settings = await cc.setSettings({ notify: e.target.checked }); };
+$('setTray').onchange = async (e) => { state.settings = await cc.setSettings({ minimizeToTray: e.target.checked }); };
+$('setStartup').onchange = async (e) => { state.settings = await cc.setSettings({ startOnLogin: e.target.checked }); toast(e.target.checked ? 'Will start on login' : 'Won’t start on login', 'ok'); };
 
 function applyTheme(theme) { document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light'); }
 

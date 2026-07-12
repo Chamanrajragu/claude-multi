@@ -6,7 +6,7 @@
 //     and account switching that carries the conversation across accounts.
 //   - LOGIN: a small interactive terminal (pty-host) used only to run /login
 //     once per account (OAuth can't run in headless chat mode).
-const { app, BrowserWindow, ipcMain, dialog, Notification, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, shell, Menu, Tray, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -90,7 +90,7 @@ function statePayload() {
     availableCount: cooldown.availableCount(store.list()),
   };
 }
-function pushState() { toRenderer('app:state', statePayload()); }
+function pushState() { toRenderer('app:state', statePayload()); updateTray(); }
 
 // ---- chat engine ----------------------------------------------------------
 function stopSession() {
@@ -338,6 +338,7 @@ function registerIpc() {
   ipcMain.handle('settings:get', () => store.getSettings());
   ipcMain.handle('settings:set', (_e, patch) => {
     const s = store.setSettings(patch);
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'startOnLogin')) applyLoginItem(s.startOnLogin);
     // Model / effort changes take effect by restarting the live session (which
     // resumes the same conversation).
     const touchesEngine = patch && (Object.prototype.hasOwnProperty.call(patch, 'model') || Object.prototype.hasOwnProperty.call(patch, 'effort'));
@@ -393,6 +394,47 @@ function registerIpc() {
   }));
 }
 
+// ---- system tray + start-on-login ----------------------------------------
+let tray = null;
+let isQuitting = false;
+
+function applyLoginItem(enabled) {
+  try { app.setLoginItemSettings({ openAtLogin: !!enabled }); } catch { /* unsupported */ }
+}
+function toggleWindow() {
+  if (!win) { createWindow(); return; }
+  if (win.isVisible() && !win.isMinimized()) win.hide();
+  else { win.show(); win.focus(); }
+}
+function buildTrayMenu() {
+  const accounts = store.list();
+  const accItems = accounts.length
+    ? accounts.map((a) => ({
+      label: (a.id === state.activeAccountId && state.running ? '● ' : '') + a.name + (a.loggedIn ? '' : ' (not signed in)'),
+      enabled: a.loggedIn && !!state.projectDir,
+      click: () => { if (win) { win.show(); win.focus(); } if (state.projectDir && a.loggedIn) useAccountForChat(a.id); },
+    }))
+    : [{ label: 'No accounts yet', enabled: false }];
+  return Menu.buildFromTemplate([
+    { label: win && win.isVisible() ? 'Hide window' : 'Show window', click: toggleWindow },
+    { type: 'separator' },
+    { label: 'Use account', submenu: accItems },
+    { type: 'separator' },
+    { label: 'Quit Claude Multi', click: () => { isQuitting = true; app.quit(); } },
+  ]);
+}
+function updateTray() { if (tray) { try { tray.setContextMenu(buildTrayMenu()); } catch { /* noop */ } } }
+function createTray() {
+  try {
+    let img = nativeImage.createFromPath(path.join(__dirname, 'renderer', 'icon.png'));
+    if (!img.isEmpty()) img = img.resize({ width: 16, height: 16 });
+    tray = new Tray(img);
+    tray.setToolTip('Claude Multi');
+    tray.on('click', toggleWindow);
+    updateTray();
+  } catch (e) { console.error('[tray]', e); }
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1180, height: 800, minWidth: 900, minHeight: 560,
@@ -413,6 +455,12 @@ function createWindow() {
     });
     win.webContents.openDevTools({ mode: 'detach' });
   }
+  // Minimize to tray instead of quitting, when enabled.
+  win.on('close', (e) => {
+    if (!isQuitting && tray && store.getSettings().minimizeToTray) {
+      e.preventDefault(); win.hide(); updateTray();
+    }
+  });
   win.on('closed', () => { win = null; });
 }
 
@@ -420,15 +468,20 @@ app.whenReady().then(() => {
   store = new Store(path.join(app.getPath('userData'), 'accounts.json'));
   state.projectDir = store.get('lastProjectDir') || '';
   Menu.setApplicationMenu(null);
+  applyLoginItem(store.getSettings().startOnLogin);
   registerIpc();
   createWindow();
+  createTray();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
     else if (win) { win.show(); win.focus(); }
   });
+  app.on('before-quit', () => { isQuitting = true; });
 });
 
 app.on('window-all-closed', () => {
+  // Keep running in the tray if the user chose minimize-to-tray.
+  if (!isQuitting && store && store.getSettings().minimizeToTray && tray) return;
   stopSession();
   sendToHost({ t: 'kill' });
   if (host) { try { host.kill(); } catch { /* noop */ } }
