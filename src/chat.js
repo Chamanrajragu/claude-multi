@@ -141,12 +141,31 @@ class ChatSession {
     }
   }
 
-  send(text) {
+  send(text, attachments = []) {
     // Queue even before the SDK finishes loading; the input generator drains
     // the queue once the query starts. Only refuse after the session ended.
     if (this._ended) return false;
     this.busy = true;
-    this._queue.push({ type: 'user', message: { role: 'user', content: String(text) } });
+    const fs = require('fs');
+    const IMG = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
+    const images = [];
+    const fileNotes = [];
+    for (const p of attachments || []) {
+      try {
+        const ext = String(p).split('.').pop().toLowerCase();
+        if (IMG[ext]) {
+          const data = fs.readFileSync(p).toString('base64');
+          images.push({ type: 'image', source: { type: 'base64', media_type: IMG[ext], data } });
+        } else {
+          fileNotes.push(p);
+        }
+      } catch { /* skip unreadable attachment */ }
+    }
+    let textOut = String(text || '');
+    if (fileNotes.length) textOut += (textOut ? '\n\n' : '') + fileNotes.map((f) => `[Attached file: ${f}]`).join('\n');
+    // A plain string keeps the simple path fast; use blocks only when needed.
+    const content = images.length ? [{ type: 'text', text: textOut }, ...images] : textOut;
+    this._queue.push({ type: 'user', message: { role: 'user', content } });
     if (this._wake) { const w = this._wake; this._wake = null; w(); }
     return true;
   }

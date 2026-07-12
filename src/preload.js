@@ -17,11 +17,17 @@ contextBridge.exposeInMainWorld('cc', {
   getHistory: () => ipcRenderer.invoke('chat:getHistory'),
   saveLog: (log) => ipcRenderer.invoke('chat:saveLog', log),
   newChat: () => ipcRenderer.invoke('chat:new'),
-  sendMessage: (text) => ipcRenderer.invoke('chat:send', text),
+  sendMessage: (text, attachments) => ipcRenderer.invoke('chat:send', text, attachments),
   interrupt: () => ipcRenderer.invoke('chat:interrupt'),
   respondPermission: (requestId, allow, message) => ipcRenderer.invoke('chat:permission', requestId, allow, message),
   switchAccount: (targetId) => ipcRenderer.invoke('chat:switch', targetId),
   stopChat: () => ipcRenderer.invoke('chat:stop'),
+
+  // ---- conversations (history) ----
+  listConvos: () => ipcRenderer.invoke('chat:listConvos'),
+  openConvo: (id) => ipcRenderer.invoke('chat:openConvo', id),
+  renameConvo: (id, title) => ipcRenderer.invoke('chat:renameConvo', id, title),
+  deleteConvo: (id) => ipcRenderer.invoke('chat:deleteConvo', id),
 
   // ---- login (interactive terminal, one-time per account) ----
   loginStart: (accountId) => ipcRenderer.invoke('login:start', accountId),
@@ -30,6 +36,9 @@ contextBridge.exposeInMainWorld('cc', {
   loginStop: () => ipcRenderer.invoke('login:stop'),
 
   // ---- misc ----
+  pickFiles: () => ipcRenderer.invoke('app:pickFiles'),
+  exportConfig: () => ipcRenderer.invoke('app:export'),
+  importConfig: () => ipcRenderer.invoke('app:import'),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
   openConfigDir: (id) => ipcRenderer.invoke('app:openConfigDir', id),
   appInfo: () => ipcRenderer.invoke('app:info'),
