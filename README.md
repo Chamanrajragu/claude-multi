@@ -35,42 +35,27 @@ Grab `Claude-Multi-…-win-x64-portable.zip`, unzip it anywhere, and run **`Clau
 
 If you pay for more than one Claude plan, you've felt this: you're deep in a session, you hit the usage limit, and everything stops for hours — even though you have *another* account sitting idle.
 
-**Claude Multi** keeps all of your accounts in one window. When the active account runs out, it detects the limit, carries your conversation over to the next available account, and relaunches Claude Code with `--continue` so you barely lose a beat.
+**Claude Multi** keeps all of your accounts in one window. When the active account runs out, it detects the limit, carries your conversation over to the next available account, and continues it there — so you barely lose a beat.
 
 No credential hacking, nothing against the rules — each account simply gets its own isolated config directory (the officially supported `CLAUDE_CONFIG_DIR` mechanism). These are **your** paid accounts.
 
 ## Features
 
-- 💬 **A polished chat bar, not a bare terminal** — a Claude Code–style composer at the bottom with a **model picker** (Opus / Sonnet / Haiku), a **mode** button (cycles permission modes), quick **presets** (ultrathink, `/compact`, `/clear`, Esc-to-interrupt), and a **🎤 voice/dictation** button. Type, hit Enter, done.
-- 🎙️ **Voice input with no time limit** — the composer is a real text field, so OS dictation (Windows **Win+H** Voice Typing) works offline with **no ~1-minute cutoff**; browser speech is used automatically where available.
-- 🧑‍🤝‍🧑 **Up to 20 accounts, fully isolated** — each account has its own login/config directory. No interference, no errors at scale.
-- 📁 **A preferred account per project** — assign a specific Claude account to each project folder. Open project A → it uses account X; open project B → it uses account Y. Assignments are remembered per folder.
-- ⭐ **Saved workspaces** — save a project folder + account as a named workspace and relaunch the pair with one click (or from the command palette).
-- 🔄 **Auto-switch on limit** — detects "usage limit reached" in the terminal and rotates to the next available account. Manual "ask first" mode too.
-- 💬 **Conversation carry-over** — copies the project's transcript to the new account and resumes with `claude --continue`.
-- ⏳ **Cooldown tracking** — remembers when each account is rate-limited and when it resets, and skips accounts that are still cooling down (picking the one that frees up soonest if they're all down).
-- 🖥️ **Real embedded terminal** — full xterm.js terminal with search, clickable links, copy/paste, adjustable font, and clear.
-- 🔔 **Desktop notifications** when a limit is hit, an account switches, or a cooled-down account is **ready again**.
-- 🎨 **Command palette** — `Ctrl/Cmd + P` to fuzzy-search every action (launch/switch accounts, pick project, settings, theme, and more).
-- 🖥️ **System tray** — minimize to tray and quick-launch any account from the tray menu.
-- ⌨️ **Quick-switch shortcuts** — `Ctrl/Cmd + 1…9` to launch or switch to an account instantly.
-- 🗂️ **Reorder & color-tag accounts** — drag order via move up/down and assign color tags for quick visual ID.
-- ↕️ **Prompt history** — press `↑` / `↓` in the chat bar to reuse recent prompts.
-- 🔎 **Account filter** — a search box appears automatically once you have many accounts.
-- 📝 **Session log export** — save the terminal transcript of a session to a `.log` file.
-- ❓ **Shortcuts cheatsheet** — press `?` (or the footer button) for every keyboard shortcut at a glance.
-- 📈 **Per-account usage stats** — sessions run and when each account was last used.
-- 💾 **Backup & restore** — export/import your accounts & settings (no credentials included).
-- 🔄 **Update checker** — tells you when a newer release is out.
-- 🚀 **Start on login** (optional) and a **custom `claude` path**.
-- ⚙️ **Settings** — auto-switch toggle + countdown, notifications, theme, extra launch flags.
-- 📊 **Live status** — session timer, switch count, and a "ready accounts" indicator.
-- 🌗 **Dark & light themes** with a clean, professional UI.
-- 🎯 **Recent project folders**, per-account menus, and a friendly first-run guide.
+- 💬 **A real chat interface, not a terminal** — talk to Claude in a clean chat window: streamed markdown replies, collapsible **tool cards** (edits, commands, searches), and inline **Allow / Deny** prompts before Claude touches your files.
+- 🔁 **One conversation, any account** — your chat belongs to the **project**, not the account. Switch accounts and the conversation is carried over and continues right where it left off; the full history stays visible when you switch back or reopen the app.
+- 🔄 **Auto-switch on usage limit** — the moment an account hits its Claude usage/session limit, Claude Multi rotates to the next available account (or asks first). No more waiting hours for a reset when you have another account idle.
+- ⏳ **Cooldown tracking** — remembers when each rate-limited account resets and skips accounts that are still cooling down, picking the one that frees up soonest.
+- 🧑‍🤝‍🧑 **Multiple accounts, fully isolated** — every account gets its own login/config directory (`CLAUDE_CONFIG_DIR`). No interference, no logging in and out by hand.
+- 🎛️ **Model + effort picker** — choose the model (**Opus / Sonnet / Haiku**) and thinking effort (**Low / Medium / High / Ultrathink**) right in the composer.
+- 📁 **A preferred account per project** — each project folder remembers which account it uses.
+- 🔐 **Subscription login, no API key** — sign in each account once with your normal Claude subscription (Pro / Max / Team). Nothing is billed per token.
+- 🔔 **Desktop notifications** when a limit is hit or an account switches.
+- 🌗 **Dark & light themes** with a clean, Claude-style UI.
+- 🔒 **100% local** — no telemetry, no analytics, and your logins never leave your machine.
 
 ## Why a desktop app instead of the raw terminal?
 
-Claude Code is fantastic, but juggling several accounts in a bare terminal is painful: you log out and back in by hand, you lose your place when you hit a limit, and there's no way to say "this project uses that account." Claude Multi gives you a clean, good-looking window where every account is one click away, each project remembers its account, and hitting a limit just means clicking **Switch** — your conversation comes with you.
+Claude Code is fantastic, but juggling several accounts by hand is painful: you log out and back in, you lose your place when you hit a limit, and there's no way to say "this project uses that account." Claude Multi gives you a clean chat window where every account is one click away, each project remembers its account, and hitting a limit just rotates to the next account — your conversation comes with you.
 
 ## Screenshots
 
@@ -178,6 +163,32 @@ npm test
 ```
 
 The suite covers the pure logic — usage-limit detection, reset-time parsing, account selection/cooldown, and the persistent store — including thousands of fuzzed cases.
+
+## FAQ
+
+### How do I use multiple Claude accounts at once?
+Install Claude Multi, add each account, and sign in once per account. Claude Multi keeps every account in a single window and lets you switch between them with one click — each account stays fully isolated in its own config directory, so there's no logging in and out by hand.
+
+### How do I avoid hitting the Claude Code usage limit?
+You can't raise a single account's limit, but if you have more than one Claude plan you can keep working by switching accounts. Claude Multi detects the moment an account hits its usage/session limit and automatically continues your conversation on the next available account, so you don't have to wait hours for a reset.
+
+### Can I run two (or three) Claude accounts on the same computer?
+Yes. Claude Multi is built for exactly this — run 2, 3, or more Claude accounts side by side, each isolated, and switch instantly. Your conversation carries over when you switch.
+
+### Is this against Anthropic's terms? Is it a hack?
+No credential hacking is involved. Each account simply uses Claude Code's officially supported `CLAUDE_CONFIG_DIR` mechanism to keep its own login separate. These are **your** own paid accounts.
+
+### Do I need an API key?
+No. Claude Multi uses your normal Claude **subscription** login (Pro, Max, or Team) — the same one Claude Code uses. Nothing is billed per token.
+
+### Does it work with Claude Pro and Claude Max?
+Yes — any plan that works with Claude Code works here, including Pro, Max, Team, and Enterprise subscription logins.
+
+### Is Claude Multi free?
+Yes, 100% free and open source (MIT). No telemetry, no accounts on our side, and your logins never leave your machine.
+
+### What platforms are supported?
+Windows today (portable build). The app is built with Electron and the codebase targets macOS and Linux as well.
 
 ## Free & open source
 
