@@ -61,9 +61,9 @@ Claude Code is fantastic, but juggling several accounts by hand is painful: you 
 
 <div align="center">
 
-| Auto-switch on limit | Command palette (Ctrl/Cmd+P) |
+| Account switcher (Ctrl/Cmd + 1–9) | Auto-switch on limit |
 | --- | --- |
-| <img src="docs/screenshot-limit.png" width="410" alt="Usage limit reached dialog" /> | <img src="docs/screenshot-palette.png" width="410" alt="Command palette" /> |
+| <img src="docs/screenshot-accounts.png" width="410" alt="Account switcher showing multiple Claude accounts with cooldown status" /> | <img src="docs/screenshot-limit.png" width="410" alt="Usage limit reached — switch account dialog" /> |
 | Settings | Light theme |
 | <img src="docs/screenshot-settings.png" width="410" alt="Settings" /> | <img src="docs/screenshot-light.png" width="410" alt="Light theme" /> |
 
