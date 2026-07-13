@@ -71,22 +71,9 @@ Claude Code is fantastic, but juggling several accounts by hand is painful: you 
 
 ## How it works
 
-```
-┌─────────────────────────────┐
-│  Electron app (main.js)      │
-│  • account store + settings  │
-│  • usage-limit scanner       │
-│  • account switching         │
-└──────────────┬──────────────┘
-               │ newline-delimited JSON over stdio
-┌──────────────▼──────────────┐        each account →
-│  pty-host.js (plain Node)    │        its own CLAUDE_CONFIG_DIR
-│  • owns the real PTY         │   ~/.claude-accounts/<id>/
-│  • runs `claude` per account │
-└─────────────────────────────┘
-```
+Each account gets its own `CLAUDE_CONFIG_DIR` (`~/.claude-accounts/<id>/`), so their logins never collide. Chatting is powered by the official **Claude Agent SDK** using that account's **subscription** login — no API key. Signing in runs the real `claude` `/login` once per account in a small terminal window (the OAuth step can't run headless).
 
-Each account launches `claude` with `CLAUDE_CONFIG_DIR` pointed at its own folder, so logins never collide. When the scanner sees a limit message, the current account is stamped with a cooldown (parsed from the reset time) and the switch flow begins.
+A conversation belongs to the **project**, not the account. When a reply comes back as a usage-limit error, the account is stamped with a cooldown (parsed from the reset time) and you're offered the next available account — the conversation's transcript is copied over and resumed, so it continues seamlessly.
 
 ## Requirements
 
@@ -104,12 +91,12 @@ npm start
 
 Then:
 
-1. **Pick your project folder** (top-left) — the folder Claude Code will work in.
-2. Click **+** to add an account (add up to 20), then **Launch** it.
-3. Type `/login` in the terminal to sign that account in.
+1. **Pick your project folder** (top-left) — the folder Claude will work in.
+2. Open the **account switcher** (bottom-left) → **Add account**.
+3. Click **Log in** and sign in when your browser opens (paste the code back with **Ctrl+V**).
 4. Repeat for each account.
-5. *(Optional)* Use **Account for this project** to pin a specific account to the current folder. Each project remembers its own account.
-6. When one account runs out, you'll be offered a switch — your conversation carries over automatically.
+5. Choose an account and start chatting. Each project keeps its own chat history and preferred account.
+6. When one account runs out, switch accounts — your conversation carries over automatically.
 
 ## Building installers
 
@@ -143,18 +130,10 @@ git add .github/workflows && git commit -m "Enable GitHub Actions" && git push
 
 | Shortcut | Action |
 | --- | --- |
-| `Ctrl/Cmd + P` | Command palette (fuzzy-search all actions) |
-| `Ctrl/Cmd + 1…9` | Launch / switch to the Nth account |
-| `Enter` / `Shift+Enter` | Send message / new line (in the chat bar) |
-| `↑` / `↓` | Reuse recent prompts (in the chat bar) |
-| `Win + H` | Windows Voice Typing into the chat bar (offline, no time limit) |
-| `Ctrl/Cmd + F` | Search the terminal |
-| `Ctrl/Cmd + Shift + C` | Copy selection |
-| `Ctrl/Cmd + Shift + V` | Paste |
-| `Ctrl/Cmd + =` / `-` | Bigger / smaller text |
-| `Ctrl/Cmd + K` | Clear terminal |
-| `Ctrl/Cmd + ,` | Open settings |
-| `?` | Keyboard shortcuts cheatsheet |
+| `Ctrl/Cmd + 1…9` | Switch to the Nth account |
+| `Enter` / `Shift + Enter` | Send message / new line |
+| `Ctrl/Cmd + V` | Paste (also into the login code box) |
+| `Esc` | Close a dialog / the login window |
 
 ## Tests
 
@@ -209,7 +188,8 @@ Don't take our word for it — [the entire source is right here](src/) to read.
 ## Limitations
 
 - A usage limit is enforced server-side, so a session can't be handed off mid-request. The switch ends the current session and resumes on the next account — near-seamless, not literally invisible.
-- Limit-message wording can change over time; detection patterns live in [`src/limits.js`](src/limits.js) and are easy to extend.
+- Signing in still uses a small terminal window for the one-time `/login` per account (OAuth can't run headless); day-to-day chatting is a normal chat window.
+- Limit detection reads the structured error the engine returns ([`src/chat.js`](src/chat.js)); wording can change over time but is easy to extend.
 
 ## Author
 
