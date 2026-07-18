@@ -44,7 +44,10 @@ function renderConvos() {
     const meta = document.createElement('div'); meta.className = 'convo-meta';
     const title = document.createElement('div'); title.className = 'convo-title'; title.textContent = c.title || 'New chat';
     const sub = document.createElement('div'); sub.className = 'convo-folder';
-    sub.textContent = c.folderName || '';
+    // Which account this chat uses (small initial badge), then the folder name.
+    const acc = c.accountId && state.accounts.find((a) => a.id === c.accountId);
+    if (acc) { const b = document.createElement('span'); b.className = 'convo-acc'; b.textContent = (acc.name || '?').trim().charAt(0).toUpperCase(); b.title = 'Account: ' + acc.name; sub.appendChild(b); }
+    const fn = document.createElement('span'); fn.className = 'cf-name'; fn.textContent = c.folderName || ''; sub.appendChild(fn);
     sub.title = c.folder || '';
     meta.appendChild(title); meta.appendChild(sub);
     // Live status: needs-approval (amber) > working spinner > live dot.
@@ -916,6 +919,12 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === '/') { e.preventDefault(); $('shortcutsModal').classList.toggle('hidden'); }
   else if ((e.key === 'n' || e.key === 'N') && !e.shiftKey) { e.preventDefault(); $('newChatBtn').click(); }
   else if ((e.key === 'f' || e.key === 'F') && !e.shiftKey) { e.preventDefault(); if (state.conversations.length) { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } }
+});
+// Esc stops the current generation (when nothing modal is open).
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (document.querySelector('.overlay:not(.hidden)') || document.querySelector('.menu.ctx')) return;
+  if (state.generating) { e.preventDefault(); cc.interrupt(); }
 });
 
 /* ---------------- drag & drop attachments ---------------- */

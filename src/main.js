@@ -224,6 +224,19 @@ function toRenderer(channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }
 
+function convoTitle(convoId) { const f = findConvo(convoId); return (f && f.convo.title && f.convo.title !== 'New chat') ? f.convo.title : 'a chat'; }
+// Bounce the taskbar/dock when a background chat needs attention (and the window
+// isn't focused), so multitasking users don't miss it.
+function flashWindow() {
+  try { if (win && !win.isFocused()) { if (process.platform === 'darwin') { try { app.dock.bounce('informational'); } catch { /* noop */ } } else win.flashFrame(true); } } catch { /* noop */ }
+}
+// Reflect how many chats are working in the window title.
+function updateWindowTitle() {
+  if (!win || win.isDestroyed()) return;
+  const n = state.genConvos.size;
+  try { win.setTitle(n > 0 ? `● ${n} working — Claude Multi` : 'Claude Multi'); } catch { /* noop */ }
+}
+
 function conversationList() {
   const items = [];
   eachConvo((c, folder) => {
@@ -262,7 +275,7 @@ function statePayload() {
     activeCount: state.sessions.size,       // how many chats are running at once
   };
 }
-function pushState() { toRenderer('app:state', statePayload()); updateTray(); }
+function pushState() { toRenderer('app:state', statePayload()); updateTray(); updateWindowTitle(); }
 
 // ---- chat engine ----------------------------------------------------------
 // Stop ONE chat's session (leaves every other running chat alone).
@@ -379,6 +392,8 @@ function onChatEvent(convoId, session, accountId, ev) {
       // replayed (and answered) when the user opens that chat.
       let m = state.perms.get(convoId); if (!m) { m = new Map(); state.perms.set(convoId, m); }
       m.set(ev.requestId, { tool: ev.tool, input: ev.input });
+      // A chat you're not looking at needs you — nudge the OS + taskbar.
+      if (convoId !== state.currentConvoId) { notify('Approval needed', `“${convoTitle(convoId)}” wants to use ${ev.tool}`); flashWindow(); }
       break;
     }
     case 'turn_end':
@@ -387,6 +402,7 @@ function onChatEvent(convoId, session, accountId, ev) {
       state.perms.delete(convoId);
       finalizeTurn(convoId, ev);
       if (ev.sessionId) updateConvoById(convoId, { sessionId: ev.sessionId, lastAccount: accountId });
+      if (convoId !== state.currentConvoId) notify('Claude finished', `“${convoTitle(convoId)}” is ready`);
       pushState();
       break;
     case 'limit':
@@ -957,6 +973,7 @@ function createWindow() {
       e.preventDefault(); win.hide(); updateTray();
     }
   });
+  win.on('focus', () => { try { win.flashFrame(false); } catch { /* noop */ } });
   win.on('closed', () => { win = null; });
 }
 
