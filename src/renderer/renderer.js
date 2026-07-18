@@ -21,27 +21,39 @@ function accView(a) {
 }
 
 /* ---------------- sidebar ---------------- */
-function renderProject() { $('projectName').textContent = state.projectDir ? baseName(state.projectDir) : 'Choose a folder…'; $('projectBtn').title = state.projectDir || 'Choose a project folder'; }
+function renderProject() {
+  const f = state.projectDir; // main sends the CURRENT chat's folder here
+  $('projectName').textContent = f ? baseName(f) : (state.currentConvoId ? 'No folder' : 'New chat to begin');
+  $('projectBtn').title = f ? ('This chat’s folder: ' + f + '\nClick to move it to another folder') : 'Start a new chat to pick a folder';
+}
 
 let convoFilter = '';
 function renderConvos() {
   const list = $('convoList');
   list.innerHTML = '';
-  if (!state.projectDir) { $('convoSearch').classList.add('hidden'); const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'Pick a project folder to start chatting.'; list.appendChild(d); return; }
-  if (!state.conversations.length) { $('convoSearch').classList.add('hidden'); const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'No chats yet. Click “New chat”.'; list.appendChild(d); return; }
+  if (!state.conversations.length) { $('convoSearch').classList.add('hidden'); const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'No chats yet. Click “New chat” and pick a folder.'; list.appendChild(d); return; }
   $('convoSearch').classList.toggle('hidden', state.conversations.length < 6 && !convoFilter);
   const q = convoFilter.trim().toLowerCase();
-  const shown = q ? state.conversations.filter((c) => (c.title || '').toLowerCase().includes(q)) : state.conversations;
+  const shown = q ? state.conversations.filter((c) => (c.title || '').toLowerCase().includes(q) || (c.folderName || '').toLowerCase().includes(q)) : state.conversations;
   if (!shown.length) { const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'No chats match your search.'; list.appendChild(d); return; }
   for (const c of shown) {
     const row = document.createElement('div');
-    row.className = 'convo' + (c.id === state.currentConvoId ? ' active' : '') + (c.pinned ? ' pinned' : '');
+    row.className = 'convo' + (c.id === state.currentConvoId ? ' active' : '') + (c.pinned ? ' pinned' : '') + (c.generating ? ' working' : '');
     const pin = document.createElement('button'); pin.className = 'convo-pin'; pin.textContent = c.pinned ? '★' : '☆'; pin.title = c.pinned ? 'Unpin' : 'Pin';
     pin.onclick = (e) => { e.stopPropagation(); cc.pinConvo(c.id); };
+    const meta = document.createElement('div'); meta.className = 'convo-meta';
     const title = document.createElement('div'); title.className = 'convo-title'; title.textContent = c.title || 'New chat';
+    const sub = document.createElement('div'); sub.className = 'convo-folder';
+    sub.textContent = c.folderName || '';
+    sub.title = c.folder || '';
+    meta.appendChild(title); meta.appendChild(sub);
+    // Live status: spinner while a background turn runs, dot if it has a live session.
+    const status = document.createElement('span');
+    status.className = 'convo-status' + (c.generating ? ' spin' : (c.running ? ' live' : ''));
+    if (c.generating) status.title = 'Working…'; else if (c.running) status.title = 'Running';
     const more = document.createElement('button'); more.className = 'convo-more'; more.textContent = '⋯';
     more.onclick = (e) => { e.stopPropagation(); convoMenu(c, e.currentTarget); };
-    row.appendChild(pin); row.appendChild(title); row.appendChild(more);
+    row.appendChild(pin); row.appendChild(meta); row.appendChild(status); row.appendChild(more);
     row.onclick = () => openConvo(c.id);
     list.appendChild(row);
   }
@@ -157,7 +169,9 @@ function renderModelLabel() {
   }
 }
 function updateComposer() {
-  const can = state.running;
+  // Can send if a session is live, or if this chat already has an account we can
+  // auto-resume on (main restarts the session on first send).
+  const can = state.running || !!state.activeAccountId;
   $('sendBtn').disabled = !can || !$('input').value.trim();
   $('input').placeholder = can ? 'Reply to Claude…' : (state.accounts.some((a) => a.loggedIn) ? 'Choose an account to start…' : 'Add & log in an account to start…');
   $('genBar').classList.toggle('hidden', !state.generating);
@@ -175,11 +189,24 @@ function renderStarters() {
   startersBuilt = true;
   for (const s of STARTERS) {
     const b = document.createElement('button'); b.className = 'starter-chip'; b.textContent = s;
-    b.onclick = () => { const inp = $('input'); inp.value = s; autoGrow(); updateComposer(); inp.focus(); if (state.running) sendMessage(); else toast('Choose an account, then press send', 'ok'); };
+    b.onclick = () => { const inp = $('input'); inp.value = s; autoGrow(); updateComposer(); inp.focus(); if (state.running || state.activeAccountId) sendMessage(); else toast('Choose an account, then press send', 'ok'); };
     box.appendChild(b);
   }
 }
-function renderAll() { renderProject(); renderConvos(); renderAccountRow(); renderTop(); updateComposer(); renderAttachments(); renderStarters(); renderUsage(); }
+function renderAll() { renderProject(); renderConvos(); renderAccountRow(); renderTop(); updateComposer(); renderAttachments(); renderStarters(); renderUsage(); renderLimitPill(); }
+
+// Topbar pill: shows when signed-in accounts are cooling down and when the
+// soonest one resets, so "how long until I can use it again" is always visible.
+function renderLimitPill() {
+  const el = $('limitPill'); if (!el) return;
+  const now = Date.now();
+  const cooling = (state.accounts || []).filter((a) => a.loggedIn && a.cooldownUntil && a.cooldownUntil > now).sort((a, b) => a.cooldownUntil - b.cooldownUntil);
+  if (!cooling.length) { el.classList.add('hidden'); return; }
+  const soonest = cooling[0];
+  el.classList.remove('hidden');
+  el.textContent = `⏳ ${soonest.name} · resets in ${fmtCountdown(soonest.cooldownUntil - now)}`;
+  el.title = cooling.length > 1 ? `${cooling.length} accounts cooling down` : 'Usage limit — resets at ' + new Date(soonest.cooldownUntil).toLocaleTimeString();
+}
 
 /* ---------------- token / usage meter ---------------- */
 // Claude Code runs a 200K-token context window by default (the 1M window is a
@@ -209,7 +236,7 @@ function renderUsage() {
   // Composer status ring
   const ring = $('usageRingFill');
   if (ring) ring.style.background = `conic-gradient(var(--info) ${pct * 3.6}deg, var(--border) 0deg)`;
-  const rb = $('usageRingBtn'); if (rb) rb.classList.toggle('hidden', !state.running);
+  const rb = $('usageRingBtn'); if (rb) rb.classList.toggle('hidden', !state.running && !usage.ctx);
   // Popover — "This chat"
   const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
   set('usageModel', usage.model ? shortModelLabel(usage.model) : shortModelLabel((state.settings || {}).model || ''));
@@ -253,7 +280,9 @@ transcript.addEventListener('scroll', () => { $('scrollDownBtn').classList.toggl
 $('scrollDownBtn').onclick = () => { transcript.scrollTop = transcript.scrollHeight; };
 function wrap(el) { const w = document.createElement('div'); w.className = 'msg-wrap'; w.appendChild(el); transcript.appendChild(w); return w; }
 function hideWelcome() { const w = $('welcome'); if (w) w.classList.add('hidden'); }
-function persist() { try { cc.saveLog(convo); } catch { /* noop */ } }
+// The transcript log is now assembled and persisted in the main process (so
+// chats running off-screen save correctly). The renderer only renders.
+function persist() { /* no-op: main owns the log */ }
 const pending = new Set(); let rafQ = false;
 function schedule(el) { pending.add(el); if (!rafQ) { rafQ = true; requestAnimationFrame(flush); } }
 function flush() { rafQ = false; for (const el of pending) el.innerHTML = renderMarkdown(el._raw || ''); pending.clear(); scrollDown(); }
@@ -364,6 +393,7 @@ function onToolResult(id, isError, text) {
   scrollDown();
 }
 function onErrorLine(text) { hideWelcome(); const el = document.createElement('div'); el.className = 'err-line'; el.textContent = '⚠ ' + text; if (turn && turn.body) turn.body.appendChild(el); else wrap(el); scrollDown(true); }
+function onInfoLine(text) { hideWelcome(); const el = document.createElement('div'); el.className = 'info-line'; el.textContent = text; wrap(el); scrollDown(true); }
 function endTurn(meta) { if (turn && turn.blocks.length) { convo.push({ role: 'assistant', blocks: turn.blocks, usage: meta && meta.usage, costUsd: meta && meta.costUsd }); persist(); if (turn.msg) decorateAssistant(turn.msg, meta); } turn = null; }
 
 /* ---------------- permission cards ---------------- */
@@ -384,6 +414,10 @@ function summarizePerm(tool, i) { if (!i) return ''; if (i.command) return '$ ' 
 
 /* ---------------- chat events ---------------- */
 cc.onChat((ev) => {
+  // Only draw events for the chat currently on screen. Other chats keep running
+  // in the background; their progress shows as a spinner in the sidebar and
+  // their results are saved by the main process.
+  if (ev.convoId && state.currentConvoId && ev.convoId !== state.currentConvoId) return;
   switch (ev.type) {
     case 'ready': if (ev.model) { usage.model = ev.model; renderUsage(); } break;
     case 'assistant_delta': onAssistantDelta(ev.text); break;
@@ -392,6 +426,7 @@ cc.onChat((ev) => {
     case 'tool_use': onToolUse(ev.id, ev.name, ev.input); break;
     case 'tool_result': onToolResult(ev.id, ev.isError, ev.text); break;
     case 'permission': onPermission(ev.requestId, ev.tool, ev.input); break;
+    case 'info': onInfoLine(ev.text); break;
     case 'turn_end': applyTurnUsage(ev.usage, ev.costUsd); endTurn({ usage: ev.usage, costUsd: ev.costUsd }); break;
     case 'auth_failed': endTurn(); onErrorLine('This account is not signed in. Open the account switcher and Log in.'); break;
     case 'error': endTurn(); onErrorLine(ev.text || 'Something went wrong.'); break;
@@ -404,7 +439,7 @@ cc.onHistory((info) => renderHistory(info && info.log));
 
 /* ---------------- actions ---------------- */
 async function useAccount(id) {
-  if (!state.projectDir) { toast('Pick a project folder first', 'err'); flashProject(); return; }
+  if (!state.currentConvoId) { const r = await cc.newChat(); if (!r || !r.ok) return; }
   const res = await cc.startChat(id);
   if (!res.ok) { if (res.error === 'not_logged_in') { const a = state.accounts.find((x) => x.id === id); openLogin(a); } else toast(res.error || 'Could not start', 'err'); }
   else if (res.carried) toast('Conversation carried to this account', 'ok');
@@ -413,7 +448,7 @@ function flashProject() { const b = $('projectBtn'); b.style.color = 'var(--err)
 async function sendMessage() {
   const inp = $('input'); const text = inp.value.trim();
   if (!text && !attachments.length) return;
-  if (!state.running) { toast('Choose an account to start chatting', 'err'); return; }
+  if (!state.running && !state.activeAccountId) { toast('Choose an account to start this chat', 'err'); return; }
   addUserMessage(text + (attachments.length ? '\n' + attachments.map((p) => '📎 ' + baseName(p)).join('\n') : ''));
   const atts = attachments.slice(); attachments = []; renderAttachments();
   inp.value = ''; autoGrow(); updateComposer();
@@ -479,8 +514,72 @@ $('input').addEventListener('paste', async (e) => {
 });
 $('stopBtn').onclick = () => cc.interrupt();
 $('attachBtn').onclick = async () => { const files = await cc.pickFiles(); if (files && files.length) { attachments = attachments.concat(files); renderAttachments(); } };
-$('newChatBtn').onclick = async () => { if (!state.projectDir) { toast('Pick a project folder first', 'err'); flashProject(); return; } const r = await cc.newChat(); if (r && !r.ok) toast(r.error || 'Could not start', 'err'); };
-$('projectBtn').onclick = async () => { state.projectDir = await cc.pickProject(); renderAll(); };
+
+/* ---------------- voice to text (dictation) ---------------- */
+(() => {
+  const btn = $('micBtn');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!btn) return;
+  if (!SR) { btn.disabled = true; btn.title = 'Voice input is not available in this build'; return; }
+  let rec = null, listening = false, baseText = '', stopping = false;
+  const inp = $('input');
+  function setListening(on) {
+    listening = on;
+    btn.classList.toggle('listening', on);
+    btn.title = on ? 'Stop dictation' : 'Dictate (voice to text)';
+  }
+  function start() {
+    try {
+      rec = new SR();
+      rec.lang = navigator.language || 'en-US';
+      rec.continuous = true;
+      rec.interimResults = true;
+      baseText = inp.value;
+      stopping = false;
+      rec.onresult = (e) => {
+        let finalTxt = '', interim = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const t = e.results[i][0].transcript;
+          if (e.results[i].isFinal) finalTxt += t; else interim += t;
+        }
+        if (finalTxt) baseText = (baseText ? baseText.replace(/\s*$/, '') + ' ' : '') + finalTxt.trim();
+        const joiner = baseText && interim ? ' ' : '';
+        inp.value = baseText + joiner + interim;
+        autoGrow(); updateComposer();
+      };
+      rec.onerror = (e) => {
+        stopping = true;
+        const msg = e && e.error;
+        if (msg === 'not-allowed' || msg === 'service-not-allowed') toast('Microphone access was blocked', 'err');
+        else if (msg === 'no-speech') toast('Didn’t catch that — try again', 'err');
+        else if (msg === 'network') toast('Voice service unavailable (no network / not supported in this build)', 'err');
+        else if (msg !== 'aborted') toast('Voice input error', 'err');
+        setListening(false);
+      };
+      rec.onend = () => {
+        // Chromium ends the session periodically; keep going until the user stops.
+        if (listening && !stopping) { try { rec.start(); return; } catch { /* fall through */ } }
+        setListening(false);
+        inp.focus();
+      };
+      rec.start();
+      setListening(true);
+    } catch (err) {
+      toast('Could not start voice input', 'err');
+      setListening(false);
+    }
+  }
+  function stop() { stopping = true; setListening(false); if (rec) { try { rec.stop(); } catch { /* noop */ } } }
+  btn.onclick = () => { if (listening) stop(); else start(); };
+})();
+$('newChatBtn').onclick = async () => { const r = await cc.newChat(); if (r && r.canceled) return; if (r && !r.ok) toast(r.error || 'Could not start', 'err'); };
+$('projectBtn').onclick = async () => {
+  if (!state.currentConvoId) { const r = await cc.newChat(); if (r && !r.ok && !r.canceled) toast(r.error || 'Could not start', 'err'); return; }
+  const dir = await cc.pickProject();
+  if (!dir) return;
+  const r = await cc.chooseProject(dir);
+  if (r && r.ok === false) toast(r.error || 'Could not change folder', 'err');
+};
 $('accountBtn').onclick = (e) => { e.stopPropagation(); openAccountMenu(e.currentTarget); };
 $('switchPill').onclick = (e) => { e.stopPropagation(); openAccountMenu(e.currentTarget); };
 $('topTitle').onclick = async () => { const c = state.conversations.find((x) => x.id === state.currentConvoId); if (!c) return; const t = await uiPrompt('Rename chat:', c.title, 'Rename'); if (t && t.trim()) cc.renameConvo(c.id, t.trim()); };
@@ -592,17 +691,36 @@ cc.onLoginExit(() => { if (loginTerm) loginTerm.write('\r\n[session ended]\r\n')
 cc.onLoginSuccess((info) => { $('loginStatus').textContent = '✓ Signed in as ' + (info.email || 'your account') + '. You can close this and start chatting.'; toast('Signed in: ' + (info.email || ''), 'ok'); setTimeout(() => { if (!$('loginModal').classList.contains('hidden')) closeLogin(); }, 2000); });
 
 /* ---------------- limit / switch ---------------- */
-let pendingSwitch = null;
+let pendingSwitch = null; let pendingLimitConvo = null;
 cc.onLimit((info) => {
   const cur = state.accounts.find((x) => x.id === info.accountId); const curName = cur ? cur.name : 'This account';
-  if (info.autoSwitch && info.next) { doSwitch(info.next.id); return; }
-  if (info.next) { pendingSwitch = info.next.id; $('switchBody').innerHTML = `<b>${escapeHtml(curName)}</b> hit its usage limit.<br><br>Switch to <b>${escapeHtml(info.next.name)}</b> and continue this conversation?`; $('switchGo').classList.remove('hidden'); }
-  else { pendingSwitch = null; $('switchBody').innerHTML = `<b>${escapeHtml(curName)}</b> hit its usage limit.<br><br>No other signed-in account is available.`; $('switchGo').classList.add('hidden'); }
+  const resetTxt = info.resetAt ? ` Resets in ${fmtCountdown(info.resetAt - Date.now())}.` : '';
+  renderLimitPill();
+  // Main already carried the chat to a free account and resumed the work.
+  if (info.handled) { toast(`${curName} hit its limit — continued on ${info.next ? info.next.name : 'another account'}`, 'ok'); return; }
+  pendingLimitConvo = info.convoId || state.currentConvoId;
+  if (info.next && info.nextAvailable) {
+    // A free account exists — offer to switch and continue.
+    pendingSwitch = info.next.id;
+    $('switchBody').innerHTML = `<b>${escapeHtml(curName)}</b> hit its usage limit.${escapeHtml(resetTxt)}<br><br>Switch to <b>${escapeHtml(info.next.name)}</b> and ${info.canContinue ? '<b>continue where Claude left off</b>' : 'continue this conversation'}?`;
+    $('switchGo').classList.remove('hidden');
+  } else {
+    // Nothing free right now — inform, don't offer a switch that would re-limit.
+    pendingSwitch = null;
+    const soon = info.next && info.next.resetAt ? ` Soonest to free up: <b>${escapeHtml(info.next.name)}</b> in ${escapeHtml(fmtCountdown(info.next.resetAt - Date.now()))}.` : '';
+    $('switchBody').innerHTML = `<b>${escapeHtml(curName)}</b> hit its usage limit.${escapeHtml(resetTxt)}<br><br>No account is free right now — the work will need to wait.${soon}`;
+    $('switchGo').classList.add('hidden');
+  }
   $('switchModal').classList.remove('hidden');
 });
 $('switchCancel').onclick = () => $('switchModal').classList.add('hidden');
 $('switchGo').onclick = () => { $('switchModal').classList.add('hidden'); if (pendingSwitch) doSwitch(pendingSwitch); };
-async function doSwitch(id) { onErrorLine('Switching account…'); const r = await cc.switchAccount(id); if (r && !r.ok) toast(r.error === 'not_logged_in' ? 'That account is not signed in' : (r.error || 'Switch failed'), 'err'); else toast('Switched account' + (r && r.carried ? ' · conversation carried over' : ''), 'ok'); }
+async function doSwitch(id) {
+  onErrorLine('Switching account…');
+  const r = await cc.continueOn(pendingLimitConvo, id);
+  if (r && !r.ok) toast(r.error === 'not_logged_in' ? 'That account is not signed in' : (r.error || 'Switch failed'), 'err');
+  else toast('Switched account' + (r && r.continued ? ' · continuing the task' : (r && r.carried ? ' · conversation carried over' : '')), 'ok');
+}
 
 /* ---------------- settings ---------------- */
 function openSettings() {
@@ -734,7 +852,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'k' || e.key === 'K') { e.preventDefault(); if ($('cmdkModal').classList.contains('hidden')) openCmdk(); else closeCmdk(); }
   else if (e.key === '/') { e.preventDefault(); $('shortcutsModal').classList.toggle('hidden'); }
   else if ((e.key === 'n' || e.key === 'N') && !e.shiftKey) { e.preventDefault(); $('newChatBtn').click(); }
-  else if ((e.key === 'f' || e.key === 'F') && !e.shiftKey) { e.preventDefault(); if (state.projectDir) { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } }
+  else if ((e.key === 'f' || e.key === 'F') && !e.shiftKey) { e.preventDefault(); if (state.conversations.length) { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } }
 });
 
 /* ---------------- drag & drop attachments ---------------- */
@@ -770,7 +888,7 @@ cc.onState((s) => { state = Object.assign(state, s); if (s.settings) applyAppear
   state = await cc.getState();
   applyAppearance(state.settings || {});
   renderAll();
-  if (state.projectDir) { try { const h = await cc.getHistory(); if (h && h.log && h.log.length) renderHistory(h.log); } catch {} }
-  setInterval(() => { if (state.accounts.some((a) => a.cooldownUntil && a.cooldownUntil > Date.now())) renderAccountRow(); }, 30000);
+  if (state.currentConvoId) { try { const h = await cc.getHistory(); if (h && h.log && h.log.length) renderHistory(h.log); } catch {} }
+  setInterval(() => { if (state.accounts.some((a) => a.cooldownUntil && a.cooldownUntil > Date.now())) { renderAccountRow(); renderLimitPill(); renderUsageAccounts(); } }, 15000);
 })();
 })();

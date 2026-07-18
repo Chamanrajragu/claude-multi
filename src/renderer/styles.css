@@ -92,7 +92,14 @@ button { font-family: inherit; color: inherit; }
 .convo:hover { background: var(--hover); }
 .convo.active { background: var(--active); }
 .convo.active::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
-.convo-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.convo-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.convo-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.convo-folder { font-size: 11px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+.convo-folder::before { content: "📁"; font-size: 10px; opacity: .8; }
+.convo-status { width: 12px; height: 12px; flex: none; border-radius: 50%; }
+.convo-status.live { background: var(--info, #6b8afd); box-shadow: 0 0 0 2px var(--bg); }
+.convo-status.spin { border: 2px solid var(--border); border-top-color: var(--accent); animation: spin .7s linear infinite; border-radius: 50%; box-sizing: border-box; }
+.convo.working .convo-title { color: var(--text); }
 .convo-more { opacity: 0; border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 2px; border-radius: 6px; }
 .convo:hover .convo-more { opacity: 1; }
 .convo-more:hover { color: var(--text); }
@@ -120,6 +127,8 @@ button { font-family: inherit; color: inherit; }
 .top-actions { display: flex; align-items: center; gap: 8px; }
 .pill { display: flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: transparent; cursor: pointer; font-size: 12.5px; }
 .pill:hover { background: var(--hover); }
+.limit-pill { cursor: default; color: var(--warn); border-color: var(--warn); background: var(--warn-soft, transparent); font-weight: 500; }
+.limit-pill:hover { background: var(--warn-soft, transparent); }
 .icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; cursor: pointer; font-size: 14px; }
 .icon-btn:hover { background: var(--hover); }
 
@@ -178,6 +187,7 @@ button { font-family: inherit; color: inherit; }
 .perm-resolved { font-size: 12.5px; font-weight: 600; }
 .perm-resolved.allow { color: var(--ok); } .perm-resolved.deny { color: var(--err); }
 .err-line { color: var(--err); font-size: 13px; margin: 0 0 12px; }
+.info-line { color: var(--muted); font-size: 12.5px; margin: 4px auto 12px; max-width: var(--col); padding: 7px 12px; border: 1px dashed var(--border); border-radius: 8px; background: var(--hover); text-align: center; }
 
 /* ================= COMPOSER ================= */
 .composer { flex: none; padding: 10px 26px 18px; }
@@ -199,6 +209,10 @@ button { font-family: inherit; color: inherit; }
 .cr-right { display: flex; align-items: center; gap: 8px; }
 .round-btn { width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border); background: transparent; cursor: pointer; font-size: 16px; display: grid; place-items: center; }
 .round-btn:hover { background: var(--hover); }
+.round-btn:disabled { opacity: .4; cursor: default; }
+.mic-btn { font-size: 14px; }
+.mic-btn.listening { color: var(--err); border-color: var(--err); background: var(--warn-soft, transparent); animation: micpulse 1.3s ease-in-out infinite; }
+@keyframes micpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(217,121,90,.45); } 50% { box-shadow: 0 0 0 5px rgba(217,121,90,0); } }
 .chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 999px; cursor: pointer; font-size: 12.5px; background: transparent; border: 1px solid var(--border); color: var(--muted); }
 .chip:hover { background: var(--hover); color: var(--text); }
 .chip-caret { color: var(--faint); font-size: 10px; }

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; font-src 'self' data:;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';" />
   <link rel="stylesheet" href="../../node_modules/@xterm/xterm/css/xterm.css" />
   <link rel="stylesheet" href="styles.css" />
   <title>Claude Multi</title>
@@ -51,6 +51,7 @@
       <header id="topbar">
         <div id="topTitle" class="top-title">New chat</div>
         <div class="top-actions">
+          <button id="limitPill" class="pill limit-pill hidden" title="Usage limit — when an account resets"></button>
           <button id="switchPill" class="pill" title="Switch account"><span id="switchDot" class="dot off"></span><span id="switchName">No account</span></button>
           <button id="settingsTop" class="icon-btn" title="Settings">⚙</button>
         </div>
@@ -61,10 +62,10 @@
           <div class="welcome-logo">✳</div>
           <h1>Chat with Claude across your accounts</h1>
           <ol class="welcome-steps">
-            <li><b>1.</b> Pick a <b>project folder</b> (top-left).</li>
+            <li><b>1.</b> Click <b>New chat</b> and pick the <b>folder</b> for this chat.</li>
             <li><b>2.</b> Open the <b>account switcher</b> (bottom-left), add an account and <b>Log in</b>.</li>
             <li><b>3.</b> Choose an account and start chatting.</li>
-            <li><b>4.</b> When one runs out, switch accounts — your conversation carries over.</li>
+            <li><b>4.</b> Start <b>another</b> chat in a different folder — they run side by side.</li>
           </ol>
           <div class="welcome-starters">
             <div class="ws-label">Try asking</div>
@@ -83,6 +84,7 @@
             <div class="cr-left">
               <button id="permChip" class="perm-chip" title="Permission mode"><span id="permChipLabel">Ask each time</span></button>
               <button id="attachBtn" class="round-btn" title="Attach files or images">＋</button>
+              <button id="micBtn" class="round-btn mic-btn" title="Dictate (voice to text)" aria-label="Dictate">🎤</button>
             </div>
             <div class="cr-right">
               <button id="modelChip" class="chip chip-plain" title="Model"><span id="modelChipLabel">Default</span> <span class="chip-caret">▾</span></button>

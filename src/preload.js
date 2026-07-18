@@ -16,12 +16,13 @@ contextBridge.exposeInMainWorld('cc', {
   startChat: (accountId) => ipcRenderer.invoke('chat:start', accountId),
   getHistory: () => ipcRenderer.invoke('chat:getHistory'),
   saveLog: (log) => ipcRenderer.invoke('chat:saveLog', log),
-  newChat: () => ipcRenderer.invoke('chat:new'),
+  newChat: (folder) => ipcRenderer.invoke('chat:new', folder),
   sendMessage: (text, attachments) => ipcRenderer.invoke('chat:send', text, attachments),
-  interrupt: () => ipcRenderer.invoke('chat:interrupt'),
-  respondPermission: (requestId, allow, message) => ipcRenderer.invoke('chat:permission', requestId, allow, message),
+  interrupt: (convoId) => ipcRenderer.invoke('chat:interrupt', convoId),
+  respondPermission: (requestId, allow, message, convoId) => ipcRenderer.invoke('chat:permission', requestId, allow, message, convoId),
   switchAccount: (targetId) => ipcRenderer.invoke('chat:switch', targetId),
-  stopChat: () => ipcRenderer.invoke('chat:stop'),
+  continueOn: (convoId, targetId) => ipcRenderer.invoke('chat:continueOn', convoId, targetId),
+  stopChat: (convoId) => ipcRenderer.invoke('chat:stop', convoId),
 
   // ---- conversations (history) ----
   listConvos: () => ipcRenderer.invoke('chat:listConvos'),

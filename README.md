@@ -29,7 +29,12 @@
 
 **[Get the latest Windows build →](https://github.com/Chamanrajragu/claude-multi/releases/latest)**
 
-Grab `Claude-Multi-…-win-x64-portable.zip`, unzip it anywhere, and run **`Claude Multi.exe`** — no installer required. (You'll still need [Node.js](https://nodejs.org) and [Claude Code](https://claude.com/claude-code) installed.) Prefer to run from source? See [Quick start](#quick-start).
+Two options on the [Releases](https://github.com/Chamanrajragu/claude-multi/releases/latest) page:
+
+- **Installer** — `Claude Multi Setup <version>.exe` — run it, choose a folder, get Start-menu and uninstall entries.
+- **Portable** — `Claude Multi <version>.exe` — run it directly, no install.
+
+You'll still need [Node.js](https://nodejs.org) and [Claude Code](https://claude.com/claude-code) installed. The build isn't code-signed yet, so Windows SmartScreen may show a prompt on first run — click **More info → Run anyway**. Prefer to run from source? See [Quick start](#quick-start).
 
 ## Why?
 
@@ -42,6 +47,10 @@ No credential hacking, nothing against the rules — each account simply gets it
 ## Features
 
 - 🖥️ **Looks and feels like the Claude desktop app** — the same near-black interface, composer, model picker, effort slider, permission-mode pill, and a **usage panel** modeled on Claude's own "usage limits" view.
+- 🧵 **Run many chats in parallel, each on its own folder** — start Claude on project A, then spin up a second chat pointed at project B and keep working while the first one runs. Each chat keeps its own folder and its own session; a live spinner in the sidebar shows which chats are busy.
+- 🎤 **Voice to text** — a mic button in the composer lets you dictate a prompt instead of typing.
+- ♻️ **Never lose work to a usage limit** — when an account hits its limit mid-task, Claude Multi carries the chat to another account **and automatically re-sends the interrupted instruction**, so the new account picks up exactly where the last one left off — no copy-pasting.
+- ⏳ **Tokens left & reset countdown, always visible** — a top-bar pill shows when a rate-limited account frees up ("resets in 2h 14m"), alongside the context/token meter for the current chat.
 - 💬 **A real chat interface, not a terminal** — talk to Claude in a clean chat window: streamed markdown replies, collapsible **tool cards** (edits, commands, searches), and inline **Allow / Deny** prompts before Claude touches your files.
 - 🛡️ **Permission modes** — keep the safe **Ask every time**, switch to **Auto-accept file edits**, or go hands-free with **Allow everything (no prompts)** — set it once in Settings → Chat.
 - 📎 **Paste & drop attachments** — paste a screenshot or copied image straight into the composer (reads the image bytes directly, so it works even for images copied from a browser or file explorer), or drag files onto the window.
@@ -86,7 +95,9 @@ Claude Code is fantastic, but juggling several accounts by hand is painful: you 
 
 Each account gets its own `CLAUDE_CONFIG_DIR` (`~/.claude-accounts/<id>/`), so their logins never collide. Chatting is powered by the official **Claude Agent SDK** using that account's **subscription** login — no API key. Signing in runs the real `claude` `/login` once per account in a small terminal window (the OAuth step can't run headless).
 
-A conversation belongs to the **project**, not the account. When a reply comes back as a usage-limit error, the account is stamped with a cooldown (parsed from the reset time) and you're offered the next available account — the conversation's transcript is copied over and resumed, so it continues seamlessly.
+Every chat owns its **own folder** and its **own live session**, so you can run several at once without them interfering — start a task in one folder and, while it works, open another chat in a different folder and keep going. Transcripts are assembled in the main process, so chats running in the background still save their results.
+
+When a reply comes back as a usage-limit error, the account is stamped with a cooldown (parsed from the reset time). If another account is free, Claude Multi copies the chat's transcript over, resumes the session, and **re-issues the instruction that was cut off** so the work continues on the new account automatically. If every account is cooling down, it tells you which one frees up soonest rather than bouncing between rate-limited accounts.
 
 ## Requirements
 
@@ -104,12 +115,12 @@ npm start
 
 Then:
 
-1. **Pick your project folder** (top-left) — the folder Claude will work in.
+1. Click **New chat** and pick the **folder** for that chat — the folder Claude will work in.
 2. Open the **account switcher** (bottom-left) → **Add account**.
 3. Click **Log in** and sign in when your browser opens (paste the code back with **Ctrl+V**).
 4. Repeat for each account.
-5. Choose an account and start chatting. Each project keeps its own chat history and preferred account.
-6. When one account runs out, switch accounts — your conversation carries over automatically.
+5. Choose an account and start chatting. Start **another** chat in a different folder and they run side by side.
+6. When an account runs out, Claude Multi carries the chat to a free account and continues the interrupted task automatically.
 
 ## Building installers
 
