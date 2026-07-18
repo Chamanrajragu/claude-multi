@@ -110,14 +110,18 @@ When a reply comes back as a usage-limit error, the account is stamped with a co
 
 ## Account safety & Anthropic's terms
 
-Being upfront about this, since it's a fair thing to ask:
+**Please read this before you use it.** No spin — here's the honest picture.
 
-- **These are your own accounts.** Claude Multi doesn't share, pool, or crack a single account. Each account is a **separate subscription you pay for**, signed in through Claude Code's normal `/login` and kept isolated with the officially supported `CLAUDE_CONFIG_DIR` mechanism — no API keys, no credential tricks.
-- **It doesn't bypass any single account's limit.** When one account hits its usage limit, you simply continue on **another account you own**, which has its own separate quota. Nothing raises or circumvents a per-account rate limit.
-- **It's ultimately governed by Anthropic's terms, not by us.** We're not affiliated with Anthropic and can't speak for how they interpret or enforce their policies. Whether using multiple accounts this way is permitted — and any enforcement — is at Anthropic's discretion. Please read the [Consumer Terms](https://www.anthropic.com/legal/consumer-terms) and [Usage Policy](https://www.anthropic.com/legal/aup) and use your own judgment.
-- **Use it responsibly.** Stick to accounts that are genuinely yours, each within its normal limits. Don't create throwaway accounts to evade limits or bans — that's a different thing and not what this is for.
+**What this is (and isn't).** Claude Multi is for one person using **their own** Claude subscriptions. Each account is a separate plan you pay for, signed in through the normal `/login`, kept isolated with `CLAUDE_CONFIG_DIR`. It doesn't share, pool, resell, or crack accounts, and it doesn't raise any single account's limit — when one hits its cap you just continue on **another account you own**, with its own quota. This is very different from the account-stacking / reselling setups (e.g. someone running a dozen subscriptions) that Anthropic's abuse detection is built to catch.
 
-We can't promise there's zero risk, and we won't pretend otherwise. This is a convenience layer over accounts you already have — you decide what you're comfortable with.
+**The part you need to weigh.** Around **February 2026 Anthropic tightened its Claude Code terms** to say that using the OAuth login from Free/Pro/Max accounts in **other tools — including the Agent SDK** — isn't permitted; it's meant for Claude Code and claude.ai only. They have server-side enforcement and reserve the right to act **without notice** (they softened this somewhat in April 2026 toward a pay-as-you-go model, but the direction is clear). Claude Multi drives the Agent SDK with your subscription login, so that policy **does apply to a tool like this** — regardless of the fact that the accounts are yours.
+
+**So, honestly:**
+- We're not affiliated with Anthropic and can't speak for how they enforce. This is **use-at-your-own-risk**, and we can't promise you won't be actioned.
+- If you want zero risk, use **Claude Code / claude.ai as intended**, or **API-key billing** for anything custom.
+- If you use this anyway: keep it to accounts that are genuinely **yours**, stay within each one's normal limits, and don't stack throwaway accounts to dodge limits.
+
+Read the [Consumer Terms](https://www.anthropic.com/legal/consumer-terms) and [Usage Policy](https://www.anthropic.com/legal/aup) and decide for yourself.
 
 ## Requirements
 
@@ -203,7 +207,7 @@ You can't raise a single account's limit, but if you have more than one Claude p
 Yes. Claude Multi is built for exactly this — run 2, 3, or more Claude accounts side by side, each isolated, and switch instantly. Your conversation carries over when you switch.
 
 ### Is this against Anthropic's terms? Is it a hack?
-No credential hacking is involved — each account uses Claude Code's officially supported `CLAUDE_CONFIG_DIR` mechanism to keep its own login separate, and they're **your** own paid subscriptions. That said, whether using multiple accounts this way is permitted is governed by Anthropic's terms and is at their discretion, and we can't guarantee against enforcement. See [Account safety & Anthropic's terms](#account-safety--anthropics-terms) for the honest, full answer.
+It's not a hack, and it's not account sharing or reselling — it's one person using their **own** paid subscriptions, each isolated via `CLAUDE_CONFIG_DIR`. But be aware: since **Feb 2026** Anthropic's terms restrict using a subscription (Pro/Max) login in third-party tools, including the Agent SDK — which is how a tool like this works — with enforcement possible without notice. So this is genuinely **use-at-your-own-risk**, and we can't guarantee against enforcement. Read the full, honest breakdown in [Account safety & Anthropic's terms](#account-safety--anthropics-terms) before you rely on it.
 
 ### Do I need an API key?
 No. Claude Multi uses your normal Claude **subscription** login (Pro, Max, or Team) — the same one Claude Code uses. Nothing is billed per token.
