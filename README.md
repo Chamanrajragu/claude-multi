@@ -6,12 +6,13 @@
 
 **Run [Claude Code](https://claude.com/claude-code) with several accounts in one app — and switch automatically the moment one hits its usage limit.**
 
-[![tests](https://img.shields.io/badge/tests-50%20passing-brightgreen)](test)
+[![Latest release](https://img.shields.io/github/v/release/Chamanrajragu/claude-multi?color=d97757&label=release)](https://github.com/Chamanrajragu/claude-multi/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Chamanrajragu/claude-multi/total?color=brightgreen&label=downloads)](https://github.com/Chamanrajragu/claude-multi/releases)
+[![Stars](https://img.shields.io/github/stars/Chamanrajragu/claude-multi?style=flat&color=f5c518)](https://github.com/Chamanrajragu/claude-multi/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/Chamanrajragu/claude-multi?color=blue)](https://github.com/Chamanrajragu/claude-multi/commits/main)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
-![Free](https://img.shields.io/badge/price-100%25%20free-brightgreen)
-![No tracking](https://img.shields.io/badge/telemetry-none-blue)
-[![Download](https://img.shields.io/badge/download-Windows%20.exe-d97757)](https://github.com/Chamanrajragu/claude-multi/releases/latest)
+[![Download](https://img.shields.io/badge/⬇%20download-Windows%20.exe-d97757)](https://github.com/Chamanrajragu/claude-multi/releases/latest)
 
 **A free, open-source desktop app (GUI) for Claude Code — manage up to 20 Claude accounts, pick an account per project, and auto-switch when you hit a usage limit. Runs entirely on your machine and never stores or sends your credentials.**
 
@@ -27,7 +28,7 @@
 
 <img src="docs/demo.gif" width="820" alt="Claude Multi — parallel chats, voice, and auto-continue on usage limits" />
 
-**▶️ [Watch the full 2-minute feature tour](https://github.com/Chamanrajragu/claude-multi/releases/latest)**
+**▶️ [Watch the full 2-minute feature tour (with narration + sound)](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.9.0/claude-multi-tour-1080p.mp4)**
 
 </div>
 
