@@ -51,6 +51,10 @@
       <header id="topbar">
         <div id="topTitle" class="top-title">New chat</div>
         <div class="top-actions">
+          <button id="usagePill" class="pill usage-pill hidden" title="Token usage this chat">
+            <span class="usage-ring"><span id="usageRingFill" class="usage-ring-fill"></span></span>
+            <span id="usagePillText" class="usage-pill-text">—</span>
+          </button>
           <button id="switchPill" class="pill" title="Switch account"><span id="switchDot" class="dot off"></span><span id="switchName">No account</span></button>
           <button id="settingsTop" class="icon-btn" title="Settings">⚙</button>
         </div>
@@ -144,8 +148,8 @@
           <h3>Chat</h3>
           <div class="setting-row"><div><div class="s-title">Permissions</div><div class="s-sub">How Claude asks before using tools (edits, commands…)</div></div>
             <select id="setPermission"><option value="ask">Ask every time</option><option value="acceptEdits">Auto-accept file edits</option><option value="bypass">Allow everything (no prompts)</option></select></div>
-          <div class="setting-row"><div><div class="s-title">Default model</div></div>
-            <select id="setModel"><option value="">Account default</option><option value="opus">Opus</option><option value="sonnet">Sonnet</option><option value="haiku">Haiku</option></select></div>
+          <div class="setting-row"><div><div class="s-title">Default model</div><div class="s-sub">Which Claude model new chats use</div></div>
+            <select id="setModel"><option value="">Account default</option><option value="claude-opus-4-8">Opus 4.8</option><option value="claude-opus-4-7">Opus 4.7</option><option value="claude-opus-4-6">Opus 4.6</option><option value="claude-sonnet-5">Sonnet 5</option><option value="claude-sonnet-4-6">Sonnet 4.6</option><option value="claude-haiku-4-5">Haiku 4.5</option></select></div>
           <div class="setting-row"><div><div class="s-title">Default effort</div></div>
             <select id="setEffort"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultrathink</option></select></div>
           <div class="setting-row"><div><div class="s-title">Auto-switch on limit</div><div class="s-sub">Switch without asking when an account runs out</div></div>
@@ -206,6 +210,25 @@
         <div class="sc-key">Esc</div><div class="sc-desc">Close a dialog / menu</div>
       </div>
     </div>
+  </div>
+
+  <!-- ============ USAGE POPOVER ============ -->
+  <div id="usageMenu" class="menu usage-menu hidden">
+    <div class="usage-head">
+      <span class="usage-title">Usage this chat</span>
+      <span id="usageModel" class="usage-model">—</span>
+    </div>
+    <div class="usage-bar-wrap"><div id="usageBar" class="usage-bar"></div></div>
+    <div id="usageCtxLine" class="usage-ctx-line">Context window</div>
+    <div class="usage-grid">
+      <div class="usage-cell"><span class="uc-label">Context used</span><span id="uCtx" class="uc-val">0</span></div>
+      <div class="usage-cell"><span class="uc-label">Remaining</span><span id="uLeft" class="uc-val">—</span></div>
+      <div class="usage-cell"><span class="uc-label">Last turn out</span><span id="uOut" class="uc-val">0</span></div>
+      <div class="usage-cell"><span class="uc-label">Cache read</span><span id="uCache" class="uc-val">0</span></div>
+      <div class="usage-cell"><span class="uc-label">Session out</span><span id="uSessOut" class="uc-val">0</span></div>
+      <div class="usage-cell"><span class="uc-label">Session cost</span><span id="uCost" class="uc-val">$0.00</span></div>
+    </div>
+    <div class="usage-foot">Context is an estimate from the last turn. Subscription limits reset periodically.</div>
   </div>
 
   <div id="toast" class="toast hidden"></div>

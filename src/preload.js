@@ -1,5 +1,5 @@
 // Secure bridge between the renderer and the main process (chat rebuild).
-const { contextBridge, ipcRenderer, clipboard } = require('electron');
+const { contextBridge, ipcRenderer, clipboard, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('cc', {
   // ---- state / accounts / project / settings ----
@@ -40,6 +40,14 @@ contextBridge.exposeInMainWorld('cc', {
   // ---- misc ----
   pickFiles: () => ipcRenderer.invoke('app:pickFiles'),
   pasteImage: () => ipcRenderer.invoke('app:pasteImage'),
+  // Electron 32+ removed the non-standard File.path property; webUtils is the
+  // supported way to get the real on-disk path of a dropped / pasted File.
+  getPathForFile: (file) => { try { return webUtils.getPathForFile(file) || ''; } catch { return ''; } },
+  // Persist raw bytes (a pasted screenshot / copied image blob) to a temp file
+  // and get back a path we can attach like any other file. This works even when
+  // the OS clipboard holds the image in a format Electron's clipboard.readImage
+  // can't decode (e.g. an image file copied from Explorer).
+  savePastedImage: (bytes, ext) => ipcRenderer.invoke('app:savePastedImage', bytes, ext),
   exportConfig: () => ipcRenderer.invoke('app:export'),
   importConfig: () => ipcRenderer.invoke('app:import'),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),

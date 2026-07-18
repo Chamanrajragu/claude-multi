@@ -129,11 +129,23 @@ function renderTop() {
   $('topTitle').textContent = c ? (c.title || 'New chat') : (state.running ? 'Chat' : 'New chat');
   renderModelLabel();
 }
-const MODELS = [['', 'Default'], ['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku']];
+const MODELS = [
+  ['', 'Default (account)'],
+  ['claude-opus-4-8', 'Opus 4.8'],
+  ['claude-opus-4-7', 'Opus 4.7'],
+  ['claude-opus-4-6', 'Opus 4.6'],
+  ['claude-sonnet-5', 'Sonnet 5'],
+  ['claude-sonnet-4-6', 'Sonnet 4.6'],
+  ['claude-haiku-4-5', 'Haiku 4.5'],
+];
+// Legacy aliases → friendly labels, so an older stored setting still reads right.
+const MODEL_ALIASES = { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' };
 const EFFORTS = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultrathink']];
-function labelFor(list, id, fb) { const f = list.find((x) => x[0] === id); return f ? f[1] : fb; }
+function labelFor(list, id, fb) { const f = list.find((x) => x[0] === id); if (f) return f[1]; if (list === MODELS && MODEL_ALIASES[id]) return MODEL_ALIASES[id]; return fb; }
+// Short label for the compact chip (drop the "(account)" suffix).
+function shortModelLabel(id) { return labelFor(MODELS, id || '', 'Default').replace(' (account)', ''); }
 function renderModelLabel() {
-  $('modelChipLabel').textContent = labelFor(MODELS, (state.settings && state.settings.model) || '', 'Default');
+  $('modelChipLabel').textContent = shortModelLabel((state.settings && state.settings.model) || '');
   $('effortChipLabel').textContent = labelFor(EFFORTS, (state.settings && state.settings.effort) || 'medium', 'Medium');
 }
 function updateComposer() {
@@ -159,7 +171,53 @@ function renderStarters() {
     box.appendChild(b);
   }
 }
-function renderAll() { renderProject(); renderConvos(); renderAccountRow(); renderTop(); updateComposer(); renderAttachments(); renderStarters(); }
+function renderAll() { renderProject(); renderConvos(); renderAccountRow(); renderTop(); updateComposer(); renderAttachments(); renderStarters(); renderUsage(); }
+
+/* ---------------- token / usage meter ---------------- */
+// Claude Code runs a 200K-token context window by default (the 1M window is a
+// separate opt-in this app doesn't enable), so we measure fill against that.
+const CONTEXT_WINDOW = 200000;
+let usage = { model: '', ctx: 0, lastOut: 0, lastCache: 0, sessOut: 0, sessCost: 0, turns: 0 };
+function resetUsage() { usage = { model: usage.model || '', ctx: 0, lastOut: 0, lastCache: 0, sessOut: 0, sessCost: 0, turns: 0 }; renderUsage(); }
+function applyTurnUsage(u, costUsd) {
+  if (u) {
+    const inp = u.input_tokens || 0;
+    const cacheR = u.cache_read_input_tokens || 0;
+    const cacheC = u.cache_creation_input_tokens || 0;
+    const out = u.output_tokens || 0;
+    usage.ctx = inp + cacheR + cacheC + out;      // ≈ tokens carried into the next turn
+    usage.lastOut = out;
+    usage.lastCache = cacheR + cacheC;
+    usage.sessOut += out;
+  }
+  if (costUsd) usage.sessCost += Number(costUsd) || 0;
+  usage.turns += 1;
+  renderUsage();
+}
+function fmtTokens(n) { n = Math.max(0, Math.round(n || 0)); if (n >= 1000) return (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, '') + 'K'; return String(n); }
+function renderUsage() {
+  const pill = $('usagePill'); if (!pill) return;
+  const hasData = usage.ctx > 0 || usage.turns > 0;
+  pill.classList.toggle('hidden', !(state.running && hasData));
+  const pct = Math.max(0, Math.min(100, Math.round((usage.ctx / CONTEXT_WINDOW) * 100)));
+  const left = Math.max(0, CONTEXT_WINDOW - usage.ctx);
+  $('usagePillText').textContent = fmtTokens(left) + ' left';
+  const fill = $('usageRingFill');
+  if (fill) { fill.style.background = `conic-gradient(var(--accent) ${pct * 3.6}deg, var(--border) 0deg)`; }
+  pill.classList.toggle('warn', pct >= 85);
+  // popover
+  const bar = $('usageBar'); if (bar) { bar.style.width = pct + '%'; bar.classList.toggle('warn', pct >= 85); }
+  const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  set('usageModel', usage.model ? shortModelLabel(usage.model) : (shortModelLabel((state.settings || {}).model || '')));
+  set('usageCtxLine', `Context window · ${pct}% used`);
+  set('uCtx', fmtTokens(usage.ctx));
+  set('uLeft', fmtTokens(left));
+  set('uOut', fmtTokens(usage.lastOut));
+  set('uCache', fmtTokens(usage.lastCache));
+  set('uSessOut', fmtTokens(usage.sessOut));
+  set('uCost', '$' + (usage.sessCost || 0).toFixed(usage.sessCost >= 1 ? 2 : 4));
+}
+$('usagePill').onclick = (e) => { e.stopPropagation(); const m = $('usageMenu'); const showing = !m.classList.contains('hidden'); closeMenus(); if (showing) return; renderUsage(); m.classList.remove('hidden'); const r = e.currentTarget.getBoundingClientRect(); m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 288)) + 'px'; m.style.top = (r.bottom + 8) + 'px'; };
 
 /* ---------------- transcript ---------------- */
 const transcript = $('transcript');
@@ -242,8 +300,12 @@ function appendAssistantDOM(blocks) {
 function renderHistory(log) {
   clearTranscript();
   convo = Array.isArray(log) ? log.map((m) => ({ ...m })) : [];
+  resetUsage();
   if (!convo.length) { const w = $('welcome'); if (w) w.classList.remove('hidden'); return; }
-  for (const m of convo) { if (m.role === 'user') appendUserDOM(m.text); else appendAssistantDOM(m.blocks); }
+  for (const m of convo) {
+    if (m.role === 'user') appendUserDOM(m.text);
+    else { appendAssistantDOM(m.blocks); if (m.usage || m.costUsd) applyTurnUsage(m.usage, m.costUsd); }
+  }
   scrollDown(true);
 }
 function addUserMessage(text) { convo.push({ role: 'user', text }); appendUserDOM(text); persist(); scrollDown(true); }
@@ -278,7 +340,7 @@ function onToolResult(id, isError, text) {
   scrollDown();
 }
 function onErrorLine(text) { hideWelcome(); const el = document.createElement('div'); el.className = 'err-line'; el.textContent = '⚠ ' + text; if (turn && turn.body) turn.body.appendChild(el); else wrap(el); scrollDown(true); }
-function endTurn(meta) { if (turn && turn.blocks.length) { convo.push({ role: 'assistant', blocks: turn.blocks }); persist(); if (turn.msg) decorateAssistant(turn.msg, meta); } turn = null; }
+function endTurn(meta) { if (turn && turn.blocks.length) { convo.push({ role: 'assistant', blocks: turn.blocks, usage: meta && meta.usage, costUsd: meta && meta.costUsd }); persist(); if (turn.msg) decorateAssistant(turn.msg, meta); } turn = null; }
 
 /* ---------------- permission cards ---------------- */
 function onPermission(requestId, tool, input) {
@@ -299,13 +361,14 @@ function summarizePerm(tool, i) { if (!i) return ''; if (i.command) return '$ ' 
 /* ---------------- chat events ---------------- */
 cc.onChat((ev) => {
   switch (ev.type) {
+    case 'ready': if (ev.model) { usage.model = ev.model; renderUsage(); } break;
     case 'assistant_delta': onAssistantDelta(ev.text); break;
     case 'assistant_text': onAssistantText(ev.text); break;
     case 'thinking': onThinking(ev.text); break;
     case 'tool_use': onToolUse(ev.id, ev.name, ev.input); break;
     case 'tool_result': onToolResult(ev.id, ev.isError, ev.text); break;
     case 'permission': onPermission(ev.requestId, ev.tool, ev.input); break;
-    case 'turn_end': endTurn({ usage: ev.usage, costUsd: ev.costUsd }); break;
+    case 'turn_end': applyTurnUsage(ev.usage, ev.costUsd); endTurn({ usage: ev.usage, costUsd: ev.costUsd }); break;
     case 'auth_failed': endTurn(); onErrorLine('This account is not signed in. Open the account switcher and Log in.'); break;
     case 'error': endTurn(); onErrorLine(ev.text || 'Something went wrong.'); break;
     case 'limit': endTurn(); break;
@@ -348,16 +411,46 @@ $('input').addEventListener('keydown', (e) => {
   if (wantSend) { e.preventDefault(); sendMessage(); }
 });
 // Paste images (screenshots / copied images) or files straight into the chat.
+// Electron 32+ removed File.path, so we resolve real files via getPathForFile
+// and handle image blobs by reading their bytes directly — that works even when
+// the OS clipboard holds the image in a format clipboard.readImage can't decode.
 $('input').addEventListener('paste', async (e) => {
   const dt = e.clipboardData; if (!dt) return;
-  const files = Array.from(dt.files || []).map((f) => f.path).filter(Boolean);
-  if (files.length) { e.preventDefault(); attachments = attachments.concat(files); renderAttachments(); toast(files.length + ' file' + (files.length > 1 ? 's' : '') + ' attached', 'ok'); return; }
-  const hasImage = Array.from(dt.items || []).some((it) => it.type && it.type.startsWith('image/'));
-  if (hasImage) {
+  // 1) Real on-disk files (copied in Explorer/Finder, dragged from another app).
+  const filePaths = Array.from(dt.files || []).map((f) => cc.getPathForFile(f)).filter(Boolean);
+  if (filePaths.length) {
     e.preventDefault();
+    attachments = attachments.concat(filePaths); renderAttachments();
+    toast(filePaths.length + ' file' + (filePaths.length > 1 ? 's' : '') + ' attached', 'ok');
+    return;
+  }
+  // 2) Image blobs with no filesystem path (screenshots, "copy image", etc.).
+  const imageItems = Array.from(dt.items || []).filter((it) => it.kind === 'file' && it.type && it.type.startsWith('image/'));
+  if (imageItems.length) {
+    e.preventDefault();
+    let added = 0;
+    for (const it of imageItems) {
+      const file = it.getAsFile(); if (!file) continue;
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const ext = ((file.type.split('/')[1] || 'png').toLowerCase()).replace('jpeg', 'jpg');
+        const r = await cc.savePastedImage(bytes, ext);
+        if (r && r.ok) { attachments.push(r.path); added++; }
+      } catch { /* skip this blob */ }
+    }
+    if (added) { renderAttachments(); toast('Image pasted', 'ok'); }
+    else {
+      // 3) Last resort: pull whatever bitmap the OS clipboard has.
+      const r = await cc.pasteImage();
+      if (r && r.ok) { attachments.push(r.path); renderAttachments(); toast('Image pasted', 'ok'); }
+      else toast((r && r.error) || 'Could not paste image', 'err');
+    }
+    return;
+  }
+  // 4) Nothing usable in the paste event — try the OS clipboard bitmap directly.
+  if (!dt.getData || !dt.getData('text')) {
     const r = await cc.pasteImage();
-    if (r && r.ok) { attachments.push(r.path); renderAttachments(); toast('Image pasted', 'ok'); }
-    else toast((r && r.error) || 'Could not paste image', 'err');
+    if (r && r.ok) { e.preventDefault(); attachments.push(r.path); renderAttachments(); toast('Image pasted', 'ok'); }
   }
 });
 $('stopBtn').onclick = () => cc.interrupt();
@@ -376,8 +469,8 @@ async function addAccount() {
 }
 
 /* ---------------- menus ---------------- */
-function closeMenus() { document.querySelectorAll('.menu.ctx').forEach((n) => n.remove()); $('modelMenu').classList.add('hidden'); $('effortMenu').classList.add('hidden'); }
-document.addEventListener('click', (e) => { if (!e.target.closest('.menu') && !e.target.closest('#accountBtn') && !e.target.closest('#switchPill') && !e.target.closest('#modelChip') && !e.target.closest('#effortChip') && !e.target.closest('.convo-more')) closeMenus(); });
+function closeMenus() { document.querySelectorAll('.menu.ctx').forEach((n) => n.remove()); $('modelMenu').classList.add('hidden'); $('effortMenu').classList.add('hidden'); $('usageMenu').classList.add('hidden'); }
+document.addEventListener('click', (e) => { if (!e.target.closest('.menu') && !e.target.closest('#accountBtn') && !e.target.closest('#switchPill') && !e.target.closest('#modelChip') && !e.target.closest('#effortChip') && !e.target.closest('#usagePill') && !e.target.closest('.convo-more')) closeMenus(); });
 function openChipMenu(menuId, list, key, onPick) {
   const menu = $(menuId);
   if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
@@ -508,6 +601,15 @@ function buildCommands() {
   cmds.push({ icon: '🎨', label: 'Toggle light / dark theme', run: async () => { const cur = (state.settings || {}).theme; const next = cur === 'light' ? 'dark' : 'light'; applyTheme(next); state.settings = await cc.setSettings({ theme: next }); } });
   cmds.push({ icon: '⚙', label: 'Open settings', run: () => openSettings() });
   cmds.push({ icon: '⌨', label: 'Keyboard shortcuts', hint: 'Ctrl+/', run: () => $('shortcutsModal').classList.remove('hidden') });
+  // Quick model switch
+  for (const [id, label] of MODELS) {
+    cmds.push({ icon: '◇', label: 'Model: ' + label, hint: (state.settings || {}).model === id ? 'current' : '', run: async () => { state.settings = await cc.setSettings({ model: id }); renderModelLabel(); toast('Model: ' + label, 'ok'); } });
+  }
+  // Quick effort switch
+  for (const [id, label] of EFFORTS) {
+    cmds.push({ icon: '⚡', label: 'Effort: ' + label, hint: ((state.settings || {}).effort || 'medium') === id ? 'current' : '', run: async () => { state.settings = await cc.setSettings({ effort: id }); renderModelLabel(); toast('Effort: ' + label, 'ok'); } });
+  }
+  cmds.push({ icon: '📊', label: 'Show token usage for this chat', run: () => { if (!$('usagePill').classList.contains('hidden')) $('usagePill').click(); else toast('Usage appears once a chat is running', 'ok'); } });
   cmds.push({ icon: '🐙', label: 'Open project on GitHub', run: () => cc.openExternal('https://github.com/Chamanrajragu/claude-multi') });
   for (const a of state.accounts) {
     const v = accView(a);
@@ -562,9 +664,22 @@ window.addEventListener('keydown', (e) => {
 (() => {
   const drop = $('main');
   ['dragover', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); }));
-  drop.addEventListener('drop', (e) => {
-    const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []).map((f) => f.path).filter(Boolean);
-    if (files.length) { attachments = attachments.concat(files); renderAttachments(); toast(files.length + ' file' + (files.length > 1 ? 's' : '') + ' attached', 'ok'); }
+  drop.addEventListener('drop', async (e) => {
+    const list = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+    const files = list.map((f) => cc.getPathForFile(f)).filter(Boolean);
+    if (files.length) { attachments = attachments.concat(files); renderAttachments(); toast(files.length + ' file' + (files.length > 1 ? 's' : '') + ' attached', 'ok'); return; }
+    // Dropped an image with no path (e.g. dragged out of a browser) — save its bytes.
+    let added = 0;
+    for (const f of list) {
+      if (!f.type || !f.type.startsWith('image/')) continue;
+      try {
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        const ext = ((f.type.split('/')[1] || 'png').toLowerCase()).replace('jpeg', 'jpg');
+        const r = await cc.savePastedImage(bytes, ext);
+        if (r && r.ok) { attachments.push(r.path); added++; }
+      } catch { /* skip */ }
+    }
+    if (added) { renderAttachments(); toast(added + ' image' + (added > 1 ? 's' : '') + ' attached', 'ok'); }
   });
 })();
 

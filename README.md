@@ -6,7 +6,7 @@
 
 **Run [Claude Code](https://claude.com/claude-code) with several accounts in one app — and switch automatically the moment one hits its usage limit.**
 
-[![tests](https://img.shields.io/badge/tests-47%20passing-brightgreen)](test)
+[![tests](https://img.shields.io/badge/tests-50%20passing-brightgreen)](test)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Free](https://img.shields.io/badge/price-100%25%20free-brightgreen)
@@ -43,12 +43,13 @@ No credential hacking, nothing against the rules — each account simply gets it
 
 - 💬 **A real chat interface, not a terminal** — talk to Claude in a clean chat window: streamed markdown replies, collapsible **tool cards** (edits, commands, searches), and inline **Allow / Deny** prompts before Claude touches your files.
 - 🛡️ **Permission modes** — keep the safe **Ask every time**, switch to **Auto-accept file edits**, or go hands-free with **Allow everything (no prompts)** — set it once in Settings → Chat.
-- 📎 **Paste & drop attachments** — paste a screenshot or copied image straight into the composer, or drag files onto the window.
+- 📎 **Paste & drop attachments** — paste a screenshot or copied image straight into the composer (reads the image bytes directly, so it works even for images copied from a browser or file explorer), or drag files onto the window.
+- 📊 **Live token meter** — a top-bar pill shows how much of the context window this chat has used and **how many tokens are left**; open it for a full breakdown (context used, cache reads, session output tokens and cost) plus the model actually running.
 - 🔁 **One conversation, any account** — your chat belongs to the **project**, not the account. Switch accounts and the conversation is carried over and continues right where it left off; the full history stays visible when you switch back or reopen the app.
 - 🔄 **Auto-switch on usage limit** — the moment an account hits its Claude usage/session limit, Claude Multi rotates to the next available account (or asks first). No more waiting hours for a reset when you have another account idle.
 - ⏳ **Cooldown tracking** — remembers when each rate-limited account resets and skips accounts that are still cooling down, picking the one that frees up soonest.
 - 🧑‍🤝‍🧑 **Multiple accounts, fully isolated** — every account gets its own login/config directory (`CLAUDE_CONFIG_DIR`). No interference, no logging in and out by hand.
-- 🎛️ **Model + effort picker** — choose the model (**Opus / Sonnet / Haiku**) and thinking effort (**Low / Medium / High / Ultrathink**) right in the composer.
+- 🎛️ **Model + effort picker** — pick a specific model version (**Opus 4.8 / 4.7 / 4.6, Sonnet 5 / 4.6, Haiku 4.5**) and thinking effort (**Low / Medium / High / Ultrathink**) right in the composer or from the command palette.
 - 📁 **A preferred account per project** — each project folder remembers which account it uses.
 - 🔐 **Subscription login, no API key** — sign in each account once with your normal Claude subscription (Pro / Max / Team). Nothing is billed per token.
 - 🔔 **Desktop notifications** when a limit is hit or an account switches.
@@ -67,8 +68,10 @@ Claude Code is fantastic, but juggling several accounts by hand is painful: you 
 
 <div align="center">
 
-| Account switcher (Ctrl/Cmd + 1–9) | Auto-switch on limit |
+| Live token meter (how many tokens left) | Model selector |
 | --- | --- |
+| <img src="docs/screenshot-usage.png" width="410" alt="Token usage meter showing context used, tokens remaining and session cost" /> | <img src="docs/screenshot-models.png" width="410" alt="Model selector: Opus 4.8 / 4.7 / 4.6, Sonnet 5 / 4.6, Haiku 4.5" /> |
+| Account switcher (Ctrl/Cmd + 1–9) | Auto-switch on limit |
 | <img src="docs/screenshot-accounts.png" width="410" alt="Account switcher showing multiple Claude accounts with cooldown status" /> | <img src="docs/screenshot-limit.png" width="410" alt="Usage limit reached — switch account dialog" /> |
 | Settings | Light theme |
 | <img src="docs/screenshot-settings.png" width="410" alt="Settings" /> | <img src="docs/screenshot-light.png" width="410" alt="Light theme" /> |

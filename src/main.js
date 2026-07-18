@@ -557,6 +557,22 @@ function registerIpc() {
       return { ok: true, path: p };
     } catch (e) { return { ok: false, error: String(e.message || e) }; }
   });
+  // Write the raw bytes of a pasted image blob (already decoded by the renderer
+  // from the paste event) to a temp file and return its path. This is the
+  // reliable image-paste path: the browser hands us the actual pixels, so it
+  // works for screenshots, "copy image" from a browser, and image files alike —
+  // regardless of which clipboard format the OS used.
+  ipcMain.handle('app:savePastedImage', (_e, bytes, ext) => {
+    try {
+      if (!bytes || !bytes.length) return { ok: false, error: 'Empty image' };
+      const safeExt = /^(png|jpg|jpeg|gif|webp|bmp)$/i.test(String(ext || '')) ? String(ext).toLowerCase() : 'png';
+      const dir = path.join(os.tmpdir(), 'claude-multi-paste');
+      fs.mkdirSync(dir, { recursive: true });
+      const p = path.join(dir, 'paste-' + Date.now() + '-' + Math.floor(Math.random() * 1e4) + '.' + safeExt);
+      fs.writeFileSync(p, Buffer.from(bytes));
+      return { ok: true, path: p };
+    } catch (e) { return { ok: false, error: String(e.message || e) }; }
+  });
   ipcMain.handle('app:openExternal', (_e, url) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return true; });
   ipcMain.handle('app:openConfigDir', (_e, id) => { const a = store.byId(id); if (a) shell.openPath(a.configDir); return true; });
   ipcMain.handle('app:info', () => ({

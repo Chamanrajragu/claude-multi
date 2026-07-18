@@ -312,6 +312,27 @@ button { font-family: inherit; color: inherit; }
 .cmdk-item.active, .cmdk-item:hover { background: var(--active); }
 .cmdk-empty { padding: 18px; text-align: center; color: var(--faint); font-size: 13px; }
 
+/* ================= token / usage meter ================= */
+.usage-pill { gap: 8px; padding: 5px 12px 5px 8px; }
+.usage-pill.warn { border-color: var(--warn); color: var(--warn); }
+.usage-ring { width: 16px; height: 16px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--border); }
+.usage-ring-fill { width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(var(--accent) 0deg, var(--border) 0deg); -webkit-mask: radial-gradient(circle 4px at center, transparent 98%, #000 100%); mask: radial-gradient(circle 4px at center, transparent 98%, #000 100%); }
+.usage-pill-text { font-variant-numeric: tabular-nums; font-size: 12px; }
+
+.usage-menu { width: 280px; padding: 14px; cursor: default; }
+.usage-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.usage-title { font-size: 12.5px; font-weight: 600; }
+.usage-model { font-size: 11px; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 999px; }
+.usage-bar-wrap { height: 8px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.usage-bar { height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width .25s; }
+.usage-bar.warn { background: var(--warn); }
+.usage-ctx-line { font-size: 11px; color: var(--muted); margin: 6px 0 12px; }
+.usage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.usage-cell { display: flex; flex-direction: column; gap: 2px; }
+.uc-label { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .04em; }
+.uc-val { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.usage-foot { font-size: 10.5px; color: var(--faint); line-height: 1.5; margin-top: 12px; border-top: 1px solid var(--border-soft); padding-top: 10px; }
+
 /* shortcuts sheet */
 .shortcuts-modal { width: 460px; }
 .shortcut-grid { display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; align-items: center; }
