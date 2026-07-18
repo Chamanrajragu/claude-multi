@@ -23,22 +23,30 @@ function accView(a) {
 /* ---------------- sidebar ---------------- */
 function renderProject() { $('projectName').textContent = state.projectDir ? baseName(state.projectDir) : 'Choose a folder…'; $('projectBtn').title = state.projectDir || 'Choose a project folder'; }
 
+let convoFilter = '';
 function renderConvos() {
   const list = $('convoList');
   list.innerHTML = '';
-  if (!state.projectDir) { const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'Pick a project folder to start chatting.'; list.appendChild(d); return; }
-  if (!state.conversations.length) { const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'No chats yet. Click “New chat”.'; list.appendChild(d); return; }
-  for (const c of state.conversations) {
+  if (!state.projectDir) { $('convoSearch').classList.add('hidden'); const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'Pick a project folder to start chatting.'; list.appendChild(d); return; }
+  if (!state.conversations.length) { $('convoSearch').classList.add('hidden'); const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'No chats yet. Click “New chat”.'; list.appendChild(d); return; }
+  $('convoSearch').classList.toggle('hidden', state.conversations.length < 6 && !convoFilter);
+  const q = convoFilter.trim().toLowerCase();
+  const shown = q ? state.conversations.filter((c) => (c.title || '').toLowerCase().includes(q)) : state.conversations;
+  if (!shown.length) { const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'No chats match your search.'; list.appendChild(d); return; }
+  for (const c of shown) {
     const row = document.createElement('div');
-    row.className = 'convo' + (c.id === state.currentConvoId ? ' active' : '');
+    row.className = 'convo' + (c.id === state.currentConvoId ? ' active' : '') + (c.pinned ? ' pinned' : '');
+    const pin = document.createElement('button'); pin.className = 'convo-pin'; pin.textContent = c.pinned ? '★' : '☆'; pin.title = c.pinned ? 'Unpin' : 'Pin';
+    pin.onclick = (e) => { e.stopPropagation(); cc.pinConvo(c.id); };
     const title = document.createElement('div'); title.className = 'convo-title'; title.textContent = c.title || 'New chat';
     const more = document.createElement('button'); more.className = 'convo-more'; more.textContent = '⋯';
     more.onclick = (e) => { e.stopPropagation(); convoMenu(c, e.currentTarget); };
-    row.appendChild(title); row.appendChild(more);
+    row.appendChild(pin); row.appendChild(title); row.appendChild(more);
     row.onclick = () => openConvo(c.id);
     list.appendChild(row);
   }
 }
+$('convoSearch').addEventListener('input', (e) => { convoFilter = e.target.value; renderConvos(); });
 async function openConvo(id) {
   if (id === state.currentConvoId && state.running) return;
   const r = await cc.openConvo(id);
@@ -48,7 +56,9 @@ function convoMenu(c, anchor) {
   closeMenus();
   const m = document.createElement('div'); m.className = 'menu ctx';
   const items = [
+    [c.pinned ? 'Unpin' : 'Pin', async () => { await cc.pinConvo(c.id); }],
     ['Rename', async () => { const t = await uiPrompt('Rename chat:', c.title, 'Rename'); if (t && t.trim()) { await cc.renameConvo(c.id, t.trim()); } }],
+    ['Export as Markdown…', async () => { const r = await cc.exportMd(c.id); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); }],
     ['Delete', async () => { if (confirm(`Delete "${c.title}"?`)) await cc.deleteConvo(c.id); }],
   ];
   for (const [label, fn] of items) { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { closeMenus(); fn(); }; m.appendChild(b); }
@@ -132,7 +142,24 @@ function updateComposer() {
   $('input').placeholder = can ? 'Reply to Claude…' : (state.accounts.some((a) => a.loggedIn) ? 'Choose an account to start…' : 'Add & log in an account to start…');
   $('genBar').classList.toggle('hidden', !state.generating);
 }
-function renderAll() { renderProject(); renderConvos(); renderAccountRow(); renderTop(); updateComposer(); renderAttachments(); }
+const STARTERS = [
+  'Explain what this project does',
+  'Find and fix a bug',
+  'Write tests for the current file',
+  'Review my recent changes',
+  'Refactor this code to be simpler',
+];
+let startersBuilt = false;
+function renderStarters() {
+  const box = $('starterChips'); if (!box || startersBuilt) return;
+  startersBuilt = true;
+  for (const s of STARTERS) {
+    const b = document.createElement('button'); b.className = 'starter-chip'; b.textContent = s;
+    b.onclick = () => { const inp = $('input'); inp.value = s; autoGrow(); updateComposer(); inp.focus(); if (state.running) sendMessage(); else toast('Choose an account, then press send', 'ok'); };
+    box.appendChild(b);
+  }
+}
+function renderAll() { renderProject(); renderConvos(); renderAccountRow(); renderTop(); updateComposer(); renderAttachments(); renderStarters(); }
 
 /* ---------------- transcript ---------------- */
 const transcript = $('transcript');
@@ -140,6 +167,8 @@ let turn = null; let convo = [];
 function clearTranscript() { transcript.innerHTML = ''; turn = null; }
 function nearBottom() { return transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 120; }
 function scrollDown(force) { if (force || nearBottom()) transcript.scrollTop = transcript.scrollHeight; }
+transcript.addEventListener('scroll', () => { $('scrollDownBtn').classList.toggle('hidden', nearBottom()); });
+$('scrollDownBtn').onclick = () => { transcript.scrollTop = transcript.scrollHeight; };
 function wrap(el) { const w = document.createElement('div'); w.className = 'msg-wrap'; w.appendChild(el); transcript.appendChild(w); return w; }
 function hideWelcome() { const w = $('welcome'); if (w) w.classList.add('hidden'); }
 function persist() { try { cc.saveLog(convo); } catch { /* noop */ } }
@@ -160,6 +189,44 @@ function makeToolCard(block) {
   card.appendChild(head); card.appendChild(body);
   return { card, head, body };
 }
+// Copy helper with a brief visual confirmation on the clicked button.
+function copyText(text, btn, okLabel) {
+  try { cc.clipboardWrite(text); } catch { return; }
+  if (btn) { const old = btn.textContent; btn.textContent = okLabel || '✓ Copied'; setTimeout(() => { btn.textContent = old; }, 1300); }
+  else toast('Copied', 'ok');
+}
+// Add a copy button to every code block inside a scope (idempotent).
+function addCodeCopy(scope) {
+  scope.querySelectorAll('pre').forEach((pre) => {
+    if (pre.querySelector('.code-copy')) return;
+    const b = document.createElement('button'); b.className = 'code-copy'; b.textContent = 'Copy';
+    b.onclick = (e) => { e.stopPropagation(); const code = pre.querySelector('code'); copyText((code || pre).innerText, b); };
+    pre.appendChild(b);
+  });
+}
+// Reconstruct the plain-text of an assistant message from its rendered blocks.
+function assistantPlainText(bodyEl) {
+  return Array.from(bodyEl.querySelectorAll('.md')).map((m) => m.innerText).join('\n\n').trim();
+}
+// Add the hover action bar (Copy) + optional usage footer to a finished turn.
+function decorateAssistant(msgEl, meta) {
+  const body = msgEl.querySelector('.assistant-body'); if (!body) return;
+  addCodeCopy(body);
+  if (!body.querySelector('.msg-actions')) {
+    const bar = document.createElement('div'); bar.className = 'msg-actions';
+    const copy = document.createElement('button'); copy.className = 'msg-act'; copy.textContent = 'Copy';
+    copy.onclick = () => copyText(assistantPlainText(body), copy);
+    bar.appendChild(copy);
+    body.appendChild(bar);
+  }
+  if (meta && !body.querySelector('.turn-meta')) {
+    const parts = [];
+    if (meta.usage) { const t = (meta.usage.input_tokens || 0) + (meta.usage.output_tokens || 0); if (t) parts.push('🔢 ' + t.toLocaleString() + ' tokens'); }
+    if (meta.costUsd) parts.push('💲 $' + Number(meta.costUsd).toFixed(4));
+    if (parts.length) { const m = document.createElement('div'); m.className = 'turn-meta'; parts.forEach((p) => { const s = document.createElement('span'); s.textContent = p; m.appendChild(s); }); body.insertBefore(m, body.querySelector('.msg-actions')); }
+  }
+}
+
 function appendAssistantDOM(blocks) {
   hideWelcome();
   const msg = document.createElement('div'); msg.className = 'msg assistant';
@@ -170,6 +237,7 @@ function appendAssistantDOM(blocks) {
     else if (blk.type === 'tool') body.appendChild(makeToolCard(blk).card);
   }
   msg.appendChild(av); msg.appendChild(body); wrap(msg);
+  decorateAssistant(msg);
 }
 function renderHistory(log) {
   clearTranscript();
@@ -186,7 +254,7 @@ function ensureTurn() {
   const av = document.createElement('div'); av.className = 'assistant-avatar'; av.textContent = '✳';
   const body = document.createElement('div'); body.className = 'assistant-body';
   msg.appendChild(av); msg.appendChild(body); wrap(msg);
-  turn = { body, curText: null, curRaw: '', curBlock: null, tools: new Map(), thinkEl: null, thinkRaw: '', blocks: [] };
+  turn = { msg, body, curText: null, curRaw: '', curBlock: null, tools: new Map(), thinkEl: null, thinkRaw: '', blocks: [] };
   return turn;
 }
 function newTextBlock() { const t = ensureTurn(); const el = document.createElement('div'); el.className = 'md'; t.body.appendChild(el); t.curText = el; t.curRaw = ''; t.curBlock = { type: 'text', text: '' }; t.blocks.push(t.curBlock); return el; }
@@ -210,7 +278,7 @@ function onToolResult(id, isError, text) {
   scrollDown();
 }
 function onErrorLine(text) { hideWelcome(); const el = document.createElement('div'); el.className = 'err-line'; el.textContent = '⚠ ' + text; if (turn && turn.body) turn.body.appendChild(el); else wrap(el); scrollDown(true); }
-function endTurn() { if (turn && turn.blocks.length) { convo.push({ role: 'assistant', blocks: turn.blocks }); persist(); } turn = null; }
+function endTurn(meta) { if (turn && turn.blocks.length) { convo.push({ role: 'assistant', blocks: turn.blocks }); persist(); if (turn.msg) decorateAssistant(turn.msg, meta); } turn = null; }
 
 /* ---------------- permission cards ---------------- */
 function onPermission(requestId, tool, input) {
@@ -237,7 +305,7 @@ cc.onChat((ev) => {
     case 'tool_use': onToolUse(ev.id, ev.name, ev.input); break;
     case 'tool_result': onToolResult(ev.id, ev.isError, ev.text); break;
     case 'permission': onPermission(ev.requestId, ev.tool, ev.input); break;
-    case 'turn_end': endTurn(); break;
+    case 'turn_end': endTurn({ usage: ev.usage, costUsd: ev.costUsd }); break;
     case 'auth_failed': endTurn(); onErrorLine('This account is not signed in. Open the account switcher and Log in.'); break;
     case 'error': endTurn(); onErrorLine(ev.text || 'Something went wrong.'); break;
     case 'limit': endTurn(); break;
@@ -273,7 +341,12 @@ function renderAttachments() {
 
 $('sendBtn').onclick = sendMessage;
 $('input').addEventListener('input', () => { autoGrow(); updateComposer(); });
-$('input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); } });
+$('input').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.isComposing) return;
+  const enterSends = (state.settings || {}).enterSends !== false;
+  const wantSend = enterSends ? (!e.shiftKey) : (e.ctrlKey || e.metaKey);
+  if (wantSend) { e.preventDefault(); sendMessage(); }
+});
 $('stopBtn').onclick = () => cc.interrupt();
 $('attachBtn').onclick = async () => { const files = await cc.pickFiles(); if (files && files.length) { attachments = attachments.concat(files); renderAttachments(); } };
 $('newChatBtn').onclick = async () => { if (!state.projectDir) { toast('Pick a project folder first', 'err'); flashProject(); return; } const r = await cc.newChat(); if (r && !r.ok) toast(r.error || 'Could not start', 'err'); };
@@ -351,7 +424,10 @@ async function doSwitch(id) { onErrorLine('Switching account…'); const r = awa
 /* ---------------- settings ---------------- */
 function openSettings() {
   const s = state.settings || {};
-  $('setTheme').value = s.theme === 'light' ? 'light' : 'dark';
+  $('setTheme').value = ['light', 'system'].includes(s.theme) ? s.theme : 'dark';
+  $('setWidth').value = s.width === 'wide' ? 'wide' : 'comfortable';
+  $('setFontScale').value = ['small', 'large'].includes(s.fontScale) ? s.fontScale : 'normal';
+  $('setEnterSends').checked = s.enterSends !== false;
   $('setModel').value = s.model || '';
   $('setEffort').value = s.effort || 'medium';
   $('setAutoSwitch').checked = !!s.autoSwitch;
@@ -377,7 +453,22 @@ $('setStartup').onchange = async (e) => { state.settings = await cc.setSettings(
 $('exportBtn').onclick = async () => { const r = await cc.exportConfig(); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); };
 $('importBtn').onclick = async () => { const r = await cc.importConfig(); if (r && r.ok) toast('Imported — accounts restored', 'ok'); else if (r && r.error) toast(r.error, 'err'); };
 $('ghBtn').onclick = () => cc.openExternal('https://github.com/Chamanrajragu/claude-multi');
-function applyTheme(t) { document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark'); }
+$('setWidth').onchange = async (e) => { applyAppearance({ width: e.target.value }); state.settings = await cc.setSettings({ width: e.target.value }); };
+$('setFontScale').onchange = async (e) => { applyAppearance({ fontScale: e.target.value }); state.settings = await cc.setSettings({ fontScale: e.target.value }); };
+$('setEnterSends').onchange = async (e) => { state.settings = await cc.setSettings({ enterSends: e.target.checked }); };
+
+const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+function applyTheme(t) {
+  const eff = t === 'system' ? (mq && mq.matches ? 'light' : 'dark') : (t === 'light' ? 'light' : 'dark');
+  document.documentElement.setAttribute('data-theme', eff);
+}
+function applyAppearance(s) {
+  s = s || (state.settings || {});
+  if (s.theme !== undefined) applyTheme(s.theme);
+  document.documentElement.setAttribute('data-width', s.width === 'wide' ? 'wide' : 'comfortable');
+  document.documentElement.setAttribute('data-fontscale', ['small', 'large'].includes(s.fontScale) ? s.fontScale : 'normal');
+}
+if (mq) mq.addEventListener('change', () => { if ((state.settings || {}).theme === 'system') applyTheme('system'); });
 
 /* ---------------- prompt modal ---------------- */
 function uiPrompt(label, def, okLabel) {
@@ -392,15 +483,85 @@ function uiPrompt(label, def, okLabel) {
   });
 }
 
+/* ---------------- command palette ---------------- */
+let cmdkItems = [], cmdkIdx = 0;
+function buildCommands() {
+  const cmds = [];
+  cmds.push({ icon: '＋', label: 'New chat', hint: 'Ctrl+N', run: () => $('newChatBtn').click() });
+  cmds.push({ icon: '🔍', label: 'Search chats', hint: 'Ctrl+F', run: () => { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } });
+  cmds.push({ icon: '📤', label: 'Export this chat as Markdown', run: async () => { const r = await cc.exportMd(); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); } });
+  cmds.push({ icon: '🎨', label: 'Toggle light / dark theme', run: async () => { const cur = (state.settings || {}).theme; const next = cur === 'light' ? 'dark' : 'light'; applyTheme(next); state.settings = await cc.setSettings({ theme: next }); } });
+  cmds.push({ icon: '⚙', label: 'Open settings', run: () => openSettings() });
+  cmds.push({ icon: '⌨', label: 'Keyboard shortcuts', hint: 'Ctrl+/', run: () => $('shortcutsModal').classList.remove('hidden') });
+  cmds.push({ icon: '🐙', label: 'Open project on GitHub', run: () => cc.openExternal('https://github.com/Chamanrajragu/claude-multi') });
+  for (const a of state.accounts) {
+    const v = accView(a);
+    cmds.push({ icon: '👤', label: 'Account: ' + a.name, hint: v.needLogin ? 'log in' : v.label, run: () => { if (v.needLogin) openLogin(a); else useAccount(a.id); } });
+  }
+  for (const c of state.conversations) cmds.push({ icon: '💬', label: 'Chat: ' + (c.title || 'New chat'), run: () => openConvo(c.id) });
+  return cmds;
+}
+function renderCmdk(filter) {
+  const q = (filter || '').trim().toLowerCase();
+  const all = buildCommands();
+  cmdkItems = q ? all.filter((c) => c.label.toLowerCase().includes(q)) : all;
+  cmdkIdx = 0;
+  const list = $('cmdkList'); list.innerHTML = '';
+  if (!cmdkItems.length) { const d = document.createElement('div'); d.className = 'cmdk-empty'; d.textContent = 'No matching commands'; list.appendChild(d); return; }
+  cmdkItems.forEach((c, i) => {
+    const el = document.createElement('div'); el.className = 'cmdk-item' + (i === cmdkIdx ? ' active' : '');
+    el.innerHTML = `<span class="cmdk-ico">${escapeHtml(c.icon)}</span><span class="cmdk-lbl"></span>${c.hint ? `<span class="cmdk-hint">${escapeHtml(c.hint)}</span>` : ''}`;
+    el.querySelector('.cmdk-lbl').textContent = c.label;
+    el.onmouseenter = () => { cmdkIdx = i; highlightCmdk(); };
+    el.onclick = () => runCmdk(i);
+    list.appendChild(el);
+  });
+}
+function highlightCmdk() { document.querySelectorAll('#cmdkList .cmdk-item').forEach((el, i) => el.classList.toggle('active', i === cmdkIdx)); }
+function runCmdk(i) { const c = cmdkItems[i]; closeCmdk(); if (c) try { c.run(); } catch (e) { toast('Command failed', 'err'); } }
+function openCmdk() { closeMenus(); $('cmdkModal').classList.remove('hidden'); const inp = $('cmdkInput'); inp.value = ''; renderCmdk(''); setTimeout(() => inp.focus(), 20); }
+function closeCmdk() { $('cmdkModal').classList.add('hidden'); }
+$('cmdkInput').addEventListener('input', (e) => renderCmdk(e.target.value));
+$('cmdkInput').addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); cmdkIdx = Math.min(cmdkIdx + 1, cmdkItems.length - 1); highlightCmdk(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); cmdkIdx = Math.max(cmdkIdx - 1, 0); highlightCmdk(); }
+  else if (e.key === 'Enter') { e.preventDefault(); runCmdk(cmdkIdx); }
+  else if (e.key === 'Escape') { e.preventDefault(); closeCmdk(); }
+});
+$('cmdkModal').addEventListener('click', (e) => { if (e.target === $('cmdkModal')) closeCmdk(); });
+$('cmdkBtn').onclick = openCmdk;
+$('shortcutsClose').onclick = () => $('shortcutsModal').classList.add('hidden');
+$('shortcutsModal').addEventListener('click', (e) => { if (e.target === $('shortcutsModal')) $('shortcutsModal').classList.add('hidden'); });
+
+/* ---------------- global shortcuts (Ctrl+K/N/F, Ctrl+/) ---------------- */
+window.addEventListener('keydown', (e) => {
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (!ctrl) return;
+  if (e.key === 'k' || e.key === 'K') { e.preventDefault(); if ($('cmdkModal').classList.contains('hidden')) openCmdk(); else closeCmdk(); }
+  else if (e.key === '/') { e.preventDefault(); $('shortcutsModal').classList.toggle('hidden'); }
+  else if ((e.key === 'n' || e.key === 'N') && !e.shiftKey) { e.preventDefault(); $('newChatBtn').click(); }
+  else if ((e.key === 'f' || e.key === 'F') && !e.shiftKey) { e.preventDefault(); if (state.projectDir) { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } }
+});
+
+/* ---------------- drag & drop attachments ---------------- */
+(() => {
+  const drop = $('main');
+  ['dragover', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); }));
+  drop.addEventListener('drop', (e) => {
+    const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []).map((f) => f.path).filter(Boolean);
+    if (files.length) { attachments = attachments.concat(files); renderAttachments(); toast(files.length + ' file' + (files.length > 1 ? 's' : '') + ' attached', 'ok'); }
+  });
+})();
+
 /* ---------------- toast ---------------- */
 let toastTimer = null;
 function toast(msg, kind) { const el = $('toast'); el.textContent = msg; el.className = 'toast' + (kind === 'err' ? ' err' : ''); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.add('hidden'), 2600); }
 
 /* ---------------- boot ---------------- */
-cc.onState((s) => { state = Object.assign(state, s); if (s.settings) applyTheme(s.settings.theme); renderAll(); });
+cc.onState((s) => { state = Object.assign(state, s); if (s.settings) applyAppearance(s.settings); renderAll(); });
 (async () => {
   state = await cc.getState();
-  applyTheme(state.settings && state.settings.theme);
+  applyAppearance(state.settings || {});
   renderAll();
   if (state.projectDir) { try { const h = await cc.getHistory(); if (h && h.log && h.log.length) renderHistory(h.log); } catch {} }
   setInterval(() => { if (state.accounts.some((a) => a.cooldownUntil && a.cooldownUntil > Date.now())) renderAccountRow(); }, 30000);

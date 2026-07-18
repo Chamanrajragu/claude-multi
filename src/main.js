@@ -60,6 +60,34 @@ function titleFromLog(log) {
   if (!u) return 'New chat';
   return (String(u.text || '').replace(/\s+/g, ' ').trim().slice(0, 46)) || 'New chat';
 }
+// Render a stored conversation log to a portable Markdown transcript.
+function conversationToMarkdown(c) {
+  const lines = [];
+  lines.push('# ' + (c.title || 'Claude Multi chat'));
+  lines.push('');
+  lines.push('_Exported from Claude Multi on ' + new Date().toLocaleString() + '_');
+  lines.push('');
+  for (const m of c.log || []) {
+    if (m.role === 'user') {
+      lines.push('## 🧑 You');
+      lines.push('');
+      lines.push(String(m.text || ''));
+      lines.push('');
+    } else if (m.role === 'assistant') {
+      lines.push('## ✳ Claude');
+      lines.push('');
+      for (const b of m.blocks || []) {
+        if (b.type === 'text') { lines.push(String(b.text || '')); lines.push(''); }
+        else if (b.type === 'tool') {
+          lines.push('> **🛠 ' + (b.name || 'tool') + '**' + (b.summary ? ' — `' + b.summary + '`' : ''));
+          lines.push('');
+        }
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
 function getProjectData(project) {
   const m = store.get('projectChats') || {};
   let d = m[project];
@@ -117,10 +145,10 @@ function toRenderer(channel, payload) {
 
 function conversationList(project) {
   const d = getProjectData(project);
-  return {
-    conversations: d.conversations.map((c) => ({ id: c.id, title: c.title || 'New chat', updatedAt: c.updatedAt || 0, empty: !(c.log && c.log.length) })),
-    currentConvoId: d.currentId,
-  };
+  const items = d.conversations.map((c) => ({ id: c.id, title: c.title || 'New chat', updatedAt: c.updatedAt || 0, pinned: !!c.pinned, empty: !(c.log && c.log.length) }));
+  // Pinned conversations float to the top (stable within each group).
+  items.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+  return { conversations: items, currentConvoId: d.currentId };
 }
 function statePayload() {
   const conv = conversationList(state.projectDir);
@@ -436,6 +464,27 @@ function registerIpc() {
     return { ok: true };
   });
   ipcMain.handle('chat:renameConvo', (_e, id, title) => { updateConvo(state.projectDir, id, { title: String(title || '').slice(0, 80) || 'New chat' }); pushState(); return { ok: true }; });
+  ipcMain.handle('chat:pinConvo', (_e, id) => {
+    const d = getProjectData(state.projectDir);
+    const c = d.conversations.find((x) => x.id === id);
+    if (c) { updateConvo(state.projectDir, id, { pinned: !c.pinned }); pushState(); return { ok: true, pinned: !c.pinned }; }
+    return { ok: false };
+  });
+  ipcMain.handle('chat:exportMd', async (_e, id) => {
+    const d = getProjectData(state.projectDir);
+    const c = d.conversations.find((x) => x.id === (id || d.currentId)) || currentConvo(state.projectDir);
+    if (!c || !(c.log && c.log.length)) return { ok: false, error: 'Nothing to export yet' };
+    const md = conversationToMarkdown(c);
+    const safe = String(c.title || 'chat').replace(/[^a-z0-9\-_ ]+/gi, '').trim().slice(0, 40) || 'chat';
+    const res = await dialog.showSaveDialog(win, {
+      title: 'Export conversation to Markdown',
+      defaultPath: path.join(os.homedir(), safe + '.md'),
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    });
+    if (res.canceled || !res.filePath) return { ok: false };
+    try { fs.writeFileSync(res.filePath, md); return { ok: true, path: res.filePath }; }
+    catch (e) { return { ok: false, error: String(e.message || e) }; }
+  });
   ipcMain.handle('chat:deleteConvo', (_e, id) => {
     const d = getProjectData(state.projectDir);
     d.conversations = d.conversations.filter((x) => x.id !== id);

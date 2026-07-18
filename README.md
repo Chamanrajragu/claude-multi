@@ -50,7 +50,11 @@ No credential hacking, nothing against the rules — each account simply gets it
 - 📁 **A preferred account per project** — each project folder remembers which account it uses.
 - 🔐 **Subscription login, no API key** — sign in each account once with your normal Claude subscription (Pro / Max / Team). Nothing is billed per token.
 - 🔔 **Desktop notifications** when a limit is hit or an account switches.
-- 🌗 **Dark & light themes** with a clean, Claude-style UI.
+- 🎨 **Themes that fit you** — dark, light, or **match your system**, plus adjustable **message width** and **text size**.
+- ⌨️ **Command palette (Ctrl/Cmd + K)** — jump to any account, chat, or action; a built-in **shortcuts sheet** (Ctrl/Cmd + /) is one keystroke away.
+- 📋 **One-click copy** — copy any assistant reply or individual **code block**, and **export a whole chat to Markdown**.
+- 📌 **Pin & search chats** — keep important conversations at the top and filter the list instantly.
+- ✨ **Starter prompts, drag-and-drop attachments, per-reply token/cost readout**, and a floating **scroll-to-latest** button.
 - 🔒 **100% local** — no telemetry, no analytics, and your logins never leave your machine.
 
 ## Why a desktop app instead of the raw terminal?
@@ -130,8 +134,12 @@ git add .github/workflows && git commit -m "Enable GitHub Actions" && git push
 
 | Shortcut | Action |
 | --- | --- |
+| `Ctrl/Cmd + K` | Command palette (accounts, chats, actions) |
+| `Ctrl/Cmd + /` | Keyboard shortcuts sheet |
+| `Ctrl/Cmd + N` | New chat |
+| `Ctrl/Cmd + F` | Search chats |
 | `Ctrl/Cmd + 1…9` | Switch to the Nth account |
-| `Enter` / `Shift + Enter` | Send message / new line |
+| `Enter` / `Shift + Enter` | Send message / new line (configurable in Settings) |
 | `Ctrl/Cmd + V` | Paste (also into the login code box) |
 | `Esc` | Close a dialog / the login window |
 

@@ -11,7 +11,10 @@ const DEFAULT_SETTINGS = {
   autoSwitch: false,        // switch automatically (with a short countdown) vs. ask
   autoSwitchDelay: 6,       // seconds to count down before an auto-switch
   notify: true,            // OS notifications on limit / switch
-  theme: 'dark',           // 'dark' | 'light'
+  theme: 'dark',           // 'dark' | 'light' | 'system'
+  width: 'comfortable',    // chat column width: 'comfortable' | 'wide'
+  fontScale: 'normal',     // chat text size: 'small' | 'normal' | 'large'
+  enterSends: true,        // Enter sends (true) vs. inserts newline (false)
   fontSize: 13,            // terminal font size
   extraArgs: '',           // extra flags passed to `claude` on launch
   confirmClose: true,      // warn before quitting during a live session

@@ -25,7 +25,11 @@
       </div>
 
       <div class="side-mid">
-        <div class="side-label">Chats</div>
+        <div class="side-label-row">
+          <span class="side-label">Chats</span>
+          <button id="cmdkBtn" class="side-mini" title="Command palette (Ctrl+K)">⌘K</button>
+        </div>
+        <input id="convoSearch" class="convo-search hidden" placeholder="Search chats…" />
         <div id="convoList" class="convo-list"></div>
       </div>
 
@@ -62,8 +66,13 @@
             <li><b>3.</b> Choose an account and start chatting.</li>
             <li><b>4.</b> When one runs out, switch accounts — your conversation carries over.</li>
           </ol>
+          <div class="welcome-starters">
+            <div class="ws-label">Try asking</div>
+            <div id="starterChips" class="starter-chips"></div>
+          </div>
         </div>
       </div>
+      <button id="scrollDownBtn" class="scroll-down hidden" title="Scroll to latest">↓</button>
 
       <div id="composer" class="composer">
         <div id="genBar" class="gen-bar hidden"><span class="gen-spinner"></span><span id="genText">Claude is working…</span><button id="stopBtn" class="stop-btn">Stop</button></div>
@@ -122,8 +131,14 @@
         <button id="settingsClose" class="x-btn settings-x">✕</button>
         <div class="spane" data-pane="appearance">
           <h3>Appearance</h3>
-          <div class="setting-row"><div><div class="s-title">Theme</div><div class="s-sub">Match Claude's light or dark look</div></div>
-            <select id="setTheme"><option value="dark">Claude Dark</option><option value="light">Claude Light</option></select></div>
+          <div class="setting-row"><div><div class="s-title">Theme</div><div class="s-sub">Match Claude's look, or follow your system</div></div>
+            <select id="setTheme"><option value="dark">Claude Dark</option><option value="light">Claude Light</option><option value="system">Match system</option></select></div>
+          <div class="setting-row"><div><div class="s-title">Message width</div><div class="s-sub">Comfortable reading column or full width</div></div>
+            <select id="setWidth"><option value="comfortable">Comfortable</option><option value="wide">Wide</option></select></div>
+          <div class="setting-row"><div><div class="s-title">Text size</div><div class="s-sub">Chat font size</div></div>
+            <select id="setFontScale"><option value="small">Small</option><option value="normal">Normal</option><option value="large">Large</option></select></div>
+          <div class="setting-row"><div><div class="s-title">Send on Enter</div><div class="s-sub">Off: Enter makes a new line, Ctrl+Enter sends</div></div>
+            <label class="switch"><input type="checkbox" id="setEnterSends" /><span class="slider"></span></label></div>
         </div>
         <div class="spane hidden" data-pane="chat">
           <h3>Chat</h3>
@@ -163,6 +178,31 @@
       <p id="promptLabel" class="prompt-label"></p>
       <input id="promptInput" class="prompt-input" type="text" />
       <div class="modal-actions"><button id="promptCancel" class="btn-ghost">Cancel</button><button id="promptOk" class="btn-primary">OK</button></div>
+    </div>
+  </div>
+
+  <!-- ============ COMMAND PALETTE ============ -->
+  <div id="cmdkModal" class="overlay hidden">
+    <div class="cmdk">
+      <input id="cmdkInput" class="cmdk-input" placeholder="Type a command or search…" />
+      <div id="cmdkList" class="cmdk-list"></div>
+    </div>
+  </div>
+
+  <!-- ============ SHORTCUTS HELP ============ -->
+  <div id="shortcutsModal" class="overlay hidden">
+    <div class="modal shortcuts-modal">
+      <div class="modal-head"><h2>Keyboard shortcuts</h2><button id="shortcutsClose" class="x-btn">✕</button></div>
+      <div class="shortcut-grid">
+        <div class="sc-key">Ctrl / ⌘ + K</div><div class="sc-desc">Command palette</div>
+        <div class="sc-key">Ctrl / ⌘ + /</div><div class="sc-desc">This shortcuts sheet</div>
+        <div class="sc-key">Ctrl / ⌘ + N</div><div class="sc-desc">New chat</div>
+        <div class="sc-key">Ctrl / ⌘ + F</div><div class="sc-desc">Search chats</div>
+        <div class="sc-key">Ctrl / ⌘ + 1…9</div><div class="sc-desc">Switch to the Nth account</div>
+        <div class="sc-key">Enter</div><div class="sc-desc">Send message</div>
+        <div class="sc-key">Shift + Enter</div><div class="sc-desc">New line</div>
+        <div class="sc-key">Esc</div><div class="sc-desc">Close a dialog / menu</div>
+      </div>
     </div>
   </div>
 

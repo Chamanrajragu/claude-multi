@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('cc', {
   openConvo: (id) => ipcRenderer.invoke('chat:openConvo', id),
   renameConvo: (id, title) => ipcRenderer.invoke('chat:renameConvo', id, title),
   deleteConvo: (id) => ipcRenderer.invoke('chat:deleteConvo', id),
+  pinConvo: (id) => ipcRenderer.invoke('chat:pinConvo', id),
+  exportMd: (id) => ipcRenderer.invoke('chat:exportMd', id),
 
   // ---- login (interactive terminal, one-time per account) ----
   loginStart: (accountId) => ipcRenderer.invoke('login:start', accountId),
