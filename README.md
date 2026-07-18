@@ -21,6 +21,14 @@
 
 <img src="docs/screenshot-main.png" width="820" alt="Claude Multi main window" />
 
+<br/>
+
+### 🎬 See it in action
+
+<img src="docs/demo.gif" width="820" alt="Claude Multi — parallel chats, voice, and auto-continue on usage limits" />
+
+**▶️ [Watch the full 2-minute feature tour](https://github.com/Chamanrajragu/claude-multi/releases/latest)**
+
 </div>
 
 ---
