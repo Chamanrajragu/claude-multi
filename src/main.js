@@ -6,7 +6,7 @@
 //     and account switching that carries the conversation across accounts.
 //   - LOGIN: a small interactive terminal (pty-host) used only to run /login
 //     once per account (OAuth can't run in headless chat mode).
-const { app, BrowserWindow, ipcMain, dialog, Notification, shell, Menu, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, shell, Menu, Tray, nativeImage, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -190,7 +190,8 @@ function startSession(accountId, resumeId) {
     model: s.model || '',
     effort: s.effort || '',
     resumeId: resumeId || '',
-    permissionMode: 'default', // "ask each time" via canUseTool
+    permissionMode: 'default', // SDK stays in default; approvalMode decides prompting
+    approvalMode: s.permissionMode || 'ask', // 'ask' | 'acceptEdits' | 'bypass'
     onEvent: (ev) => onChatEvent(accountId, ev),
   });
   state.session = session;
@@ -419,7 +420,7 @@ function registerIpc() {
     if (patch && Object.prototype.hasOwnProperty.call(patch, 'startOnLogin')) applyLoginItem(s.startOnLogin);
     // Model / effort changes take effect by restarting the live session (which
     // resumes the same conversation).
-    const touchesEngine = patch && (Object.prototype.hasOwnProperty.call(patch, 'model') || Object.prototype.hasOwnProperty.call(patch, 'effort'));
+    const touchesEngine = patch && (Object.prototype.hasOwnProperty.call(patch, 'model') || Object.prototype.hasOwnProperty.call(patch, 'effort') || Object.prototype.hasOwnProperty.call(patch, 'permissionMode'));
     if (touchesEngine && state.running && state.activeAccountId) useAccountForChat(state.activeAccountId);
     pushState();
     return s;
@@ -542,6 +543,19 @@ function registerIpc() {
     });
     if (res.canceled) return [];
     return res.filePaths || [];
+  });
+  // Save an image sitting on the clipboard (e.g. a screenshot) to a temp file
+  // and return its path so it can be attached like any other file.
+  ipcMain.handle('app:pasteImage', () => {
+    try {
+      const img = clipboard.readImage();
+      if (!img || img.isEmpty()) return { ok: false, error: 'No image on the clipboard' };
+      const dir = path.join(os.tmpdir(), 'claude-multi-paste');
+      fs.mkdirSync(dir, { recursive: true });
+      const p = path.join(dir, 'paste-' + Date.now() + '.png');
+      fs.writeFileSync(p, img.toPNG());
+      return { ok: true, path: p };
+    } catch (e) { return { ok: false, error: String(e.message || e) }; }
   });
   ipcMain.handle('app:openExternal', (_e, url) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return true; });
   ipcMain.handle('app:openConfigDir', (_e, id) => { const a = store.byId(id); if (a) shell.openPath(a.configDir); return true; });

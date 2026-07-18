@@ -23,6 +23,9 @@
 //   { type:'error', text }
 //   { type:'exit' }
 
+// File-mutating tools that "Auto-accept edits" mode approves without asking.
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Update', 'ApplyPatch']);
+
 let sdkPromise = null;
 function loadSdk() {
   // The SDK is ESM; load it from CommonJS via dynamic import (cached).
@@ -53,7 +56,7 @@ function classifyError(text) {
 }
 
 class ChatSession {
-  constructor({ claudePath, configDir, cwd, model, effort, resumeId, permissionMode, onEvent }) {
+  constructor({ claudePath, configDir, cwd, model, effort, resumeId, permissionMode, approvalMode, onEvent }) {
     this.claudePath = claudePath;
     this.configDir = configDir;
     this.cwd = cwd;
@@ -61,6 +64,11 @@ class ChatSession {
     this.effort = effort || '';
     this.resumeId = resumeId || '';
     this.permissionMode = permissionMode || 'default';
+    // How to answer tool-permission requests:
+    //   'ask'          — prompt the user for every tool (default, safest)
+    //   'acceptEdits'  — auto-allow file edits, prompt for the rest
+    //   'bypass'       — auto-allow everything, never prompt
+    this.approvalMode = approvalMode || 'ask';
     this.onEvent = onEvent || (() => {});
     this.q = null;
     this.alive = false;
@@ -171,6 +179,9 @@ class ChatSession {
   }
 
   _canUseTool(toolName, toolInput) {
+    // Auto-approval modes skip the prompt entirely.
+    if (this.approvalMode === 'bypass') return Promise.resolve({ behavior: 'allow', updatedInput: toolInput });
+    if (this.approvalMode === 'acceptEdits' && EDIT_TOOLS.has(toolName)) return Promise.resolve({ behavior: 'allow', updatedInput: toolInput });
     return new Promise((resolve) => {
       const id = 'perm_' + (++this._permSeq);
       this._perms.set(id, { resolve, input: toolInput });

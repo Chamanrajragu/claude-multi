@@ -8,6 +8,7 @@ const os = require('os');
 const ACCOUNTS_ROOT = path.join(os.homedir(), '.claude-accounts');
 
 const DEFAULT_SETTINGS = {
+  permissionMode: 'ask',    // tool approvals: 'ask' | 'acceptEdits' | 'bypass'
   autoSwitch: false,        // switch automatically (with a short countdown) vs. ask
   autoSwitchDelay: 6,       // seconds to count down before an auto-switch
   notify: true,            // OS notifications on limit / switch

@@ -42,6 +42,8 @@ No credential hacking, nothing against the rules — each account simply gets it
 ## Features
 
 - 💬 **A real chat interface, not a terminal** — talk to Claude in a clean chat window: streamed markdown replies, collapsible **tool cards** (edits, commands, searches), and inline **Allow / Deny** prompts before Claude touches your files.
+- 🛡️ **Permission modes** — keep the safe **Ask every time**, switch to **Auto-accept file edits**, or go hands-free with **Allow everything (no prompts)** — set it once in Settings → Chat.
+- 📎 **Paste & drop attachments** — paste a screenshot or copied image straight into the composer, or drag files onto the window.
 - 🔁 **One conversation, any account** — your chat belongs to the **project**, not the account. Switch accounts and the conversation is carried over and continues right where it left off; the full history stays visible when you switch back or reopen the app.
 - 🔄 **Auto-switch on usage limit** — the moment an account hits its Claude usage/session limit, Claude Multi rotates to the next available account (or asks first). No more waiting hours for a reset when you have another account idle.
 - ⏳ **Cooldown tracking** — remembers when each rate-limited account resets and skips accounts that are still cooling down, picking the one that frees up soonest.

@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('cc', {
 
   // ---- misc ----
   pickFiles: () => ipcRenderer.invoke('app:pickFiles'),
+  pasteImage: () => ipcRenderer.invoke('app:pasteImage'),
   exportConfig: () => ipcRenderer.invoke('app:export'),
   importConfig: () => ipcRenderer.invoke('app:import'),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),

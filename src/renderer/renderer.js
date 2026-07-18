@@ -347,6 +347,19 @@ $('input').addEventListener('keydown', (e) => {
   const wantSend = enterSends ? (!e.shiftKey) : (e.ctrlKey || e.metaKey);
   if (wantSend) { e.preventDefault(); sendMessage(); }
 });
+// Paste images (screenshots / copied images) or files straight into the chat.
+$('input').addEventListener('paste', async (e) => {
+  const dt = e.clipboardData; if (!dt) return;
+  const files = Array.from(dt.files || []).map((f) => f.path).filter(Boolean);
+  if (files.length) { e.preventDefault(); attachments = attachments.concat(files); renderAttachments(); toast(files.length + ' file' + (files.length > 1 ? 's' : '') + ' attached', 'ok'); return; }
+  const hasImage = Array.from(dt.items || []).some((it) => it.type && it.type.startsWith('image/'));
+  if (hasImage) {
+    e.preventDefault();
+    const r = await cc.pasteImage();
+    if (r && r.ok) { attachments.push(r.path); renderAttachments(); toast('Image pasted', 'ok'); }
+    else toast((r && r.error) || 'Could not paste image', 'err');
+  }
+});
 $('stopBtn').onclick = () => cc.interrupt();
 $('attachBtn').onclick = async () => { const files = await cc.pickFiles(); if (files && files.length) { attachments = attachments.concat(files); renderAttachments(); } };
 $('newChatBtn').onclick = async () => { if (!state.projectDir) { toast('Pick a project folder first', 'err'); flashProject(); return; } const r = await cc.newChat(); if (r && !r.ok) toast(r.error || 'Could not start', 'err'); };
@@ -428,6 +441,7 @@ function openSettings() {
   $('setWidth').value = s.width === 'wide' ? 'wide' : 'comfortable';
   $('setFontScale').value = ['small', 'large'].includes(s.fontScale) ? s.fontScale : 'normal';
   $('setEnterSends').checked = s.enterSends !== false;
+  $('setPermission').value = ['acceptEdits', 'bypass'].includes(s.permissionMode) ? s.permissionMode : 'ask';
   $('setModel').value = s.model || '';
   $('setEffort').value = s.effort || 'medium';
   $('setAutoSwitch').checked = !!s.autoSwitch;
@@ -444,6 +458,7 @@ document.querySelectorAll('.snav').forEach((b) => { b.onclick = () => {
   const p = b.dataset.pane; document.querySelectorAll('.spane').forEach((x) => x.classList.toggle('hidden', x.dataset.pane !== p));
 }; });
 $('setTheme').onchange = async (e) => { applyTheme(e.target.value); state.settings = await cc.setSettings({ theme: e.target.value }); };
+$('setPermission').onchange = async (e) => { state.settings = await cc.setSettings({ permissionMode: e.target.value }); toast(e.target.value === 'bypass' ? 'Allowing all tools — no more prompts' : (e.target.value === 'acceptEdits' ? 'Auto-accepting file edits' : 'Will ask before each tool'), 'ok'); };
 $('setModel').onchange = async (e) => { state.settings = await cc.setSettings({ model: e.target.value }); renderModelLabel(); };
 $('setEffort').onchange = async (e) => { state.settings = await cc.setSettings({ effort: e.target.value }); renderModelLabel(); };
 $('setAutoSwitch').onchange = async (e) => { state.settings = await cc.setSettings({ autoSwitch: e.target.checked }); };
