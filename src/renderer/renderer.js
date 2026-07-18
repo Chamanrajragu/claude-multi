@@ -130,23 +130,31 @@ function renderTop() {
   renderModelLabel();
 }
 const MODELS = [
-  ['', 'Default (account)'],
+  ['claude-fable-5', 'Fable 5'],
   ['claude-opus-4-8', 'Opus 4.8'],
   ['claude-opus-4-7', 'Opus 4.7'],
   ['claude-opus-4-6', 'Opus 4.6'],
   ['claude-sonnet-5', 'Sonnet 5'],
   ['claude-sonnet-4-6', 'Sonnet 4.6'],
   ['claude-haiku-4-5', 'Haiku 4.5'],
+  ['', 'Default (account)'],
 ];
 // Legacy aliases → friendly labels, so an older stored setting still reads right.
 const MODEL_ALIASES = { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' };
-const EFFORTS = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultrathink']];
+const EFFORTS = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Max']];
+const PERMS = [['ask', 'Ask each time'], ['acceptEdits', 'Accept edits'], ['bypass', 'Bypass permissions']];
 function labelFor(list, id, fb) { const f = list.find((x) => x[0] === id); if (f) return f[1]; if (list === MODELS && MODEL_ALIASES[id]) return MODEL_ALIASES[id]; return fb; }
 // Short label for the compact chip (drop the "(account)" suffix).
 function shortModelLabel(id) { return labelFor(MODELS, id || '', 'Default').replace(' (account)', ''); }
 function renderModelLabel() {
   $('modelChipLabel').textContent = shortModelLabel((state.settings && state.settings.model) || '');
   $('effortChipLabel').textContent = labelFor(EFFORTS, (state.settings && state.settings.effort) || 'medium', 'Medium');
+  const pm = (state.settings && state.settings.permissionMode) || 'ask';
+  const pc = $('permChip'); if (pc) {
+    $('permChipLabel').textContent = labelFor(PERMS, pm, 'Ask each time');
+    pc.classList.toggle('bypass', pm === 'bypass');
+    pc.classList.toggle('accept', pm === 'acceptEdits');
+  }
 }
 function updateComposer() {
   const can = state.running;
@@ -196,28 +204,44 @@ function applyTurnUsage(u, costUsd) {
 }
 function fmtTokens(n) { n = Math.max(0, Math.round(n || 0)); if (n >= 1000) return (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, '') + 'K'; return String(n); }
 function renderUsage() {
-  const pill = $('usagePill'); if (!pill) return;
-  const hasData = usage.ctx > 0 || usage.turns > 0;
-  pill.classList.toggle('hidden', !(state.running && hasData));
   const pct = Math.max(0, Math.min(100, Math.round((usage.ctx / CONTEXT_WINDOW) * 100)));
   const left = Math.max(0, CONTEXT_WINDOW - usage.ctx);
-  $('usagePillText').textContent = fmtTokens(left) + ' left';
-  const fill = $('usageRingFill');
-  if (fill) { fill.style.background = `conic-gradient(var(--accent) ${pct * 3.6}deg, var(--border) 0deg)`; }
-  pill.classList.toggle('warn', pct >= 85);
-  // popover
-  const bar = $('usageBar'); if (bar) { bar.style.width = pct + '%'; bar.classList.toggle('warn', pct >= 85); }
+  // Composer status ring
+  const ring = $('usageRingFill');
+  if (ring) ring.style.background = `conic-gradient(var(--info) ${pct * 3.6}deg, var(--border) 0deg)`;
+  const rb = $('usageRingBtn'); if (rb) rb.classList.toggle('hidden', !state.running);
+  // Popover — "This chat"
   const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
-  set('usageModel', usage.model ? shortModelLabel(usage.model) : (shortModelLabel((state.settings || {}).model || '')));
-  set('usageCtxLine', `Context window · ${pct}% used`);
-  set('uCtx', fmtTokens(usage.ctx));
-  set('uLeft', fmtTokens(left));
-  set('uOut', fmtTokens(usage.lastOut));
-  set('uCache', fmtTokens(usage.lastCache));
-  set('uSessOut', fmtTokens(usage.sessOut));
-  set('uCost', '$' + (usage.sessCost || 0).toFixed(usage.sessCost >= 1 ? 2 : 4));
+  set('usageModel', usage.model ? shortModelLabel(usage.model) : shortModelLabel((state.settings || {}).model || ''));
+  set('usageCtxPct', pct + '% used');
+  const bar = $('usageBar'); if (bar) { bar.style.width = pct + '%'; bar.classList.toggle('warn', pct >= 85); }
+  set('usageCtxSub', fmtTokens(left) + ' tokens left of ~' + fmtTokens(CONTEXT_WINDOW));
+  set('usageFootStats', `Session: ${fmtTokens(usage.sessOut)} out · $${(usage.sessCost || 0).toFixed(usage.sessCost >= 1 ? 2 : 4)}`);
+  renderUsageAccounts();
 }
-$('usagePill').onclick = (e) => { e.stopPropagation(); const m = $('usageMenu'); const showing = !m.classList.contains('hidden'); closeMenus(); if (showing) return; renderUsage(); m.classList.remove('hidden'); const r = e.currentTarget.getBoundingClientRect(); m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 288)) + 'px'; m.style.top = (r.bottom + 8) + 'px'; };
+// Per-account bars (maps our multi-account cooldowns onto Claude-desktop's
+// "usage limits" layout): active account shows context fill; cooling accounts
+// show time-to-reset; the rest are Ready.
+function renderUsageAccounts() {
+  const box = $('usageAccounts'); if (!box) return;
+  box.innerHTML = '';
+  const now = Date.now();
+  const FULL = 5 * 3600e3; // ~5h reset window used only to scale the cooldown bar
+  const pctCtx = Math.max(0, Math.min(100, Math.round((usage.ctx / CONTEXT_WINDOW) * 100)));
+  let shown = 0;
+  for (const a of (state.accounts || [])) {
+    if (!a.loggedIn) continue;
+    shown++;
+    let pct = 0, sub = 'Ready', cls = 'info';
+    if (a.cooldownUntil && a.cooldownUntil > now) { pct = Math.max(6, Math.min(100, Math.round(((a.cooldownUntil - now) / FULL) * 100))); sub = 'Resets in ' + fmtCountdown(a.cooldownUntil - now); cls = 'warn'; }
+    else if (a.id === state.activeAccountId && state.running) { pct = pctCtx; sub = pctCtx + '% context used'; }
+    const row = document.createElement('div'); row.className = 'ua-row';
+    row.innerHTML = `<div class="ua-top"><span class="ua-name">${escapeHtml(a.name)}${a.id === state.activeAccountId ? ' <span class="ua-active">Active</span>' : ''}</span><span class="ua-sub">${escapeHtml(sub)}</span></div><div class="usage-bar-wrap sm"><div class="usage-bar ${cls}" style="width:${pct}%"></div></div>`;
+    box.appendChild(row);
+  }
+  if (!shown) { const d = document.createElement('div'); d.className = 'ul-sub'; d.textContent = 'No signed-in accounts yet.'; box.appendChild(d); }
+}
+$('usageRingBtn').onclick = (e) => { e.stopPropagation(); const m = $('usageMenu'); const showing = !m.classList.contains('hidden'); closeMenus(); if (showing) return; renderUsage(); m.classList.remove('hidden'); const r = e.currentTarget.getBoundingClientRect(); const w = 300; m.style.left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)) + 'px'; m.style.bottom = (window.innerHeight - r.top + 10) + 'px'; m.style.top = 'auto'; };
 
 /* ---------------- transcript ---------------- */
 const transcript = $('transcript');
@@ -469,18 +493,71 @@ async function addAccount() {
 }
 
 /* ---------------- menus ---------------- */
-function closeMenus() { document.querySelectorAll('.menu.ctx').forEach((n) => n.remove()); $('modelMenu').classList.add('hidden'); $('effortMenu').classList.add('hidden'); $('usageMenu').classList.add('hidden'); }
-document.addEventListener('click', (e) => { if (!e.target.closest('.menu') && !e.target.closest('#accountBtn') && !e.target.closest('#switchPill') && !e.target.closest('#modelChip') && !e.target.closest('#effortChip') && !e.target.closest('#usagePill') && !e.target.closest('.convo-more')) closeMenus(); });
-function openChipMenu(menuId, list, key, onPick) {
-  const menu = $(menuId);
+function closeMenus() { document.querySelectorAll('.menu.ctx').forEach((n) => n.remove()); $('modelMenu').classList.add('hidden'); $('effortMenu').classList.add('hidden'); $('permMenu').classList.add('hidden'); $('usageMenu').classList.add('hidden'); }
+document.addEventListener('click', (e) => { if (!e.target.closest('.menu') && !e.target.closest('#accountBtn') && !e.target.closest('#switchPill') && !e.target.closest('#modelChip') && !e.target.closest('#effortChip') && !e.target.closest('#permChip') && !e.target.closest('#usageRingBtn') && !e.target.closest('.convo-more')) closeMenus(); });
+// Position a composer popover just above its anchor chip.
+function anchorAbove(menu, anchor) {
+  menu.classList.remove('hidden');
+  const r = anchor.getBoundingClientRect();
+  const w = menu.offsetWidth || 240;
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+  menu.style.bottom = (window.innerHeight - r.top + 8) + 'px';
+  menu.style.top = 'auto';
+}
+// Model picker — Claude-desktop style: "Models" header, numbered rows, checkmark.
+function openModelMenu(anchor) {
+  const menu = $('modelMenu');
   if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
   closeMenus(); menu.innerHTML = '';
-  const cur = (state.settings && state.settings[key]) || (key === 'effort' ? 'medium' : '');
-  for (const [id, label] of list) { const b = document.createElement('button'); b.textContent = (id === cur ? '✓ ' : '') + label; b.onclick = async () => { menu.classList.add('hidden'); state.settings = await cc.setSettings({ [key]: id }); renderModelLabel(); onPick && onPick(label); }; menu.appendChild(b); }
-  menu.classList.remove('hidden');
+  const cur = (state.settings && state.settings.model) || '';
+  const lbl = document.createElement('div'); lbl.className = 'm-label'; lbl.textContent = 'Models'; menu.appendChild(lbl);
+  MODELS.forEach(([id, label], i) => {
+    const b = document.createElement('button'); b.className = 'model-row';
+    const num = id ? String(i + 1) : '';
+    b.innerHTML = `<span class="mr-check">${id === cur ? '✓' : ''}</span><span class="mr-name">${escapeHtml(label)}</span><span class="mr-num">${num}</span>`;
+    b.onclick = async () => { closeMenus(); state.settings = await cc.setSettings({ model: id }); renderModelLabel(); renderUsage(); toast('Model: ' + shortModelLabel(id), 'ok'); };
+    menu.appendChild(b);
+  });
+  anchorAbove(menu, anchor);
 }
-$('modelChip').onclick = (e) => { e.stopPropagation(); openChipMenu('modelMenu', MODELS, 'model', (l) => toast('Model: ' + l, 'ok')); const r = e.currentTarget.getBoundingClientRect(); const m = $('modelMenu'); m.style.left = r.left + 'px'; m.style.bottom = (window.innerHeight - r.top + 6) + 'px'; };
-$('effortChip').onclick = (e) => { e.stopPropagation(); openChipMenu('effortMenu', EFFORTS, 'effort', (l) => toast('Effort: ' + l, 'ok')); const r = e.currentTarget.getBoundingClientRect(); const m = $('effortMenu'); m.style.left = r.left + 'px'; m.style.bottom = (window.innerHeight - r.top + 6) + 'px'; };
+// Effort picker — Faster ↔ Smarter slider.
+function openEffortMenu(anchor) {
+  const menu = $('effortMenu');
+  if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
+  closeMenus(); menu.innerHTML = '';
+  const cur = (state.settings && state.settings.effort) || 'medium';
+  const head = document.createElement('div'); head.className = 'effort-head'; head.innerHTML = `Effort <b>${escapeHtml(labelFor(EFFORTS, cur, 'Medium'))}</b>`; menu.appendChild(head);
+  const ends = document.createElement('div'); ends.className = 'effort-ends'; ends.innerHTML = '<span>Faster</span><span>Smarter</span>'; menu.appendChild(ends);
+  const track = document.createElement('div'); track.className = 'effort-track';
+  const curIdx = EFFORTS.findIndex((x) => x[0] === cur);
+  EFFORTS.forEach(([id, label], i) => {
+    const stop = document.createElement('button'); stop.className = 'effort-stop' + (i <= curIdx ? ' on' : '') + (id === cur ? ' active' : '');
+    stop.title = label;
+    stop.onclick = async () => { closeMenus(); state.settings = await cc.setSettings({ effort: id }); renderModelLabel(); toast('Effort: ' + label, 'ok'); };
+    track.appendChild(stop);
+  });
+  menu.appendChild(track);
+  anchorAbove(menu, anchor);
+}
+// Permission-mode picker.
+function openPermMenu(anchor) {
+  const menu = $('permMenu');
+  if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
+  closeMenus(); menu.innerHTML = '';
+  const cur = (state.settings && state.settings.permissionMode) || 'ask';
+  const subs = { ask: 'Approve each tool before it runs', acceptEdits: 'Auto-approve file edits, ask for the rest', bypass: 'Run every tool without asking' };
+  const lbl = document.createElement('div'); lbl.className = 'm-label'; lbl.textContent = 'Permissions'; menu.appendChild(lbl);
+  PERMS.forEach(([id, label]) => {
+    const b = document.createElement('button'); b.className = 'perm-row' + (id === 'bypass' ? ' bypass' : '');
+    b.innerHTML = `<span class="pr-check">${id === cur ? '✓' : ''}</span><span class="pr-meta"><span class="pr-name">${escapeHtml(label)}</span><span class="pr-sub">${escapeHtml(subs[id])}</span></span>`;
+    b.onclick = async () => { closeMenus(); state.settings = await cc.setSettings({ permissionMode: id }); renderModelLabel(); toast(label, 'ok'); };
+    menu.appendChild(b);
+  });
+  anchorAbove(menu, anchor);
+}
+$('modelChip').onclick = (e) => { e.stopPropagation(); openModelMenu(e.currentTarget); };
+$('effortChip').onclick = (e) => { e.stopPropagation(); openEffortMenu(e.currentTarget); };
+$('permChip').onclick = (e) => { e.stopPropagation(); openPermMenu(e.currentTarget); };
 
 /* ---------------- quick-switch Ctrl+1..9 ---------------- */
 window.addEventListener('keydown', (e) => {
@@ -551,7 +628,7 @@ document.querySelectorAll('.snav').forEach((b) => { b.onclick = () => {
   const p = b.dataset.pane; document.querySelectorAll('.spane').forEach((x) => x.classList.toggle('hidden', x.dataset.pane !== p));
 }; });
 $('setTheme').onchange = async (e) => { applyTheme(e.target.value); state.settings = await cc.setSettings({ theme: e.target.value }); };
-$('setPermission').onchange = async (e) => { state.settings = await cc.setSettings({ permissionMode: e.target.value }); toast(e.target.value === 'bypass' ? 'Allowing all tools — no more prompts' : (e.target.value === 'acceptEdits' ? 'Auto-accepting file edits' : 'Will ask before each tool'), 'ok'); };
+$('setPermission').onchange = async (e) => { state.settings = await cc.setSettings({ permissionMode: e.target.value }); renderModelLabel(); toast(e.target.value === 'bypass' ? 'Allowing all tools — no more prompts' : (e.target.value === 'acceptEdits' ? 'Auto-accepting file edits' : 'Will ask before each tool'), 'ok'); };
 $('setModel').onchange = async (e) => { state.settings = await cc.setSettings({ model: e.target.value }); renderModelLabel(); };
 $('setEffort').onchange = async (e) => { state.settings = await cc.setSettings({ effort: e.target.value }); renderModelLabel(); };
 $('setAutoSwitch').onchange = async (e) => { state.settings = await cc.setSettings({ autoSwitch: e.target.checked }); };

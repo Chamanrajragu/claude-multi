@@ -51,10 +51,6 @@
       <header id="topbar">
         <div id="topTitle" class="top-title">New chat</div>
         <div class="top-actions">
-          <button id="usagePill" class="pill usage-pill hidden" title="Token usage this chat">
-            <span class="usage-ring"><span id="usageRingFill" class="usage-ring-fill"></span></span>
-            <span id="usagePillText" class="usage-pill-text">—</span>
-          </button>
           <button id="switchPill" class="pill" title="Switch account"><span id="switchDot" class="dot off"></span><span id="switchName">No account</span></button>
           <button id="settingsTop" class="icon-btn" title="Settings">⚙</button>
         </div>
@@ -82,18 +78,21 @@
         <div id="genBar" class="gen-bar hidden"><span class="gen-spinner"></span><span id="genText">Claude is working…</span><button id="stopBtn" class="stop-btn">Stop</button></div>
         <div id="attachRow" class="attach-row hidden"></div>
         <div class="composer-box">
-          <textarea id="input" rows="1" placeholder="Reply to Claude…"></textarea>
+          <textarea id="input" rows="1" placeholder="Describe a task or ask a question"></textarea>
           <div class="composer-row">
             <div class="cr-left">
+              <button id="permChip" class="perm-chip" title="Permission mode"><span id="permChipLabel">Ask each time</span></button>
               <button id="attachBtn" class="round-btn" title="Attach files or images">＋</button>
-              <button id="modelChip" class="chip" title="Model">◇ <span id="modelChipLabel">Default</span> <span class="chip-caret">▾</span></button>
-              <button id="effortChip" class="chip" title="Thinking effort">⚡ <span id="effortChipLabel">Medium</span> <span class="chip-caret">▾</span></button>
             </div>
             <div class="cr-right">
+              <button id="modelChip" class="chip chip-plain" title="Model"><span id="modelChipLabel">Default</span> <span class="chip-caret">▾</span></button>
+              <button id="effortChip" class="chip chip-plain" title="Thinking effort"><span id="effortChipLabel">Medium</span> <span class="chip-caret">▾</span></button>
+              <button id="usageRingBtn" class="usage-ring-btn" title="Usage this chat"><span class="usage-ring"><span id="usageRingFill" class="usage-ring-fill"></span></span></button>
               <button id="sendBtn" class="send-btn" title="Send (Enter)">↑</button>
             </div>
           </div>
         </div>
+        <div id="permMenu" class="menu hidden"></div>
         <div id="modelMenu" class="menu hidden"></div>
         <div id="effortMenu" class="menu hidden"></div>
       </div>
@@ -212,23 +211,27 @@
     </div>
   </div>
 
-  <!-- ============ USAGE POPOVER ============ -->
+  <!-- ============ USAGE POPOVER ("Your usage limits") ============ -->
   <div id="usageMenu" class="menu usage-menu hidden">
     <div class="usage-head">
-      <span class="usage-title">Usage this chat</span>
+      <span class="usage-title">Usage</span>
       <span id="usageModel" class="usage-model">—</span>
     </div>
-    <div class="usage-bar-wrap"><div id="usageBar" class="usage-bar"></div></div>
-    <div id="usageCtxLine" class="usage-ctx-line">Context window</div>
-    <div class="usage-grid">
-      <div class="usage-cell"><span class="uc-label">Context used</span><span id="uCtx" class="uc-val">0</span></div>
-      <div class="usage-cell"><span class="uc-label">Remaining</span><span id="uLeft" class="uc-val">—</span></div>
-      <div class="usage-cell"><span class="uc-label">Last turn out</span><span id="uOut" class="uc-val">0</span></div>
-      <div class="usage-cell"><span class="uc-label">Cache read</span><span id="uCache" class="uc-val">0</span></div>
-      <div class="usage-cell"><span class="uc-label">Session out</span><span id="uSessOut" class="uc-val">0</span></div>
-      <div class="usage-cell"><span class="uc-label">Session cost</span><span id="uCost" class="uc-val">$0.00</span></div>
+
+    <div class="usage-section-label">This chat</div>
+    <div class="usage-limit">
+      <div class="usage-limit-top"><span class="ul-name">Context window</span><span id="usageCtxPct" class="ul-pct">0% used</span></div>
+      <div class="usage-bar-wrap"><div id="usageBar" class="usage-bar"></div></div>
+      <div id="usageCtxSub" class="ul-sub">— tokens left</div>
     </div>
-    <div class="usage-foot">Context is an estimate from the last turn. Subscription limits reset periodically.</div>
+
+    <div class="usage-section-label">Accounts</div>
+    <div id="usageAccounts" class="usage-accounts"></div>
+
+    <div class="usage-foot">
+      <span id="usageFootStats">Context is estimated from the last turn.</span>
+      <span id="usageUpdated" class="usage-updated"></span>
+    </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>
