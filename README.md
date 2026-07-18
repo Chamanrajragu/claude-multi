@@ -225,17 +225,36 @@ Windows today (portable build). The app is built with Electron and the codebase 
 
 Claude Multi is **completely free** and **open source (MIT)**. There is no paid tier, no account to create, no ads, and **no monetization of any kind** — the author earns nothing from it. Use it, fork it, and modify it however you like.
 
-## Privacy — we never store your credentials
+## 🔒 Your data & privacy
 
-**Claude Multi does not collect, transmit, or store your Claude credentials — ever.**
+> **Summary:** Claude Multi is a **local-only** desktop application. It has **no servers, no developer-side accounts, and no way to see, collect, or receive your data.** Everything — your logins, your settings, and your entire chat history — is created and stored **on your own computer**. The author of Claude Multi never receives any of it.
 
-- 🔒 **Logins are handled entirely by Claude Code**, inside each account's own local config folder (`~/.claude-accounts/<id>/`) on *your* machine. The app never reads, copies, or uploads your tokens.
-- 🖥️ **Everything stays local.** The only data the app itself saves is your account *labels* and preferences, in Electron's `userData` folder on your computer. Nothing leaves your device.
-- 📡 **Zero telemetry.** No analytics, no tracking, no phone-home, no external servers. The app talks only to your local `claude` process.
-- 🚫 `.gitignore` excludes `accounts.json` and `.claude-accounts/`, so credentials can never be committed by accident.
-- ✅ All it does is set the officially supported `CLAUDE_CONFIG_DIR` environment variable per account — exactly as documented by Claude Code.
+This statement describes exactly how the application handles data. Because the project is open source (MIT), every claim below can be independently verified by reading the [source code](src/).
 
-Don't take our word for it — [the entire source is right here](src/) to read.
+### 1. Credentials never reach us — or anyone
+When you sign in to an account, authentication is performed by **Claude Code itself** through its normal `/login` (OAuth) flow. The resulting login is written by Claude Code into that account's **own local configuration directory** on your device (`~/.claude-accounts/<id>/`). Claude Multi does **not** read, copy, export, transmit, or otherwise handle your authentication tokens. It merely points Claude Code at the correct per-account folder using the officially documented `CLAUDE_CONFIG_DIR` environment variable.
+
+### 2. All data is stored locally, on your machine only
+Everything the application persists lives on **your** computer, in your operating-system user profile — never on any remote server:
+
+| Data | Where it is stored | Contains credentials? |
+| --- | --- | --- |
+| Account logins (OAuth tokens) | `~/.claude-accounts/<id>/` (written by Claude Code) | Yes — **local only**, never touched by Claude Multi |
+| Account labels & app settings | Electron `userData` folder (`accounts.json`) | **No** — names/preferences only |
+| Chat history & transcripts | Electron `userData` folder | **No** — your conversations, kept on your device |
+
+Nothing in the above is transmitted to the author or to any third party controlled by this project.
+
+### 3. No telemetry, no analytics, no tracking
+The application contains **no analytics, no tracking, no usage reporting, and no "phone-home" of any kind.** It makes **no outbound network requests of its own** — there is no update-checker beacon, no crash reporter, no server it talks to. Your Claude conversations travel only between your **local `claude` process and Anthropic**, exactly as they would if you used Claude Code directly; Claude Multi does not sit in the middle of, log, or forward that traffic. (Clicking a "GitHub" link simply opens the page in **your own browser** — the app itself connects to nothing.)
+
+### 4. Single user, by design
+Claude Multi is built for **one person using their own accounts on their own machine.** It provides no facility to share, sync, upload, export credentials, or make an account available to anyone else. If another person installs the app, their logins are created and stored on **their** computer — never yours, and never the author's.
+
+### 5. Open source & auditable
+There is no hidden behaviour to take on trust. The [entire source is public](src/); the network and file-system behaviour described here can be confirmed line by line.
+
+> **Important — this is a privacy statement, not a compliance guarantee.** "Stored locally and private" is **not** the same as "permitted by Anthropic." How you access Anthropic's Services is governed by Anthropic's terms, and using a subscription login with automated tooling is a real consideration — please read [**Account safety & Anthropic's terms**](#account-safety--anthropics-terms) above and decide for yourself. This section only describes how *your data* is handled by *this app*.
 
 ## Limitations
 
