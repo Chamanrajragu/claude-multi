@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld('cc', {
   switchAccount: (targetId) => ipcRenderer.invoke('chat:switch', targetId),
   continueOn: (convoId, targetId) => ipcRenderer.invoke('chat:continueOn', convoId, targetId),
   stopChat: (convoId) => ipcRenderer.invoke('chat:stop', convoId),
+  regenerate: () => ipcRenderer.invoke('chat:regenerate'),
+  duplicateConvo: (id) => ipcRenderer.invoke('chat:duplicate', id),
+  promptHistory: () => ipcRenderer.invoke('app:promptHistory'),
 
   // ---- conversations (history) ----
   listConvos: () => ipcRenderer.invoke('chat:listConvos'),

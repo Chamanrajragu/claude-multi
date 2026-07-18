@@ -47,10 +47,10 @@ function renderConvos() {
     sub.textContent = c.folderName || '';
     sub.title = c.folder || '';
     meta.appendChild(title); meta.appendChild(sub);
-    // Live status: spinner while a background turn runs, dot if it has a live session.
+    // Live status: needs-approval (amber) > working spinner > live dot.
     const status = document.createElement('span');
-    status.className = 'convo-status' + (c.generating ? ' spin' : (c.running ? ' live' : ''));
-    if (c.generating) status.title = 'Working…'; else if (c.running) status.title = 'Running';
+    status.className = 'convo-status' + (c.awaiting ? ' needs' : (c.generating ? ' spin' : (c.running ? ' live' : '')));
+    if (c.awaiting) status.title = 'Waiting for your approval — open this chat'; else if (c.generating) status.title = 'Working…'; else if (c.running) status.title = 'Running';
     const more = document.createElement('button'); more.className = 'convo-more'; more.textContent = '⋯';
     more.onclick = (e) => { e.stopPropagation(); convoMenu(c, e.currentTarget); };
     row.appendChild(pin); row.appendChild(meta); row.appendChild(status); row.appendChild(more);
@@ -70,6 +70,7 @@ function convoMenu(c, anchor) {
   const items = [
     [c.pinned ? 'Unpin' : 'Pin', async () => { await cc.pinConvo(c.id); }],
     ['Rename', async () => { const t = await uiPrompt('Rename chat:', c.title, 'Rename'); if (t && t.trim()) { await cc.renameConvo(c.id, t.trim()); } }],
+    ['Duplicate', async () => { const r = await cc.duplicateConvo(c.id); if (r && r.ok) toast('Chat duplicated', 'ok'); else toast('Could not duplicate', 'err'); }],
     ['Export as Markdown…', async () => { const r = await cc.exportMd(c.id); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); }],
     ['Delete', async () => { if (confirm(`Delete "${c.title}"?`)) await cc.deleteConvo(c.id); }],
   ];
@@ -172,7 +173,7 @@ function updateComposer() {
   // Can send if a session is live, or if this chat already has an account we can
   // auto-resume on (main restarts the session on first send).
   const can = state.running || !!state.activeAccountId;
-  $('sendBtn').disabled = !can || !$('input').value.trim();
+  $('sendBtn').disabled = !can || (!$('input').value.trim() && !attachments.length);
   $('input').placeholder = can ? 'Reply to Claude…' : (state.accounts.some((a) => a.loggedIn) ? 'Choose an account to start…' : 'Add & log in an account to start…');
   $('genBar').classList.toggle('hidden', !state.generating);
 }
@@ -327,7 +328,10 @@ function decorateAssistant(msgEl, meta) {
     const bar = document.createElement('div'); bar.className = 'msg-actions';
     const copy = document.createElement('button'); copy.className = 'msg-act'; copy.textContent = 'Copy';
     copy.onclick = () => copyText(assistantPlainText(body), copy);
-    bar.appendChild(copy);
+    const retry = document.createElement('button'); retry.className = 'msg-act'; retry.textContent = '↻ Retry';
+    retry.title = 'Regenerate — re-run your last request';
+    retry.onclick = () => regenerate();
+    bar.appendChild(copy); bar.appendChild(retry);
     body.appendChild(bar);
   }
   if (meta && !body.querySelector('.turn-meta')) {
@@ -455,6 +459,12 @@ async function sendMessage() {
   const res = await cc.sendMessage(text, atts);
   if (res && !res.ok) onErrorLine(res.error || 'Could not send');
 }
+async function regenerate() {
+  if (!state.running && !state.activeAccountId) { toast('Choose an account first', 'err'); return; }
+  const res = await cc.regenerate();
+  if (res && !res.ok) { toast(res.error || 'Could not regenerate', 'err'); return; }
+  scrollDown(true);
+}
 function autoGrow() { const i = $('input'); i.style.height = 'auto'; i.style.height = Math.min(200, i.scrollHeight) + 'px'; }
 function renderAttachments() {
   const row = $('attachRow'); row.innerHTML = ''; row.classList.toggle('hidden', !attachments.length);
@@ -462,12 +472,26 @@ function renderAttachments() {
 }
 
 $('sendBtn').onclick = sendMessage;
-$('input').addEventListener('input', () => { autoGrow(); updateComposer(); });
+$('input').addEventListener('input', () => { autoGrow(); updateComposer(); histIdx = -1; });
+// Composer prompt history: ↑ recalls previous prompts (when caret is at the
+// start / already navigating), ↓ moves back toward your draft. Newest first.
+let histItems = [], histIdx = -1;
+async function loadHist() { try { histItems = (await cc.promptHistory()) || []; } catch { histItems = []; } }
 $('input').addEventListener('keydown', (e) => {
+  if (e.isComposing) return;
+  const inp = $('input');
+  if (e.key === 'ArrowUp' && histItems.length && (histIdx >= 0 || inp.selectionStart === 0)) {
+    if (histIdx < histItems.length - 1) { histIdx++; inp.value = histItems[histIdx]; autoGrow(); updateComposer(); }
+    e.preventDefault(); return;
+  }
+  if (e.key === 'ArrowDown' && histIdx >= 0) {
+    histIdx--; inp.value = histIdx >= 0 ? histItems[histIdx] : ''; autoGrow(); updateComposer();
+    e.preventDefault(); return;
+  }
   if (e.key !== 'Enter' || e.isComposing) return;
   const enterSends = (state.settings || {}).enterSends !== false;
   const wantSend = enterSends ? (!e.shiftKey) : (e.ctrlKey || e.metaKey);
-  if (wantSend) { e.preventDefault(); sendMessage(); }
+  if (wantSend) { e.preventDefault(); histIdx = -1; sendMessage().then(loadHist); }
 });
 // Paste images (screenshots / copied images) or files straight into the chat.
 // Electron 32+ removed File.path, so we resolve real files via getPathForFile
@@ -572,7 +596,15 @@ $('attachBtn').onclick = async () => { const files = await cc.pickFiles(); if (f
   function stop() { stopping = true; setListening(false); if (rec) { try { rec.stop(); } catch { /* noop */ } } }
   btn.onclick = () => { if (listening) stop(); else start(); };
 })();
-$('newChatBtn').onclick = async () => { const r = await cc.newChat(); if (r && r.canceled) return; if (r && !r.ok) toast(r.error || 'Could not start', 'err'); };
+async function newChat(chooseFolder) {
+  // Reuse the current chat's folder by default (no dialog); pass chooseFolder
+  // to explicitly pick a different one.
+  const folder = chooseFolder ? '' : (state.projectDir || '');
+  const r = await cc.newChat(folder);
+  if (r && r.canceled) return;
+  if (r && !r.ok) toast(r.error || 'Could not start', 'err');
+}
+$('newChatBtn').onclick = (e) => newChat(e && (e.altKey || e.shiftKey)); // Alt/Shift+click = pick a folder
 $('projectBtn').onclick = async () => {
   if (!state.currentConvoId) { const r = await cc.newChat(); if (r && !r.ok && !r.canceled) toast(r.error || 'Could not start', 'err'); return; }
   const dir = await cc.pickProject();
@@ -698,6 +730,13 @@ cc.onLimit((info) => {
   renderLimitPill();
   // Main already carried the chat to a free account and resumed the work.
   if (info.handled) { toast(`${curName} hit its limit — continued on ${info.next ? info.next.name : 'another account'}`, 'ok'); return; }
+  // If the limit is on a background chat (not the one on screen), don't hijack
+  // the visible chat with a modal — just nudge the user to open that chat.
+  if (info.convoId && state.currentConvoId && info.convoId !== state.currentConvoId) {
+    const c = state.conversations.find((x) => x.id === info.convoId);
+    toast(`${curName} hit its limit${c ? ` on “${c.title}”` : ''} — open that chat to switch accounts`, 'err');
+    return;
+  }
   pendingLimitConvo = info.convoId || state.currentConvoId;
   if (info.next && info.nextAvailable) {
     // A free account exists — offer to switch and continue.
@@ -716,7 +755,8 @@ cc.onLimit((info) => {
 $('switchCancel').onclick = () => $('switchModal').classList.add('hidden');
 $('switchGo').onclick = () => { $('switchModal').classList.add('hidden'); if (pendingSwitch) doSwitch(pendingSwitch); };
 async function doSwitch(id) {
-  onErrorLine('Switching account…');
+  // Only write the inline note if the limited chat is the one on screen.
+  if (!pendingLimitConvo || pendingLimitConvo === state.currentConvoId) onErrorLine('Switching account…');
   const r = await cc.continueOn(pendingLimitConvo, id);
   if (r && !r.ok) toast(r.error === 'not_logged_in' ? 'That account is not signed in' : (r.error || 'Switch failed'), 'err');
   else toast('Switched account' + (r && r.continued ? ' · continuing the task' : (r && r.carried ? ' · conversation carried over' : '')), 'ok');
@@ -770,7 +810,27 @@ function applyAppearance(s) {
   if (s.theme !== undefined) applyTheme(s.theme);
   document.documentElement.setAttribute('data-width', s.width === 'wide' ? 'wide' : 'comfortable');
   document.documentElement.setAttribute('data-fontscale', ['small', 'large'].includes(s.fontScale) ? s.fontScale : 'normal');
+  if (s.sidebarWidth) { const sb = $('sidebar'); if (sb) { const w = Math.max(220, Math.min(480, s.sidebarWidth)); sb.style.width = w + 'px'; sb.style.minWidth = w + 'px'; } }
 }
+// Drag-to-resize the sidebar; width persists in settings.
+(function sidebarResize() {
+  const sb = $('sidebar'); if (!sb) return;
+  sb.style.position = 'relative';
+  const h = document.createElement('div'); h.className = 'side-resize'; sb.appendChild(h);
+  const clamp = (w) => Math.max(220, Math.min(480, w));
+  h.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const startX = e.clientX, startW = sb.getBoundingClientRect().width;
+    document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none';
+    const mm = (ev) => { const w = clamp(startW + (ev.clientX - startX)); sb.style.width = w + 'px'; sb.style.minWidth = w + 'px'; };
+    const mu = () => {
+      document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu);
+      document.body.style.cursor = ''; document.body.style.userSelect = '';
+      cc.setSettings({ sidebarWidth: Math.round(sb.getBoundingClientRect().width) });
+    };
+    document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
+  });
+})();
 if (mq) mq.addEventListener('change', () => { if ((state.settings || {}).theme === 'system') applyTheme('system'); });
 
 /* ---------------- prompt modal ---------------- */
@@ -790,7 +850,10 @@ function uiPrompt(label, def, okLabel) {
 let cmdkItems = [], cmdkIdx = 0;
 function buildCommands() {
   const cmds = [];
-  cmds.push({ icon: '＋', label: 'New chat', hint: 'Ctrl+N', run: () => $('newChatBtn').click() });
+  cmds.push({ icon: '＋', label: 'New chat (same folder)', hint: 'Ctrl+N', run: () => newChat(false) });
+  cmds.push({ icon: '📁', label: 'New chat in another folder…', run: () => newChat(true) });
+  if (state.currentConvoId) cmds.push({ icon: '⎘', label: 'Duplicate this chat', run: async () => { const r = await cc.duplicateConvo(state.currentConvoId); if (r && r.ok) toast('Chat duplicated', 'ok'); } });
+  if (state.running) cmds.push({ icon: '↻', label: 'Regenerate last response', run: () => regenerate() });
   cmds.push({ icon: '🔍', label: 'Search chats', hint: 'Ctrl+F', run: () => { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } });
   cmds.push({ icon: '📤', label: 'Export this chat as Markdown', run: async () => { const r = await cc.exportMd(); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); } });
   cmds.push({ icon: '🎨', label: 'Toggle light / dark theme', run: async () => { const cur = (state.settings || {}).theme; const next = cur === 'light' ? 'dark' : 'light'; applyTheme(next); state.settings = await cc.setSettings({ theme: next }); } });
@@ -804,7 +867,7 @@ function buildCommands() {
   for (const [id, label] of EFFORTS) {
     cmds.push({ icon: '⚡', label: 'Effort: ' + label, hint: ((state.settings || {}).effort || 'medium') === id ? 'current' : '', run: async () => { state.settings = await cc.setSettings({ effort: id }); renderModelLabel(); toast('Effort: ' + label, 'ok'); } });
   }
-  cmds.push({ icon: '📊', label: 'Show token usage for this chat', run: () => { if (!$('usagePill').classList.contains('hidden')) $('usagePill').click(); else toast('Usage appears once a chat is running', 'ok'); } });
+  cmds.push({ icon: '📊', label: 'Show token usage for this chat', run: () => { const b = $('usageRingBtn'); if (b && !b.classList.contains('hidden')) b.click(); else toast('Usage appears once a chat is running', 'ok'); } });
   cmds.push({ icon: '🐙', label: 'Open project on GitHub', run: () => cc.openExternal('https://github.com/Chamanrajragu/claude-multi') });
   for (const a of state.accounts) {
     const v = accView(a);
@@ -888,6 +951,7 @@ cc.onState((s) => { state = Object.assign(state, s); if (s.settings) applyAppear
   state = await cc.getState();
   applyAppearance(state.settings || {});
   renderAll();
+  loadHist();
   if (state.currentConvoId) { try { const h = await cc.getHistory(); if (h && h.log && h.log.length) renderHistory(h.log); } catch {} }
   setInterval(() => { if (state.accounts.some((a) => a.cooldownUntil && a.cooldownUntil > Date.now())) { renderAccountRow(); renderLimitPill(); renderUsageAccounts(); } }, 15000);
 })();

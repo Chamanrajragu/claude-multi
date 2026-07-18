@@ -64,6 +64,9 @@ button { font-family: inherit; color: inherit; }
 
 /* ================= SIDEBAR ================= */
 #sidebar { width: 264px; min-width: 264px; background: var(--sidebar); border-right: 1px solid var(--border-soft); display: flex; flex-direction: column; }
+.side-resize { position: absolute; top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; z-index: 30; }
+.side-resize::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background .12s; }
+.side-resize:hover::after { background: var(--accent); }
 .side-top { padding: 12px 10px 8px; }
 .brand { display: flex; align-items: center; gap: 9px; padding: 4px 8px 12px; }
 .brand .logo { color: var(--accent); font-size: 17px; }
@@ -98,6 +101,8 @@ button { font-family: inherit; color: inherit; }
 .convo-folder::before { content: "📁"; font-size: 10px; opacity: .8; }
 .convo-status { width: 12px; height: 12px; flex: none; border-radius: 50%; }
 .convo-status.live { background: var(--info, #6b8afd); box-shadow: 0 0 0 2px var(--bg); }
+.convo-status.needs { background: var(--warn, #e0a458); box-shadow: 0 0 0 2px var(--bg); animation: needspulse 1.2s ease-in-out infinite; }
+@keyframes needspulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 .convo-status.spin { border: 2px solid var(--border); border-top-color: var(--accent); animation: spin .7s linear infinite; border-radius: 50%; box-sizing: border-box; }
 .convo.working .convo-title { color: var(--text); }
 .convo-more { opacity: 0; border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 2px; border-radius: 6px; }

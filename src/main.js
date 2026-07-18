@@ -35,6 +35,7 @@ const state = {
   genConvos: new Set(),      // convoIds whose turn is in progress
   turnBuf: new Map(),        // convoId -> { blocks, curText, tools } assembling the live turn
   pending: new Map(),        // convoId -> { text, attachments } the last turn's prompt, kept until it completes
+  perms: new Map(),          // convoId -> Map(requestId -> { tool, input }) unresolved permission prompts
   switchCount: 0,
 };
 
@@ -236,6 +237,7 @@ function conversationList() {
       empty: !(c.log && c.log.length),
       generating: state.genConvos.has(c.id),
       running: state.sessions.has(c.id),
+      awaiting: state.perms.has(c.id),
       accountId: c.lastAccount || '',
     });
   });
@@ -269,6 +271,7 @@ function stopSession(convoId) {
   if (s) { try { s.stop(); } catch { /* noop */ } state.sessions.delete(convoId); }
   state.genConvos.delete(convoId);
   state.turnBuf.delete(convoId);
+  state.perms.delete(convoId);
 }
 function stopAllSessions() { for (const id of [...state.sessions.keys()]) stopSession(id); }
 
@@ -319,7 +322,7 @@ function useAccountForChat(accountId, convoId) {
   if (chat.sessionId) {
     if (chat.lastAccount && chat.lastAccount !== accountId) {
       const fromAcc = store.byId(chat.lastAccount);
-      if (fromAcc && carryTranscripts(fromAcc.configDir, acc.configDir, f.folder)) {
+      if (fromAcc && carryTranscripts(fromAcc.configDir, acc.configDir, f.folder, chat.sessionId)) {
         resumeId = chat.sessionId;
         carried = true;
       }
@@ -371,9 +374,17 @@ function onChatEvent(convoId, session, accountId, ev) {
     case 'tool_result':
       accumulate(convoId, ev);
       break;
+    case 'permission': {
+      // Remember unresolved prompts so a background chat's request can be
+      // replayed (and answered) when the user opens that chat.
+      let m = state.perms.get(convoId); if (!m) { m = new Map(); state.perms.set(convoId, m); }
+      m.set(ev.requestId, { tool: ev.tool, input: ev.input });
+      break;
+    }
     case 'turn_end':
       state.genConvos.delete(convoId);
       state.pending.delete(convoId); // completed cleanly — nothing to resume
+      state.perms.delete(convoId);
       finalizeTurn(convoId, ev);
       if (ev.sessionId) updateConvoById(convoId, { sessionId: ev.sessionId, lastAccount: accountId });
       pushState();
@@ -381,16 +392,19 @@ function onChatEvent(convoId, session, accountId, ev) {
     case 'limit':
       state.genConvos.delete(convoId);
       state.turnBuf.delete(convoId);
+      state.perms.delete(convoId);
       handleLimit(convoId, accountId, ev);
       break;
     case 'error':
     case 'auth_failed':
       state.genConvos.delete(convoId);
       state.turnBuf.delete(convoId);
+      state.perms.delete(convoId);
       pushState();
       break;
     case 'exit':
       state.genConvos.delete(convoId);
+      state.perms.delete(convoId);
       if (session && !session.alive) state.sessions.delete(convoId);
       pushState();
       break;
@@ -437,16 +451,23 @@ function handleLimit(convoId, accountId, ev) {
 
 // Copy the active project's transcripts from one account to another so the
 // switched-to account can resume the same conversation.
-function carryTranscripts(fromDir, toDir, projectDir) {
+function carryTranscripts(fromDir, toDir, projectDir, sessionId) {
   try {
     const enc = projectDir.replace(/[^a-zA-Z0-9]/g, '-');
     const src = path.join(fromDir, 'projects', enc);
     const dst = path.join(toDir, 'projects', enc);
-    if (fs.existsSync(src)) {
-      fs.mkdirSync(path.dirname(dst), { recursive: true });
-      fs.cpSync(src, dst, { recursive: true });
-      return true;
+    if (!fs.existsSync(src)) return false;
+    fs.mkdirSync(dst, { recursive: true });
+    // Prefer copying ONLY this chat's session transcript, so two chats sharing a
+    // folder on different accounts can't clobber each other's history.
+    if (sessionId) {
+      const file = sessionId + '.jsonl';
+      const sf = path.join(src, file);
+      if (fs.existsSync(sf)) { fs.copyFileSync(sf, path.join(dst, file)); return true; }
     }
+    // Fallback (unknown session filename): copy the whole folder.
+    fs.cpSync(src, dst, { recursive: true });
+    return true;
   } catch (e) { console.error('[carryTranscripts]', e); }
   return false;
 }
@@ -641,6 +662,10 @@ function registerIpc() {
     // Keep the folder bucket's own pointer in sync (used by migration/legacy).
     const d = getProjectData(f.folder); d.currentId = id; saveProjectData(f.folder, d);
     toRenderer('chat:history', { log: f.convo.log || [] });
+    // Replay any permission prompt this chat is waiting on (it was raised while
+    // the chat was off-screen and had nowhere to show).
+    const pend = state.perms.get(id);
+    if (pend) for (const [rid, p] of pend) toRenderer('chat:event', { convoId: id, type: 'permission', requestId: rid, tool: p.tool, input: p.input });
     // Just view it — its session (if any) keeps running; we don't auto-start one.
     pushState();
     return { ok: true, running: state.sessions.has(id) };
@@ -707,6 +732,7 @@ function registerIpc() {
       session = state.sessions.get(id);
     }
     appendUserMessage(id, text, attachments || []);
+    if (text.trim()) store.addPrompt(text.trim()); // composer ↑ history
     state.pending.set(id, { text, attachments: attachments || [] }); // for auto-continue on limit
     session.send(text, attachments || []);
     state.genConvos.add(id);
@@ -717,6 +743,8 @@ function registerIpc() {
   ipcMain.handle('chat:permission', (_e, requestId, allow, message, convoId) => {
     const s = state.sessions.get(convoId || state.currentConvoId);
     if (s) s.respondPermission(requestId, allow, message);
+    // Clear it from the pending-prompt queue (search all convos by request id).
+    for (const [cid, m] of state.perms) { if (m.delete(requestId) && m.size === 0) state.perms.delete(cid); }
     return { ok: true };
   });
   ipcMain.handle('chat:switch', (_e, targetId) => switchAccount(targetId));
@@ -730,6 +758,52 @@ function registerIpc() {
     return resumeInterrupted(id, targetId);
   });
   ipcMain.handle('chat:stop', (_e, id) => { stopSession(id || state.currentConvoId); pushState(); return { ok: true }; });
+  // Composer ↑/↓ history — recently sent prompts, newest first.
+  ipcMain.handle('app:promptHistory', () => store.getPromptHistory());
+  // Re-run the last user message of the current chat (Regenerate).
+  ipcMain.handle('chat:regenerate', () => {
+    const id = state.currentConvoId;
+    const f = id && findConvo(id);
+    if (!f) return { ok: false, error: 'No chat selected' };
+    const log = Array.isArray(f.convo.log) ? f.convo.log : [];
+    let lastUser = null;
+    for (let i = log.length - 1; i >= 0; i--) { if (log[i].role === 'user') { lastUser = log[i]; break; } }
+    if (!lastUser) return { ok: false, error: 'Nothing to regenerate yet' };
+    let session = state.sessions.get(id);
+    if (!session || !session.alive) {
+      const accountId = f.convo.lastAccount || state.lastAccountId;
+      if (!accountId) return { ok: false, error: 'Choose an account first' };
+      const r = startSession(id, accountId, f.convo.sessionId || '');
+      if (!r.ok) return r;
+      session = state.sessions.get(id);
+    }
+    const text = 'Please try that again' + (lastUser.text ? ` — my last request was:\n\n${lastUser.text}` : '.');
+    state.pending.set(id, { text, attachments: [] });
+    session.send(text, []);
+    state.genConvos.add(id);
+    pushState();
+    return { ok: true };
+  });
+  // Duplicate a chat (fresh session, same folder, copied transcript).
+  ipcMain.handle('chat:duplicate', (_e, id) => {
+    const f = (id && findConvo(id)) || (state.currentConvoId && findConvo(state.currentConvoId));
+    if (!f) return { ok: false };
+    const d = getProjectData(f.folder);
+    const copy = {
+      id: genId(),
+      title: (f.convo.title && f.convo.title !== 'New chat' ? f.convo.title + ' (copy)' : 'New chat'),
+      sessionId: '', lastAccount: '',
+      log: Array.isArray(f.convo.log) ? f.convo.log.map((m) => ({ ...m })) : [],
+      pinned: false, createdAt: Date.now(), updatedAt: Date.now(),
+    };
+    d.conversations.unshift(copy);
+    d.currentId = copy.id;
+    saveProjectData(f.folder, d);
+    state.currentConvoId = copy.id;
+    toRenderer('chat:history', { log: copy.log });
+    pushState();
+    return { ok: true, id: copy.id };
+  });
 
   // ---- backup / restore (accounts + settings; no credentials) ----
   ipcMain.handle('app:export', async () => {
