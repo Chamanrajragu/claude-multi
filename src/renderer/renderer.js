@@ -10,7 +10,13 @@ function baseName(p) { return String(p || '').replace(/[\\/]+$/, '').split(/[\\/
 let state = { accounts: [], activeAccountId: null, projectDir: '', running: false, generating: false, settings: {}, conversations: [], currentConvoId: '' };
 let attachments = [];
 let drafts = {}; // convoId -> unsent composer text (kept per chat)
-function swapDraft(prev, next) { const inp = $('input'); if (prev != null && prev !== '') drafts[prev] = inp.value; inp.value = (next && drafts[next]) || ''; autoGrow(); updateComposer(); }
+function swapDraft(prev, next) {
+  const inp = $('input');
+  // Only save the outgoing draft if that chat still exists (avoid resurrecting a deleted chat's draft).
+  if (prev != null && prev !== '' && (state.conversations || []).some((c) => c.id === prev)) drafts[prev] = inp.value;
+  inp.value = (next && drafts[next]) || ''; autoGrow(); updateComposer();
+}
+function pruneDrafts() { const ids = new Set((state.conversations || []).map((c) => c.id)); if (state.currentConvoId) ids.add(state.currentConvoId); for (const k of Object.keys(drafts)) if (!ids.has(k)) delete drafts[k]; }
 
 function activeAccount() { return state.accounts.find((a) => a.id === state.activeAccountId); }
 function fmtCountdown(ms) { const t = Math.max(0, Math.round(ms / 1000)); const h = Math.floor(t / 3600); const m = Math.floor((t % 3600) / 60); return h > 0 ? `${h}h ${m}m` : (m > 0 ? `${m}m` : `${t}s`); }
@@ -90,7 +96,7 @@ $('convoSearch').addEventListener('input', async (e) => {
   convoFilter = e.target.value; renderConvos();
   const q = convoFilter.trim();
   if (q.length >= 2) { try { const res = await cc.searchAll(q); if (convoFilter.trim() === q) { contentMatches = {}; res.forEach((r) => { contentMatches[r.id] = r.snippet; }); renderConvos(); } } catch { /* noop */ } }
-  else { contentMatches = {}; }
+  else if (Object.keys(contentMatches).length) { contentMatches = {}; renderConvos(); }
 });
 async function openConvo(id) {
   if (id === state.currentConvoId && state.running) return;
@@ -192,9 +198,14 @@ const PERMS = [['ask', 'Ask each time'], ['acceptEdits', 'Accept edits'], ['bypa
 function labelFor(list, id, fb) { const f = list.find((x) => x[0] === id); if (f) return f[1]; if (list === MODELS && MODEL_ALIASES[id]) return MODEL_ALIASES[id]; return fb; }
 // Short label for the compact chip (drop the "(account)" suffix).
 function shortModelLabel(id) { return labelFor(MODELS, id || '', 'Default').replace(' (account)', ''); }
+// Effective model/effort = per-chat override if set, else the global default.
+function effModel() { return state.chatModel != null ? state.chatModel : ((state.settings && state.settings.model) || ''); }
+function effEffort() { return state.chatEffort != null ? state.chatEffort : ((state.settings && state.settings.effort) || 'medium'); }
 function renderModelLabel() {
-  $('modelChipLabel').textContent = shortModelLabel((state.settings && state.settings.model) || '');
-  $('effortChipLabel').textContent = labelFor(EFFORTS, (state.settings && state.settings.effort) || 'medium', 'Medium');
+  $('modelChipLabel').textContent = shortModelLabel(effModel());
+  $('effortChipLabel').textContent = labelFor(EFFORTS, effEffort(), 'Medium');
+  $('modelChip').classList.toggle('per-chat', state.chatModel != null);
+  $('effortChip').classList.toggle('per-chat', state.chatEffort != null);
   const pm = (state.settings && state.settings.permissionMode) || 'ask';
   const pc = $('permChip'); if (pc) {
     $('permChipLabel').textContent = labelFor(PERMS, pm, 'Ask each time');
@@ -242,7 +253,7 @@ function renderWelcome() {
   let n = 1;
   ol.innerHTML = steps.map((s) => `<li class="ob-step${s.done ? ' done' : ''}"><span class="ob-mark">${s.done ? '✓' : (n++)}</span><span class="ob-txt"><b>${escapeHtml(s.label)}</b>${s.hint ? `<span class="ob-hint">${escapeHtml(s.hint)}</span>` : ''}</span></li>`).join('');
 }
-function renderAll() { renderProject(); renderConvos(); renderAccountRow(); renderTop(); updateComposer(); renderAttachments(); renderStarters(); renderUsage(); renderLimitPill(); renderWelcome(); }
+function renderAll() { renderProject(); renderConvos(); renderAccountRow(); renderTop(); updateComposer(); renderAttachments(); renderStarters(); renderUsage(); renderLimitPill(); renderWelcome(); pruneDrafts(); }
 
 // Topbar pill: shows when signed-in accounts are cooling down and when the
 // soonest one resets, so "how long until I can use it again" is always visible.
@@ -580,11 +591,11 @@ async function loadHist() { try { histItems = (await cc.promptHistory()) || []; 
 $('input').addEventListener('keydown', (e) => {
   if (e.isComposing) return;
   const inp = $('input');
-  if (e.key === 'ArrowUp' && histItems.length && (histIdx >= 0 || inp.selectionStart === 0)) {
+  if (e.key === 'ArrowUp' && !e.altKey && histItems.length && (histIdx >= 0 || inp.selectionStart === 0)) {
     if (histIdx < histItems.length - 1) { histIdx++; inp.value = histItems[histIdx]; autoGrow(); updateComposer(); }
     e.preventDefault(); return;
   }
-  if (e.key === 'ArrowDown' && histIdx >= 0) {
+  if (e.key === 'ArrowDown' && !e.altKey && histIdx >= 0) {
     histIdx--; inp.value = histIdx >= 0 ? histItems[histIdx] : ''; autoGrow(); updateComposer();
     e.preventDefault(); return;
   }
@@ -638,6 +649,44 @@ $('input').addEventListener('paste', async (e) => {
 });
 $('stopBtn').onclick = () => cc.interrupt();
 $('attachBtn').onclick = async () => { const files = await cc.pickFiles(); if (files && files.length) { attachments = attachments.concat(files); renderAttachments(); } };
+
+/* ---------------- prompt templates ---------------- */
+const DEFAULT_TEMPLATES = [
+  { name: 'Explain this codebase', text: 'Give me a high-level overview of this codebase: the main modules, how they fit together, and where the entry points are.' },
+  { name: 'Find & fix a bug', text: 'Find a bug in the most recently changed files, explain the root cause, then fix it.' },
+  { name: 'Write tests', text: 'Write thorough tests for the current file, covering the main paths and edge cases.' },
+  { name: 'Review my changes', text: 'Review my most recent changes for correctness, edge cases and simplifications. Be specific with file:line references.' },
+  { name: 'Refactor for clarity', text: 'Refactor this code to be simpler and clearer without changing behavior. Explain each change briefly.' },
+];
+function templates() { const t = (state.settings || {}).templates; return (Array.isArray(t) && t.length) ? t : DEFAULT_TEMPLATES; }
+function insertTemplate(text) { const inp = $('input'); inp.value = (inp.value ? inp.value + '\n' : '') + text; autoGrow(); updateComposer(); inp.focus(); if (state.currentConvoId) drafts[state.currentConvoId] = inp.value; }
+function openTemplateMenu(anchor) {
+  closeMenus();
+  const m = document.createElement('div'); m.className = 'menu ctx tpl-menu';
+  const lbl = document.createElement('div'); lbl.className = 'm-label'; lbl.textContent = 'Prompt templates'; m.appendChild(lbl);
+  const custom = Array.isArray((state.settings || {}).templates);
+  templates().forEach((t, i) => {
+    const b = document.createElement('button'); b.className = 'tpl-item';
+    const nm = document.createElement('span'); nm.className = 'tpl-name'; nm.textContent = t.name; b.appendChild(nm);
+    if (custom) { const x = document.createElement('span'); x.className = 'tpl-del'; x.textContent = '✕'; x.title = 'Delete template'; x.onclick = async (e) => { e.stopPropagation(); const arr = templates().filter((_, j) => j !== i); state.settings = await cc.setSettings({ templates: arr }); openTemplateMenu(anchor); }; b.appendChild(x); }
+    b.onclick = () => { closeMenus(); insertTemplate(t.text); };
+    m.appendChild(b);
+  });
+  const sep = document.createElement('div'); sep.className = 'm-sep'; m.appendChild(sep);
+  const save = document.createElement('button'); save.textContent = '＋ Save current text as template';
+  save.onclick = async () => {
+    closeMenus(); const cur = $('input').value.trim();
+    if (!cur) { toast('Type a prompt first, then save it', 'err'); return; }
+    const name = await uiPrompt('Template name:', '', 'Save');
+    if (name && name.trim()) { const base = custom ? state.settings.templates.slice() : DEFAULT_TEMPLATES.slice(); base.push({ name: name.trim().slice(0, 40), text: cur }); state.settings = await cc.setSettings({ templates: base }); toast('Template saved', 'ok'); }
+  };
+  m.appendChild(save);
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect(); const w = m.offsetWidth || 260;
+  m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+  m.style.bottom = (window.innerHeight - r.top + 8) + 'px'; m.style.top = 'auto';
+}
+$('tplBtn').onclick = (e) => { e.stopPropagation(); openTemplateMenu(e.currentTarget); };
 
 /* ---------------- voice to text (dictation) ---------------- */
 (() => {
@@ -742,13 +791,14 @@ function openModelMenu(anchor) {
   const menu = $('modelMenu');
   if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
   closeMenus(); menu.innerHTML = '';
-  const cur = (state.settings && state.settings.model) || '';
-  const lbl = document.createElement('div'); lbl.className = 'm-label'; lbl.textContent = 'Models'; menu.appendChild(lbl);
+  const cur = effModel();
+  const perChat = !!state.currentConvoId;
+  const lbl = document.createElement('div'); lbl.className = 'm-label'; lbl.textContent = perChat ? 'Model — this chat' : 'Default model'; menu.appendChild(lbl);
   MODELS.forEach(([id, label], i) => {
     const b = document.createElement('button'); b.className = 'model-row';
     const num = id ? String(i + 1) : '';
     b.innerHTML = `<span class="mr-check">${id === cur ? '✓' : ''}</span><span class="mr-name">${escapeHtml(label)}</span><span class="mr-num">${num}</span>`;
-    b.onclick = async () => { closeMenus(); state.settings = await cc.setSettings({ model: id }); renderModelLabel(); renderUsage(); toast('Model: ' + shortModelLabel(id), 'ok'); };
+    b.onclick = async () => { closeMenus(); if (perChat) { state.chatModel = id; await cc.setChatModel(id); } else { state.settings = await cc.setSettings({ model: id }); } renderModelLabel(); renderUsage(); toast('Model: ' + shortModelLabel(id), 'ok'); };
     menu.appendChild(b);
   });
   anchorAbove(menu, anchor);
@@ -758,15 +808,16 @@ function openEffortMenu(anchor) {
   const menu = $('effortMenu');
   if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
   closeMenus(); menu.innerHTML = '';
-  const cur = (state.settings && state.settings.effort) || 'medium';
-  const head = document.createElement('div'); head.className = 'effort-head'; head.innerHTML = `Effort <b>${escapeHtml(labelFor(EFFORTS, cur, 'Medium'))}</b>`; menu.appendChild(head);
+  const cur = effEffort();
+  const perChat = !!state.currentConvoId;
+  const head = document.createElement('div'); head.className = 'effort-head'; head.innerHTML = `Effort${perChat ? ' (this chat)' : ''} <b>${escapeHtml(labelFor(EFFORTS, cur, 'Medium'))}</b>`; menu.appendChild(head);
   const ends = document.createElement('div'); ends.className = 'effort-ends'; ends.innerHTML = '<span>Faster</span><span>Smarter</span>'; menu.appendChild(ends);
   const track = document.createElement('div'); track.className = 'effort-track';
   const curIdx = EFFORTS.findIndex((x) => x[0] === cur);
   EFFORTS.forEach(([id, label], i) => {
     const stop = document.createElement('button'); stop.className = 'effort-stop' + (i <= curIdx ? ' on' : '') + (id === cur ? ' active' : '');
     stop.title = label;
-    stop.onclick = async () => { closeMenus(); state.settings = await cc.setSettings({ effort: id }); renderModelLabel(); toast('Effort: ' + label, 'ok'); };
+    stop.onclick = async () => { closeMenus(); if (perChat) { state.chatEffort = id; await cc.setChatEffort(id); } else { state.settings = await cc.setSettings({ effort: id }); } renderModelLabel(); toast('Effort: ' + label, 'ok'); };
     track.appendChild(stop);
   });
   menu.appendChild(track);
@@ -1088,11 +1139,13 @@ window.addEventListener('keydown', (e) => {
 // Alt+↑/↓ switch chats · Ctrl/Cmd +/-/0 zoom the whole UI.
 function cycleChat(dir) { const list = state.conversations || []; if (!list.length) return; let i = list.findIndex((c) => c.id === state.currentConvoId); if (i < 0) i = 0; const n = ((i + dir) % list.length + list.length) % list.length; openConvo(list[n].id); }
 window.addEventListener('keydown', (e) => {
-  if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); cycleChat(e.key === 'ArrowUp' ? -1 : 1); return; }
+  const typing = /^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || '');
+  if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !typing) { e.preventDefault(); cycleChat(e.key === 'ArrowUp' ? -1 : 1); return; }
   const ctrl = e.ctrlKey || e.metaKey; if (!ctrl) return;
-  if (e.key === '=' || e.key === '+') { e.preventDefault(); const z = cc.zoom(0.5); cc.setSettings({ zoom: z }); }
-  else if (e.key === '-' || e.key === '_') { e.preventDefault(); const z = cc.zoom(-0.5); cc.setSettings({ zoom: z }); }
-  else if (e.key === '0') { e.preventDefault(); cc.zoom(0); cc.setSettings({ zoom: 0 }); }
+  const setZoom = (z) => { if (state.settings) state.settings.zoom = z; cc.setSettings({ zoom: z }); };
+  if (e.key === '=' || e.key === '+') { e.preventDefault(); setZoom(cc.zoom(0.5)); }
+  else if (e.key === '-' || e.key === '_') { e.preventDefault(); setZoom(cc.zoom(-0.5)); }
+  else if (e.key === '0') { e.preventDefault(); cc.zoom(0); setZoom(0); }
 });
 
 /* ---------------- drag & drop attachments ---------------- */

@@ -276,6 +276,8 @@ function statePayload() {
     conversations: conv.conversations,
     currentConvoId: conv.currentConvoId,
     activeCount: state.sessions.size,       // how many chats are running at once
+    chatModel: (cur && typeof cur.convo.model === 'string') ? cur.convo.model : null,   // per-chat override, or null = use default
+    chatEffort: (cur && typeof cur.convo.effort === 'string') ? cur.convo.effort : null,
   };
 }
 function pushState() { toRenderer('app:state', statePayload()); updateTray(); updateWindowTitle(); }
@@ -302,11 +304,14 @@ function startSession(convoId, accountId, resumeId) {
 
   stopSession(convoId); // replace only THIS chat's session
   const s = store.getSettings();
+  // Per-chat override wins over the global default when set.
+  const model = (typeof f.convo.model === 'string') ? f.convo.model : (s.model || '');
+  const effort = (typeof f.convo.effort === 'string') ? f.convo.effort : (s.effort || '');
   const session = new ChatSession({
     configDir: acc.configDir,
     cwd: folder,
-    model: s.model || '',
-    effort: s.effort || '',
+    model,
+    effort,
     resumeId: resumeId || '',
     permissionMode: 'default', // SDK stays in default; approvalMode decides prompting
     approvalMode: s.permissionMode || 'ask', // 'ask' | 'acceptEdits' | 'bypass'
@@ -711,6 +716,10 @@ function registerIpc() {
     return { ok: true, running: state.sessions.has(id) };
   });
   ipcMain.handle('chat:renameConvo', (_e, id, title) => { updateConvoById(id, { title: String(title || '').slice(0, 80) || 'New chat' }); pushState(); return { ok: true }; });
+  // Per-chat model / effort override (falls back to the global default).
+  function restartCurrentIfRunning() { const id = state.currentConvoId; if (id && state.sessions.has(id)) { const f = findConvo(id); if (f && f.convo.lastAccount) useAccountForChat(f.convo.lastAccount, id); } }
+  ipcMain.handle('chat:setModel', (_e, model) => { const id = state.currentConvoId; if (!id) return { ok: false }; updateConvoById(id, { model: String(model || '') }); restartCurrentIfRunning(); pushState(); return { ok: true }; });
+  ipcMain.handle('chat:setEffort', (_e, effort) => { const id = state.currentConvoId; if (!id) return { ok: false }; updateConvoById(id, { effort: String(effort || '') }); restartCurrentIfRunning(); pushState(); return { ok: true }; });
   // Persist a manual drag order (sortIndex) without bumping updatedAt.
   ipcMain.handle('chat:reorder', (_e, orderedIds) => {
     if (!Array.isArray(orderedIds)) return { ok: false };
