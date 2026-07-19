@@ -54,6 +54,7 @@
         <div class="top-actions">
           <button id="limitPill" class="pill limit-pill hidden" title="Usage limit — when an account resets"></button>
           <button id="switchPill" class="pill" title="Switch account"><span id="switchDot" class="dot off"></span><span id="switchName">No account</span></button>
+          <button id="dashBtn" class="icon-btn" title="Activity &amp; usage">📊</button>
           <button id="settingsTop" class="icon-btn" title="Settings">⚙</button>
         </div>
       </header>
@@ -182,6 +183,14 @@
           <div class="btn-row" style="margin-top:12px"><button id="ghBtn" class="btn-ghost">GitHub</button></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ============ ACTIVITY & USAGE DASHBOARD ============ -->
+  <div id="dashModal" class="overlay hidden">
+    <div class="modal dash-modal">
+      <div class="modal-head"><h2>Activity &amp; usage</h2><button id="dashClose" class="x-btn">✕</button></div>
+      <div id="dashBody" class="dash-body"></div>
     </div>
   </div>
 

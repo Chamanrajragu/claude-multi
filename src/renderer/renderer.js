@@ -983,6 +983,39 @@ function openSettings() {
   $('settingsModal').classList.remove('hidden');
 }
 $('settingsTop').onclick = openSettings;
+
+/* ---------------- activity & usage dashboard ---------------- */
+function renderDashboard() {
+  const el = $('dashBody'); if (!el) return;
+  const now = Date.now();
+  const convs = state.conversations || [];
+  const loggedIn = (state.accounts || []).filter((a) => a.loggedIn);
+  const accHtml = loggedIn.map((a) => {
+    const using = convs.filter((c) => c.accountId === a.id).length;
+    const run = convs.filter((c) => c.accountId === a.id && c.running).length;
+    let status = 'Ready', cls = 'ready';
+    if (a.cooldownUntil && a.cooldownUntil > now) { status = 'Cooling · ' + fmtCountdown(a.cooldownUntil - now); cls = 'cool'; }
+    else if (a.id === state.activeAccountId && state.running) { status = 'Active'; cls = 'active'; }
+    return `<div class="dash-acc"><span class="dash-acc-av">${escapeHtml((a.name || '?').charAt(0).toUpperCase())}</span>`
+      + `<span class="dash-acc-meta"><span class="dash-acc-name">${escapeHtml(a.name)}</span><span class="dash-acc-sub">${escapeHtml(a.email || 'not signed in')}</span></span>`
+      + `<span class="dash-acc-stat ${cls}">${escapeHtml(status)}</span>`
+      + `<span class="dash-acc-num">${using} chat${using === 1 ? '' : 's'}${run ? ' · ' + run + ' running' : ''}</span></div>`;
+  }).join('') || '<div class="dash-empty">No signed-in accounts yet.</div>';
+  const pct = Math.max(0, Math.min(100, Math.round((usage.ctx / CONTEXT_WINDOW) * 100)));
+  const left = Math.max(0, CONTEXT_WINDOW - usage.ctx);
+  const stat = (n, l) => `<div class="dash-stat"><div class="dash-n">${n}</div><div class="dash-l">${l}</div></div>`;
+  el.innerHTML = `<div class="dash-stats">${stat(convs.length, 'chats')}${stat(convs.filter((c) => c.running).length, 'running')}${stat(convs.filter((c) => c.generating).length, 'working now')}${stat(loggedIn.length, 'accounts')}</div>`
+    + `<div class="dash-sec-label">Accounts</div><div class="dash-accs">${accHtml}</div>`
+    + `<div class="dash-sec-label">This chat</div><div class="dash-chat">`
+    + `<div class="dash-row"><span>Model</span><b>${escapeHtml(shortModelLabel(usage.model || effModel()))}</b></div>`
+    + `<div class="dash-row"><span>Context used</span><b>${pct}% · ${fmtTokens(left)} left</b></div>`
+    + `<div class="dash-row"><span>Session output</span><b>${fmtTokens(usage.sessOut)} tokens</b></div>`
+    + `<div class="dash-row"><span>Session cost</span><b>$${(usage.sessCost || 0).toFixed(usage.sessCost >= 1 ? 2 : 4)}</b></div></div>`;
+}
+function openDashboard() { renderDashboard(); $('dashModal').classList.remove('hidden'); }
+$('dashBtn').onclick = openDashboard;
+$('dashClose').onclick = () => $('dashModal').classList.add('hidden');
+$('dashModal').addEventListener('click', (e) => { if (e.target === $('dashModal')) $('dashModal').classList.add('hidden'); });
 $('settingsClose').onclick = () => $('settingsModal').classList.add('hidden');
 document.querySelectorAll('.snav').forEach((b) => { b.onclick = () => {
   document.querySelectorAll('.snav').forEach((x) => x.classList.remove('active')); b.classList.add('active');
@@ -1070,6 +1103,7 @@ function buildCommands() {
   cmds.push({ icon: '🗂', label: 'Export ALL chats to Markdown…', run: async () => { const r = await cc.exportAllChats(); if (r && r.ok) toast(`Exported ${r.count} chats to ${r.path}`, 'ok'); else if (r && r.error) toast(r.error, 'err'); } });
   cmds.push({ icon: '🎨', label: 'Toggle light / dark theme', run: async () => { const cur = (state.settings || {}).theme; const next = cur === 'light' ? 'dark' : 'light'; applyTheme(next); state.settings = await cc.setSettings({ theme: next }); } });
   cmds.push({ icon: '⬅', label: (state.settings || {}).sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar', hint: 'Ctrl+B', run: () => toggleSidebar() });
+  cmds.push({ icon: '📊', label: 'Activity & usage dashboard', run: () => openDashboard() });
   cmds.push({ icon: '⚙', label: 'Open settings', run: () => openSettings() });
   cmds.push({ icon: '⌨', label: 'Keyboard shortcuts', hint: 'Ctrl+/', run: () => $('shortcutsModal').classList.remove('hidden') });
   // Quick model switch

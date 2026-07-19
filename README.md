@@ -69,6 +69,7 @@ No credential hacking, nothing against the rules — each account simply gets it
 - 📋 **Prompt templates** — save and reuse your go-to prompts from a one-click menu in the composer.
 - 🟢🔴 **Diff view for edits** — every Edit / Write / MultiEdit shows a **red/green diff** of exactly what changed, right in the tool card.
 - 🗂 **Export everything** — one click exports **all** your chats to Markdown files (Settings → Backup, or the command palette).
+- 📊 **Activity & usage dashboard** — one view (📊 in the top bar) for every account's status & cooldown, how many chats are running/working, and this chat's tokens & cost.
 - 💬 **A real chat interface, not a terminal** — talk to Claude in a clean chat window: streamed markdown replies, collapsible **tool cards** (edits, commands, searches), and inline **Allow / Deny** prompts before Claude touches your files.
 - 🛡️ **Permission modes** — keep the safe **Ask every time**, switch to **Auto-accept file edits**, or go hands-free with **Allow everything (no prompts)** — set it once in Settings → Chat.
 - 📎 **Paste & drop attachments** — paste a screenshot or copied image straight into the composer (reads the image bytes directly, so it works even for images copied from a browser or file explorer), or drag files onto the window.
@@ -97,8 +98,10 @@ Claude Code is fantastic, but juggling several accounts by hand is painful: you 
 
 <div align="center">
 
-| Usage panel (how many tokens left, per account) | Model selector |
+| Activity & usage dashboard | Diff view for every edit |
 | --- | --- |
+| <img src="docs/screenshot-dashboard.png" width="410" alt="Activity & usage dashboard: chats, running/working counts, per-account status and cooldowns, and this chat's tokens and cost" /> | <img src="docs/screenshot-main.png" width="410" alt="Chat with a red/green diff shown in an Edit tool card" /> |
+| Usage panel (tokens left, per account) | Model selector |
 | <img src="docs/screenshot-usage.png" width="410" alt="Usage panel showing context used, tokens remaining, per-account reset timers and session cost" /> | <img src="docs/screenshot-models.png" width="410" alt="Model selector: Fable 5, Opus 4.8 / 4.7 / 4.6, Sonnet 5 / 4.6, Haiku 4.5" /> |
 | Effort slider (Faster ↔ Smarter) | Permission modes |
 | <img src="docs/screenshot-effort.png" width="410" alt="Effort slider from Faster to Smarter" /> | <img src="docs/screenshot-permissions.png" width="410" alt="Permission modes: Ask each time, Accept edits, Bypass permissions" /> |
