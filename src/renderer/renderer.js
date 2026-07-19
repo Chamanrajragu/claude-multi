@@ -373,13 +373,39 @@ function toolIcon(name) {
   if (n === 'todowrite' || n.includes('todo')) return '✅';
   return '⚙';
 }
+// Mirror of main's diffFromInput so a diff shows live (streaming), not just on reload.
+function diffFromToolInput(name, input) {
+  const n = String(name || '').toLowerCase();
+  if (!input || typeof input !== 'object') return null;
+  const cap = (s) => String(s == null ? '' : s).slice(0, 4000);
+  const file = input.file_path || input.path || input.notebook_path || '';
+  if (n === 'edit' || n === 'update' || n === 'notebookedit') return { file, hunks: [{ old: cap(input.old_string), new: cap(input.new_string) }] };
+  if (n === 'multiedit' && Array.isArray(input.edits)) return { file, hunks: input.edits.slice(0, 30).map((e) => ({ old: cap(e && e.old_string), new: cap(e && e.new_string) })) };
+  if (n === 'write' && typeof input.content === 'string') return { file, hunks: [{ old: '', new: cap(input.content) }] };
+  return null;
+}
+// Render a red/green diff for a file-editing tool card.
+function renderDiff(edit) {
+  const el = document.createElement('div'); el.className = 'tool-diff';
+  if (edit.file) { const f = document.createElement('div'); f.className = 'diff-file'; f.textContent = edit.file; el.appendChild(f); }
+  (edit.hunks || []).forEach((h, i) => {
+    if (i > 0) { const s = document.createElement('div'); s.className = 'diff-sep'; s.textContent = '⋯'; el.appendChild(s); }
+    const addLine = (cls, prefix, text) => { const d = document.createElement('div'); d.className = 'diff-line ' + cls; d.textContent = prefix + text; el.appendChild(d); };
+    if (h.old) h.old.split('\n').forEach((l) => addLine('del', '- ', l));
+    if (h.new) h.new.split('\n').forEach((l) => addLine('add', '+ ', l));
+  });
+  return el;
+}
 function makeToolCard(block) {
   const card = document.createElement('div'); card.className = 'tool-card';
   const head = document.createElement('div'); head.className = 'tool-head';
   const st = block.state === 'running' ? 'running…' : (block.state === 'err' ? 'error' : 'done');
   const cls = block.state === 'running' ? '' : (block.state === 'err' ? 'err' : 'ok');
   head.innerHTML = `<span class="tool-ico">${toolIcon(block.name)}</span><span class="tool-name">${escapeHtml(block.name)}</span><span class="tool-summary">${escapeHtml(block.summary || '')}</span><span class="tool-state ${cls}">${st}</span>`;
-  const body = document.createElement('div'); body.className = 'tool-body hidden'; body.textContent = block.output || '';
+  const body = document.createElement('div'); body.className = 'tool-body hidden';
+  // Show the diff for edits; on failure fall back to the error text so the user
+  // can read WHY it failed.
+  if (block.edit && block.state !== 'err') body.appendChild(renderDiff(block.edit)); else body.textContent = block.output || '';
   head.onclick = () => body.classList.toggle('hidden');
   card.appendChild(head); card.appendChild(body);
   return { card, head, body };
@@ -498,13 +524,18 @@ function onThinking(text) {
 function onToolUse(id, name, input) {
   const t = ensureTurn(); t.curText = null; t.curBlock = null;
   const block = { type: 'tool', name, summary: toolSummary(name, input), state: 'running', output: typeof input === 'object' ? JSON.stringify(input, null, 2) : String(input) };
+  const ed = diffFromToolInput(name, input); if (ed) block.edit = ed; // live red/green diff
   t.blocks.push(block); const { card, head, body } = makeToolCard(block); t.body.appendChild(card); t.tools.set(id, { block, head, body }); scrollDown();
 }
 function onToolResult(id, isError, text) {
   const t = turn; if (!t) return; const e = t.tools.get(id); if (!e) return;
   e.block.state = isError ? 'err' : 'ok';
   const s = e.head.querySelector('.tool-state'); s.textContent = isError ? 'error' : 'done'; s.className = 'tool-state ' + (isError ? 'err' : 'ok');
-  if (text) { e.block.output = (typeof text === 'string' ? text : JSON.stringify(text)).slice(0, 8000); e.body.textContent = e.block.output; }
+  if (text) {
+    e.block.output = (typeof text === 'string' ? text : JSON.stringify(text)).slice(0, 8000);
+    // Keep the diff for a successful edit; show the result/error text otherwise.
+    if (isError || !e.block.edit) e.body.textContent = e.block.output;
+  }
   scrollDown();
 }
 function onErrorLine(text) { hideWelcome(); const el = document.createElement('div'); el.className = 'err-line'; el.textContent = '⚠ ' + text; if (turn && turn.body) turn.body.appendChild(el); else wrap(el); scrollDown(true); }
@@ -966,6 +997,7 @@ $('setNotify').onchange = async (e) => { state.settings = await cc.setSettings({
 $('setTray').onchange = async (e) => { state.settings = await cc.setSettings({ minimizeToTray: e.target.checked }); };
 $('setStartup').onchange = async (e) => { state.settings = await cc.setSettings({ startOnLogin: e.target.checked }); };
 $('exportBtn').onclick = async () => { const r = await cc.exportConfig(); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); };
+$('exportAllBtn').onclick = async () => { const r = await cc.exportAllChats(); if (r && r.ok) toast(`Exported ${r.count} chat${r.count === 1 ? '' : 's'} to ${r.path}`, 'ok'); else if (r && r.error) toast(r.error, 'err'); };
 $('importBtn').onclick = async () => { const r = await cc.importConfig(); if (r && r.ok) toast('Imported — accounts restored', 'ok'); else if (r && r.error) toast(r.error, 'err'); };
 $('ghBtn').onclick = () => cc.openExternal('https://github.com/Chamanrajragu/claude-multi');
 $('setWidth').onchange = async (e) => { applyAppearance({ width: e.target.value }); state.settings = await cc.setSettings({ width: e.target.value }); };
@@ -1035,6 +1067,7 @@ function buildCommands() {
   cmds.push({ icon: '🔍', label: 'Search chats', hint: 'Ctrl+F', run: () => { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } });
   cmds.push({ icon: '🔎', label: 'Find in this chat', hint: 'Ctrl+Shift+F', run: () => openFind() });
   cmds.push({ icon: '📤', label: 'Export this chat as Markdown', run: async () => { const r = await cc.exportMd(); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); } });
+  cmds.push({ icon: '🗂', label: 'Export ALL chats to Markdown…', run: async () => { const r = await cc.exportAllChats(); if (r && r.ok) toast(`Exported ${r.count} chats to ${r.path}`, 'ok'); else if (r && r.error) toast(r.error, 'err'); } });
   cmds.push({ icon: '🎨', label: 'Toggle light / dark theme', run: async () => { const cur = (state.settings || {}).theme; const next = cur === 'light' ? 'dark' : 'light'; applyTheme(next); state.settings = await cc.setSettings({ theme: next }); } });
   cmds.push({ icon: '⬅', label: (state.settings || {}).sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar', hint: 'Ctrl+B', run: () => toggleSidebar() });
   cmds.push({ icon: '⚙', label: 'Open settings', run: () => openSettings() });

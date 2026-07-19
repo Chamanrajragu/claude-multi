@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('cc', {
   // can't decode (e.g. an image file copied from Explorer).
   savePastedImage: (bytes, ext) => ipcRenderer.invoke('app:savePastedImage', bytes, ext),
   exportConfig: () => ipcRenderer.invoke('app:export'),
+  exportAllChats: () => ipcRenderer.invoke('app:exportAll'),
   importConfig: () => ipcRenderer.invoke('app:import'),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
   openConfigDir: (id) => ipcRenderer.invoke('app:openConfigDir', id),

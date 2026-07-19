@@ -227,6 +227,14 @@ button { font-family: inherit; color: inherit; }
 .tool-state.ok { color: var(--ok); } .tool-state.err { color: var(--err); }
 .tool-body { border-top: 1px solid var(--border-soft); padding: 10px 12px; font-family: "Cascadia Mono", Consolas, monospace; font-size: 11.5px; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; color: var(--muted); }
 .tool-body.hidden { display: none; }
+.tool-diff { font-family: "Cascadia Mono", Consolas, monospace; font-size: 11.5px; }
+.diff-file { color: var(--muted); margin-bottom: 6px; opacity: .85; }
+.diff-sep { color: var(--faint); text-align: center; }
+.diff-line { white-space: pre-wrap; word-break: break-word; padding: 0 4px; border-radius: 3px; }
+.diff-line.del { color: #e0715b; background: rgba(224,113,91,.10); }
+.diff-line.add { color: #6cae8f; background: rgba(108,174,143,.12); }
+[data-theme="light"] .diff-line.del { color: #b23c2a; background: rgba(224,113,91,.12); }
+[data-theme="light"] .diff-line.add { color: #2e7d55; background: rgba(108,174,143,.16); }
 
 .perm-card { border: 1.5px solid var(--accent); border-radius: 12px; margin: 0 0 12px; background: var(--accent-soft); padding: 13px 15px; }
 .perm-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }

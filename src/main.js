@@ -47,6 +47,25 @@ function toolSummary(name, i) {
     (i.prompt ? String(i.prompt).slice(0, 80) : (JSON.stringify(i) === '{}' ? '' : JSON.stringify(i).slice(0, 80)));
 }
 function safeJson(x) { try { return typeof x === 'object' ? JSON.stringify(x, null, 2) : String(x); } catch { return ''; } }
+// A filesystem-safe base name for an exported chat: strips path chars, trims
+// after truncating, and avoids Windows reserved device names (CON, PRN, …).
+function safeFileName(title) {
+  let s = String(title || 'chat').replace(/[^a-z0-9\-_ ]+/gi, '').slice(0, 50).trim() || 'chat';
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(s)) s = '_' + s;
+  return s;
+}
+// Extract a compact old→new diff from a file-editing tool's input, so the UI can
+// show a red/green diff. Strings are capped to keep the saved log reasonable.
+function diffFromInput(name, input) {
+  const n = String(name || '').toLowerCase();
+  if (!input || typeof input !== 'object') return null;
+  const cap = (s) => String(s == null ? '' : s).slice(0, 4000);
+  const file = input.file_path || input.path || input.notebook_path || '';
+  if (n === 'edit' || n === 'update' || n === 'notebookedit') return { file, hunks: [{ old: cap(input.old_string), new: cap(input.new_string) }] };
+  if (n === 'multiedit' && Array.isArray(input.edits)) return { file, hunks: input.edits.slice(0, 30).map((e) => ({ old: cap(e && e.old_string), new: cap(e && e.new_string) })) };
+  if (n === 'write' && typeof input.content === 'string') return { file, hunks: [{ old: '', new: cap(input.content) }] };
+  return null;
+}
 
 // ---- helpers --------------------------------------------------------------
 function findClaudePath() {
@@ -178,6 +197,8 @@ function accumulate(id, ev) {
     case 'tool_use': {
       b.curText = null;
       const blk = { type: 'tool', name: ev.name, summary: toolSummary(ev.name, ev.input), state: 'running', output: safeJson(ev.input) };
+      const ed = diffFromInput(ev.name, ev.input);
+      if (ed) blk.edit = ed; // enables a red/green diff view in the UI
       b.blocks.push(blk); b.tools.set(ev.id, blk); break;
     }
     case 'tool_result': {
@@ -743,7 +764,7 @@ function registerIpc() {
     const c = f && f.convo;
     if (!c || !(c.log && c.log.length)) return { ok: false, error: 'Nothing to export yet' };
     const md = conversationToMarkdown(c);
-    const safe = String(c.title || 'chat').replace(/[^a-z0-9\-_ ]+/gi, '').trim().slice(0, 40) || 'chat';
+    const safe = safeFileName(c.title);
     const res = await dialog.showSaveDialog(win, {
       title: 'Export conversation to Markdown',
       defaultPath: path.join(os.homedir(), safe + '.md'),
@@ -876,6 +897,20 @@ function registerIpc() {
     if (res.canceled || !res.filePath) return { ok: false };
     try { fs.writeFileSync(res.filePath, store.exportData()); return { ok: true, path: res.filePath }; }
     catch (e) { return { ok: false, error: String(e.message || e) }; }
+  });
+  // Export EVERY chat (across all folders) to Markdown files in a chosen folder.
+  ipcMain.handle('app:exportAll', async () => {
+    const res = await dialog.showOpenDialog(win, { title: 'Choose a folder to export all chats to', properties: ['openDirectory', 'createDirectory'] });
+    if (res.canceled || !res.filePaths[0]) return { ok: false };
+    const dir = res.filePaths[0]; let count = 0;
+    eachConvo((c) => {
+      if (!(c.log && c.log.length)) return;
+      const safe = safeFileName(c.title);
+      let file = path.join(dir, safe + '.md'); let n = 2;
+      while (fs.existsSync(file)) file = path.join(dir, safe + ' (' + (n++) + ').md');
+      try { fs.writeFileSync(file, conversationToMarkdown(c)); count++; } catch { /* skip */ }
+    });
+    return { ok: true, count, path: dir };
   });
   ipcMain.handle('app:import', async () => {
     const res = await dialog.showOpenDialog(win, { title: 'Import Claude Multi config', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
