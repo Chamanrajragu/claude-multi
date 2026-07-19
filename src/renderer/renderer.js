@@ -60,10 +60,10 @@ function renderConvos() {
     more.onclick = (e) => { e.stopPropagation(); convoMenu(c, e.currentTarget); };
     row.appendChild(pin); row.appendChild(meta); row.appendChild(status); row.appendChild(more);
     row.onclick = () => openConvo(c.id);
-    // Drag to reorder
-    row.draggable = true; row.dataset.id = c.id;
+    // Drag to reorder (disabled while a search filter is active)
+    row.draggable = !convoFilter; row.dataset.id = c.id;
     row.addEventListener('dragstart', (e) => { draggingConvo = true; row.classList.add('dragging'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.id); } catch { /* noop */ } });
-    row.addEventListener('dragend', () => { row.classList.remove('dragging'); draggingConvo = false; const ids = Array.from(list.querySelectorAll('.convo')).map((r) => r.dataset.id).filter(Boolean); cc.reorderConvos(ids); });
+    row.addEventListener('dragend', () => { row.classList.remove('dragging'); draggingConvo = false; if (convoFilter) { renderConvos(); return; } const ids = Array.from(list.querySelectorAll('.convo')).map((r) => r.dataset.id).filter(Boolean); cc.reorderConvos(ids); });
     list.appendChild(row);
   }
   setupConvoDnD(list);
@@ -71,6 +71,8 @@ function renderConvos() {
 let convoDnDReady = false;
 function setupConvoDnD(list) {
   if (convoDnDReady) return; convoDnDReady = true;
+  // Backstop: never let the drag flag wedge the sidebar if dragend is missed.
+  window.addEventListener('dragend', () => { if (draggingConvo) { draggingConvo = false; renderConvos(); } });
   list.addEventListener('dragover', (e) => {
     if (!draggingConvo) return;
     e.preventDefault();
@@ -327,13 +329,36 @@ function flush() { rafQ = false; for (const el of pending) el.innerHTML = render
 function toolSummary(name, i) { if (!i) return ''; return i.command || i.file_path || i.path || i.pattern || i.url || (i.prompt ? String(i.prompt).slice(0, 80) : (JSON.stringify(i) === '{}' ? '' : JSON.stringify(i).slice(0, 80))); }
 
 function fmtTime(ts) { if (!ts) return ''; try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } }
-function appendUserDOM(text, ts) { hideWelcome(); const msg = document.createElement('div'); msg.className = 'msg user'; const b = document.createElement('div'); b.className = 'bubble'; b.textContent = text; msg.appendChild(b); if (ts) { const t = document.createElement('div'); t.className = 'msg-time'; t.textContent = fmtTime(ts); msg.appendChild(t); } wrap(msg); }
+function appendUserDOM(text, ts) {
+  hideWelcome();
+  const msg = document.createElement('div'); msg.className = 'msg user';
+  const b = document.createElement('div'); b.className = 'bubble'; b.textContent = text; msg.appendChild(b);
+  const foot = document.createElement('div'); foot.className = 'user-foot';
+  const edit = document.createElement('button'); edit.className = 'msg-edit'; edit.textContent = '✎ Edit'; edit.title = 'Edit & resend this message';
+  edit.onclick = () => { const inp = $('input'); inp.value = String(text).replace(/\n?📎 .*$/gm, '').trim(); autoGrow(); updateComposer(); inp.focus(); };
+  foot.appendChild(edit);
+  if (ts) { const t = document.createElement('span'); t.className = 'msg-time'; t.textContent = fmtTime(ts); foot.appendChild(t); }
+  msg.appendChild(foot);
+  wrap(msg);
+}
+function toolIcon(name) {
+  const n = String(name || '').toLowerCase();
+  if (n === 'read' || n === 'notebookread') return '📖';
+  if (n === 'write') return '📝';
+  if (n === 'edit' || n === 'multiedit' || n === 'notebookedit' || n === 'update' || n === 'applypatch') return '✏️';
+  if (n === 'bash' || n === 'powershell' || n.includes('shell')) return '⌨️';
+  if (n === 'grep' || n === 'glob' || n === 'search' || n.includes('find')) return '🔍';
+  if (n === 'webfetch' || n === 'websearch' || n.includes('fetch')) return '🌐';
+  if (n === 'task' || n === 'agent') return '🤖';
+  if (n === 'todowrite' || n.includes('todo')) return '✅';
+  return '⚙';
+}
 function makeToolCard(block) {
   const card = document.createElement('div'); card.className = 'tool-card';
   const head = document.createElement('div'); head.className = 'tool-head';
   const st = block.state === 'running' ? 'running…' : (block.state === 'err' ? 'error' : 'done');
   const cls = block.state === 'running' ? '' : (block.state === 'err' ? 'err' : 'ok');
-  head.innerHTML = `<span class="tool-ico">⚙</span><span class="tool-name">${escapeHtml(block.name)}</span><span class="tool-summary">${escapeHtml(block.summary || '')}</span><span class="tool-state ${cls}">${st}</span>`;
+  head.innerHTML = `<span class="tool-ico">${toolIcon(block.name)}</span><span class="tool-name">${escapeHtml(block.name)}</span><span class="tool-summary">${escapeHtml(block.summary || '')}</span><span class="tool-state ${cls}">${st}</span>`;
   const body = document.createElement('div'); body.className = 'tool-body hidden'; body.textContent = block.output || '';
   head.onclick = () => body.classList.toggle('hidden');
   card.appendChild(head); card.appendChild(body);
@@ -444,7 +469,7 @@ function ensureTurn() {
 }
 function newTextBlock() { const t = ensureTurn(); const el = document.createElement('div'); el.className = 'md'; t.body.appendChild(el); t.curText = el; t.curRaw = ''; t.curBlock = { type: 'text', text: '' }; t.blocks.push(t.curBlock); return el; }
 function onAssistantDelta(text) { const t = ensureTurn(); if (!t.curText) newTextBlock(); t.curRaw += text; t.curText._raw = t.curRaw; t.curBlock.text = t.curRaw; schedule(t.curText); }
-function onAssistantText(text) { const t = ensureTurn(); if (!t.curText) newTextBlock(); t.curText._raw = text; t.curText.innerHTML = renderMarkdown(text); t.curBlock.text = text; t.curText = null; t.curRaw = ''; t.curBlock = null; scrollDown(); }
+function onAssistantText(text) { const t = ensureTurn(); if (!t.curText) newTextBlock(); const el = t.curText; el._raw = text; el.innerHTML = renderMarkdown(text); pending.delete(el); t.curBlock.text = text; t.curText = null; t.curRaw = ''; t.curBlock = null; scrollDown(); }
 function onThinking(text) {
   const t = ensureTurn();
   if (!t.thinkEl) { const d = document.createElement('details'); d.className = 'think'; const s = document.createElement('summary'); s.textContent = 'Thinking'; const b = document.createElement('div'); b.className = 'think-body'; d.appendChild(s); d.appendChild(b); t.body.appendChild(d); t.thinkEl = b; t.thinkRaw = ''; }
@@ -671,6 +696,8 @@ async function newChat(chooseFolder) {
   if (r && !r.ok) toast(r.error || 'Could not start', 'err');
 }
 $('newChatBtn').onclick = (e) => newChat(e && (e.altKey || e.shiftKey)); // Alt/Shift+click = pick a folder
+async function toggleSidebar() { const v = !(state.settings || {}).sidebarCollapsed; state.settings = await cc.setSettings({ sidebarCollapsed: v }); applyAppearance(state.settings); }
+$('sidebarToggle').onclick = toggleSidebar;
 $('projectBtn').onclick = async () => {
   if (!state.currentConvoId) { const r = await cc.newChat(); if (r && !r.ok && !r.canceled) toast(r.error || 'Could not start', 'err'); return; }
   const dir = await cc.pickProject();
@@ -829,8 +856,27 @@ async function doSwitch(id) {
 }
 
 /* ---------------- settings ---------------- */
+const ACCENTS = [
+  { v: '', c: '#d97757', name: 'Coral (default)' },
+  { v: '#4d90d6', c: '#4d90d6', name: 'Blue' },
+  { v: '#4ec98a', c: '#4ec98a', name: 'Green' },
+  { v: '#a07cf0', c: '#a07cf0', name: 'Purple' },
+  { v: '#e0a458', c: '#e0a458', name: 'Amber' },
+  { v: '#e06ba8', c: '#e06ba8', name: 'Pink' },
+  { v: '#3bb3a1', c: '#3bb3a1', name: 'Teal' },
+];
+function renderAccentRow() {
+  const row = $('accentRow'); if (!row) return; row.innerHTML = '';
+  const cur = (state.settings || {}).accent || '';
+  ACCENTS.forEach((a) => {
+    const b = document.createElement('button'); b.className = 'accent-sw' + (a.v === cur ? ' on' : ''); b.style.background = a.c; b.title = a.name;
+    b.onclick = async () => { state.settings = await cc.setSettings({ accent: a.v }); applyAppearance(state.settings); renderAccentRow(); };
+    row.appendChild(b);
+  });
+}
 function openSettings() {
   const s = state.settings || {};
+  renderAccentRow();
   $('setTheme').value = ['light', 'system'].includes(s.theme) ? s.theme : 'dark';
   $('setWidth').value = s.width === 'wide' ? 'wide' : 'comfortable';
   $('setFontScale').value = ['small', 'large'].includes(s.fontScale) ? s.fontScale : 'normal';
@@ -871,11 +917,16 @@ function applyTheme(t) {
   const eff = t === 'system' ? (mq && mq.matches ? 'light' : 'dark') : (t === 'light' ? 'light' : 'dark');
   document.documentElement.setAttribute('data-theme', eff);
 }
+function shade(hex, f) { const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return hex; const n = parseInt(m[1], 16); const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((x) => Math.max(0, Math.min(255, Math.round(x * f))).toString(16).padStart(2, '0')); return '#' + c.join(''); }
 function applyAppearance(s) {
   s = s || (state.settings || {});
   if (s.theme !== undefined) applyTheme(s.theme);
   document.documentElement.setAttribute('data-width', s.width === 'wide' ? 'wide' : 'comfortable');
   document.documentElement.setAttribute('data-fontscale', ['small', 'large'].includes(s.fontScale) ? s.fontScale : 'normal');
+  const rs = document.documentElement.style;
+  if (s.accent) { rs.setProperty('--accent', s.accent); rs.setProperty('--accent-2', shade(s.accent, 0.82)); }
+  else { rs.removeProperty('--accent'); rs.removeProperty('--accent-2'); }
+  document.documentElement.setAttribute('data-sidebar', s.sidebarCollapsed ? 'collapsed' : 'open');
   if (s.sidebarWidth) { const sb = $('sidebar'); if (sb) { const w = Math.max(220, Math.min(480, s.sidebarWidth)); sb.style.width = w + 'px'; sb.style.minWidth = w + 'px'; } }
 }
 // Drag-to-resize the sidebar; width persists in settings.
@@ -924,6 +975,7 @@ function buildCommands() {
   cmds.push({ icon: '🔎', label: 'Find in this chat', hint: 'Ctrl+Shift+F', run: () => openFind() });
   cmds.push({ icon: '📤', label: 'Export this chat as Markdown', run: async () => { const r = await cc.exportMd(); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); } });
   cmds.push({ icon: '🎨', label: 'Toggle light / dark theme', run: async () => { const cur = (state.settings || {}).theme; const next = cur === 'light' ? 'dark' : 'light'; applyTheme(next); state.settings = await cc.setSettings({ theme: next }); } });
+  cmds.push({ icon: '⬅', label: (state.settings || {}).sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar', hint: 'Ctrl+B', run: () => toggleSidebar() });
   cmds.push({ icon: '⚙', label: 'Open settings', run: () => openSettings() });
   cmds.push({ icon: '⌨', label: 'Keyboard shortcuts', hint: 'Ctrl+/', run: () => $('shortcutsModal').classList.remove('hidden') });
   // Quick model switch
@@ -1013,6 +1065,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'k' || e.key === 'K') { e.preventDefault(); if ($('cmdkModal').classList.contains('hidden')) openCmdk(); else closeCmdk(); }
   else if (e.key === '/') { e.preventDefault(); $('shortcutsModal').classList.toggle('hidden'); }
   else if ((e.key === 'n' || e.key === 'N') && !e.shiftKey) { e.preventDefault(); $('newChatBtn').click(); }
+  else if (e.key === 'b' || e.key === 'B') { e.preventDefault(); toggleSidebar(); }
   else if ((e.key === 'f' || e.key === 'F') && e.shiftKey) { e.preventDefault(); openFind(); }
   else if ((e.key === 'f' || e.key === 'F') && !e.shiftKey) { e.preventDefault(); if (state.conversations.length) { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } }
 });

@@ -49,6 +49,7 @@
     <!-- ================= MAIN ================= -->
     <main id="main">
       <header id="topbar">
+        <button id="sidebarToggle" class="sidebar-toggle" title="Toggle sidebar (Ctrl+B)">☰</button>
         <div id="topTitle" class="top-title">New chat</div>
         <div class="top-actions">
           <button id="limitPill" class="pill limit-pill hidden" title="Usage limit — when an account resets"></button>
@@ -138,6 +139,8 @@
           <h3>Appearance</h3>
           <div class="setting-row"><div><div class="s-title">Theme</div><div class="s-sub">Match Claude's look, or follow your system</div></div>
             <select id="setTheme"><option value="dark">Claude Dark</option><option value="light">Claude Light</option><option value="system">Match system</option></select></div>
+          <div class="setting-row"><div><div class="s-title">Accent color</div><div class="s-sub">Personalize the highlight color</div></div>
+            <div id="accentRow" class="accent-row"></div></div>
           <div class="setting-row"><div><div class="s-title">Message width</div><div class="s-sub">Comfortable reading column or full width</div></div>
             <select id="setWidth"><option value="comfortable">Comfortable</option><option value="wide">Wide</option></select></div>
           <div class="setting-row"><div><div class="s-title">Text size</div><div class="s-sub">Chat font size</div></div>

@@ -773,10 +773,13 @@ function registerIpc() {
   });
   ipcMain.handle('chat:interrupt', (_e, id) => { const s = state.sessions.get(id || state.currentConvoId); if (s) s.interrupt(); return { ok: true }; });
   ipcMain.handle('chat:permission', (_e, requestId, allow, message, convoId) => {
-    const s = state.sessions.get(convoId || state.currentConvoId);
+    const cid = convoId || state.currentConvoId;
+    const s = state.sessions.get(cid);
     if (s) s.respondPermission(requestId, allow, message);
-    // Clear it from the pending-prompt queue (search all convos by request id).
-    for (const [cid, m] of state.perms) { if (m.delete(requestId) && m.size === 0) state.perms.delete(cid); }
+    // Clear ONLY this chat's pending prompt. (Request ids can repeat across
+    // parallel chats, so never touch other convos' maps.)
+    const m = state.perms.get(cid);
+    if (m && m.delete(requestId) && m.size === 0) state.perms.delete(cid);
     return { ok: true };
   });
   ipcMain.handle('chat:switch', (_e, targetId) => switchAccount(targetId));

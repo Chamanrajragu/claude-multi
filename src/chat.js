@@ -27,6 +27,7 @@
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Update', 'ApplyPatch']);
 
 let sdkPromise = null;
+let permCounter = 0; // globally-unique permission request ids across all sessions
 function loadSdk() {
   // The SDK is ESM; load it from CommonJS via dynamic import (cached).
   if (!sdkPromise) sdkPromise = import('@anthropic-ai/claude-agent-sdk');
@@ -183,7 +184,7 @@ class ChatSession {
     if (this.approvalMode === 'bypass') return Promise.resolve({ behavior: 'allow', updatedInput: toolInput });
     if (this.approvalMode === 'acceptEdits' && EDIT_TOOLS.has(toolName)) return Promise.resolve({ behavior: 'allow', updatedInput: toolInput });
     return new Promise((resolve) => {
-      const id = 'perm_' + (++this._permSeq);
+      const id = 'perm_' + (++permCounter);
       this._perms.set(id, { resolve, input: toolInput });
       this.onEvent({ type: 'permission', requestId: id, tool: toolName, input: toolInput || {} });
     });
