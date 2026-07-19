@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('cc', {
   stopChat: (convoId) => ipcRenderer.invoke('chat:stop', convoId),
   regenerate: () => ipcRenderer.invoke('chat:regenerate'),
   duplicateConvo: (id) => ipcRenderer.invoke('chat:duplicate', id),
+  reorderConvos: (ids) => ipcRenderer.invoke('chat:reorder', ids),
   promptHistory: () => ipcRenderer.invoke('app:promptHistory'),
 
   // ---- conversations (history) ----

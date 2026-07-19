@@ -28,7 +28,9 @@ function renderProject() {
 }
 
 let convoFilter = '';
+let draggingConvo = false;
 function renderConvos() {
+  if (draggingConvo) return; // don't rebuild the list mid-drag
   const list = $('convoList');
   list.innerHTML = '';
   if (!state.conversations.length) { $('convoSearch').classList.add('hidden'); const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'No chats yet. Click “New chat” and pick a folder.'; list.appendChild(d); return; }
@@ -58,8 +60,25 @@ function renderConvos() {
     more.onclick = (e) => { e.stopPropagation(); convoMenu(c, e.currentTarget); };
     row.appendChild(pin); row.appendChild(meta); row.appendChild(status); row.appendChild(more);
     row.onclick = () => openConvo(c.id);
+    // Drag to reorder
+    row.draggable = true; row.dataset.id = c.id;
+    row.addEventListener('dragstart', (e) => { draggingConvo = true; row.classList.add('dragging'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.id); } catch { /* noop */ } });
+    row.addEventListener('dragend', () => { row.classList.remove('dragging'); draggingConvo = false; const ids = Array.from(list.querySelectorAll('.convo')).map((r) => r.dataset.id).filter(Boolean); cc.reorderConvos(ids); });
     list.appendChild(row);
   }
+  setupConvoDnD(list);
+}
+let convoDnDReady = false;
+function setupConvoDnD(list) {
+  if (convoDnDReady) return; convoDnDReady = true;
+  list.addEventListener('dragover', (e) => {
+    if (!draggingConvo) return;
+    e.preventDefault();
+    const dragging = list.querySelector('.convo.dragging'); if (!dragging) return;
+    const rows = Array.from(list.querySelectorAll('.convo:not(.dragging)'));
+    const after = rows.find((r) => e.clientY < r.getBoundingClientRect().top + r.getBoundingClientRect().height / 2);
+    if (after) list.insertBefore(dragging, after); else list.appendChild(dragging);
+  });
 }
 $('convoSearch').addEventListener('input', (e) => { convoFilter = e.target.value; renderConvos(); });
 async function openConvo(id) {
@@ -197,7 +216,22 @@ function renderStarters() {
     box.appendChild(b);
   }
 }
-function renderAll() { renderProject(); renderConvos(); renderAccountRow(); renderTop(); updateComposer(); renderAttachments(); renderStarters(); renderUsage(); renderLimitPill(); }
+// Live onboarding checklist in the welcome screen — ticks off as you set up.
+function renderWelcome() {
+  const w = $('welcome'); const ol = w && w.querySelector('.welcome-steps'); if (!ol) return;
+  const hasChat = !!(state.currentConvoId || (state.conversations && state.conversations.length));
+  const hasAcct = (state.accounts || []).length > 0;
+  const loggedIn = (state.accounts || []).some((a) => a.loggedIn);
+  const steps = [
+    { done: hasChat, label: 'Create a chat & pick a folder', hint: 'Click “New chat” (top-left)' },
+    { done: hasAcct, label: 'Add a Claude account', hint: 'Account switcher (bottom-left) → Add account' },
+    { done: loggedIn, label: 'Log in — your login stays on your machine', hint: 'Sign in once per account' },
+    { done: !!state.running, label: 'Choose an account & start chatting', hint: '' },
+  ];
+  let n = 1;
+  ol.innerHTML = steps.map((s) => `<li class="ob-step${s.done ? ' done' : ''}"><span class="ob-mark">${s.done ? '✓' : (n++)}</span><span class="ob-txt"><b>${escapeHtml(s.label)}</b>${s.hint ? `<span class="ob-hint">${escapeHtml(s.hint)}</span>` : ''}</span></li>`).join('');
+}
+function renderAll() { renderProject(); renderConvos(); renderAccountRow(); renderTop(); updateComposer(); renderAttachments(); renderStarters(); renderUsage(); renderLimitPill(); renderWelcome(); }
 
 // Topbar pill: shows when signed-in accounts are cooling down and when the
 // soonest one resets, so "how long until I can use it again" is always visible.
@@ -277,7 +311,7 @@ $('usageRingBtn').onclick = (e) => { e.stopPropagation(); const m = $('usageMenu
 /* ---------------- transcript ---------------- */
 const transcript = $('transcript');
 let turn = null; let convo = [];
-function clearTranscript() { transcript.innerHTML = ''; turn = null; }
+function clearTranscript() { transcript.innerHTML = ''; turn = null; if (typeof closeFind === 'function') closeFind(); }
 function nearBottom() { return transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 120; }
 function scrollDown(force) { if (force || nearBottom()) transcript.scrollTop = transcript.scrollHeight; }
 transcript.addEventListener('scroll', () => { $('scrollDownBtn').classList.toggle('hidden', nearBottom()); });
@@ -292,7 +326,8 @@ function schedule(el) { pending.add(el); if (!rafQ) { rafQ = true; requestAnimat
 function flush() { rafQ = false; for (const el of pending) el.innerHTML = renderMarkdown(el._raw || ''); pending.clear(); scrollDown(); }
 function toolSummary(name, i) { if (!i) return ''; return i.command || i.file_path || i.path || i.pattern || i.url || (i.prompt ? String(i.prompt).slice(0, 80) : (JSON.stringify(i) === '{}' ? '' : JSON.stringify(i).slice(0, 80))); }
 
-function appendUserDOM(text) { hideWelcome(); const msg = document.createElement('div'); msg.className = 'msg user'; const b = document.createElement('div'); b.className = 'bubble'; b.textContent = text; msg.appendChild(b); wrap(msg); }
+function fmtTime(ts) { if (!ts) return ''; try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } }
+function appendUserDOM(text, ts) { hideWelcome(); const msg = document.createElement('div'); msg.className = 'msg user'; const b = document.createElement('div'); b.className = 'bubble'; b.textContent = text; msg.appendChild(b); if (ts) { const t = document.createElement('div'); t.className = 'msg-time'; t.textContent = fmtTime(ts); msg.appendChild(t); } wrap(msg); }
 function makeToolCard(block) {
   const card = document.createElement('div'); card.className = 'tool-card';
   const head = document.createElement('div'); head.className = 'tool-head';
@@ -310,6 +345,32 @@ function copyText(text, btn, okLabel) {
   if (btn) { const old = btn.textContent; btn.textContent = okLabel || '✓ Copied'; setTimeout(() => { btn.textContent = old; }, 1300); }
   else toast('Copied', 'ok');
 }
+// Lightweight, dependency-free syntax highlighting for code blocks. Tokenises
+// comments / strings / numbers / keywords and wraps them in styled spans. Safe:
+// every token is HTML-escaped and only our own <span class> markup is emitted.
+const HL_KW = new Set(('const let var function return if else for while do switch case break continue new class extends super import export from default async await try catch finally throw typeof instanceof delete yield void this null true false undefined in of static get set public private protected def elif except with lambda pass None True False and or not is print raise global nonlocal func package type struct interface map range chan select defer go fn impl mut pub use match enum trait where mod loop unless then begin end nil echo local fi esac then done').split(' '));
+function highlightCode(scope) {
+  if (!scope) return;
+  scope.querySelectorAll('pre code:not(.hl-done)').forEach((code) => {
+    code.classList.add('hl-done');
+    const lang = ((code.className.match(/language-([\w-]+)/) || [])[1] || '').toLowerCase();
+    const hash = /^(py|python|sh|bash|shell|zsh|yaml|yml|rb|ruby|toml|ini|conf|makefile|dockerfile|r)$/.test(lang);
+    const src = code.textContent || '';
+    const cmt = hash ? '#[^\\n]*|' : '';
+    const re = new RegExp('(' + cmt + '\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)|("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\'|`(?:\\\\.|[^`\\\\])*`)|(\\b\\d[\\d_.eExXa-fA-F]*\\b)|(\\b[A-Za-z_$][\\w$]*\\b)', 'g');
+    let out = '', last = 0, m;
+    while ((m = re.exec(src))) {
+      out += escapeHtml(src.slice(last, m.index));
+      if (m[1]) out += '<span class="tk-c">' + escapeHtml(m[1]) + '</span>';
+      else if (m[2]) out += '<span class="tk-s">' + escapeHtml(m[2]) + '</span>';
+      else if (m[3]) out += '<span class="tk-n">' + escapeHtml(m[3]) + '</span>';
+      else { const w = m[4]; out += HL_KW.has(w) ? '<span class="tk-k">' + escapeHtml(w) + '</span>' : escapeHtml(w); }
+      last = re.lastIndex;
+    }
+    out += escapeHtml(src.slice(last));
+    code.innerHTML = out;
+  });
+}
 // Add a copy button to every code block inside a scope (idempotent).
 function addCodeCopy(scope) {
   scope.querySelectorAll('pre').forEach((pre) => {
@@ -326,6 +387,7 @@ function assistantPlainText(bodyEl) {
 // Add the hover action bar (Copy) + optional usage footer to a finished turn.
 function decorateAssistant(msgEl, meta) {
   const body = msgEl.querySelector('.assistant-body'); if (!body) return;
+  highlightCode(body);
   addCodeCopy(body);
   if (!body.querySelector('.msg-actions')) {
     const bar = document.createElement('div'); bar.className = 'msg-actions';
@@ -335,6 +397,7 @@ function decorateAssistant(msgEl, meta) {
     retry.title = 'Regenerate — re-run your last request';
     retry.onclick = () => regenerate();
     bar.appendChild(copy); bar.appendChild(retry);
+    if (meta && meta.ts) { const t = document.createElement('span'); t.className = 'msg-act-time'; t.textContent = fmtTime(meta.ts); bar.appendChild(t); }
     body.appendChild(bar);
   }
   if (meta && !body.querySelector('.turn-meta')) {
@@ -345,7 +408,7 @@ function decorateAssistant(msgEl, meta) {
   }
 }
 
-function appendAssistantDOM(blocks) {
+function appendAssistantDOM(blocks, meta) {
   hideWelcome();
   const msg = document.createElement('div'); msg.className = 'msg assistant';
   const av = document.createElement('div'); av.className = 'assistant-avatar'; av.textContent = '✳';
@@ -355,7 +418,7 @@ function appendAssistantDOM(blocks) {
     else if (blk.type === 'tool') body.appendChild(makeToolCard(blk).card);
   }
   msg.appendChild(av); msg.appendChild(body); wrap(msg);
-  decorateAssistant(msg);
+  decorateAssistant(msg, meta);
 }
 function renderHistory(log) {
   clearTranscript();
@@ -363,12 +426,12 @@ function renderHistory(log) {
   resetUsage();
   if (!convo.length) { const w = $('welcome'); if (w) w.classList.remove('hidden'); return; }
   for (const m of convo) {
-    if (m.role === 'user') appendUserDOM(m.text);
-    else { appendAssistantDOM(m.blocks); if (m.usage || m.costUsd) applyTurnUsage(m.usage, m.costUsd); }
+    if (m.role === 'user') appendUserDOM(m.text, m.ts);
+    else { appendAssistantDOM(m.blocks, { usage: m.usage, costUsd: m.costUsd, ts: m.ts }); if (m.usage || m.costUsd) applyTurnUsage(m.usage, m.costUsd); }
   }
   scrollDown(true);
 }
-function addUserMessage(text) { convo.push({ role: 'user', text }); appendUserDOM(text); persist(); scrollDown(true); }
+function addUserMessage(text) { convo.push({ role: 'user', text }); appendUserDOM(text, Date.now()); persist(); scrollDown(true); }
 function ensureTurn() {
   if (turn) return turn;
   hideWelcome();
@@ -401,7 +464,7 @@ function onToolResult(id, isError, text) {
 }
 function onErrorLine(text) { hideWelcome(); const el = document.createElement('div'); el.className = 'err-line'; el.textContent = '⚠ ' + text; if (turn && turn.body) turn.body.appendChild(el); else wrap(el); scrollDown(true); }
 function onInfoLine(text) { hideWelcome(); const el = document.createElement('div'); el.className = 'info-line'; el.textContent = text; wrap(el); scrollDown(true); }
-function endTurn(meta) { if (turn && turn.blocks.length) { convo.push({ role: 'assistant', blocks: turn.blocks, usage: meta && meta.usage, costUsd: meta && meta.costUsd }); persist(); if (turn.msg) decorateAssistant(turn.msg, meta); } turn = null; }
+function endTurn(meta) { if (turn && turn.blocks.length) { const m = Object.assign({ ts: Date.now() }, meta); convo.push({ role: 'assistant', blocks: turn.blocks, usage: m.usage, costUsd: m.costUsd }); persist(); if (turn.msg) decorateAssistant(turn.msg, m); } turn = null; }
 
 /* ---------------- permission cards ---------------- */
 function onPermission(requestId, tool, input) {
@@ -858,6 +921,7 @@ function buildCommands() {
   if (state.currentConvoId) cmds.push({ icon: '⎘', label: 'Duplicate this chat', run: async () => { const r = await cc.duplicateConvo(state.currentConvoId); if (r && r.ok) toast('Chat duplicated', 'ok'); } });
   if (state.running) cmds.push({ icon: '↻', label: 'Regenerate last response', run: () => regenerate() });
   cmds.push({ icon: '🔍', label: 'Search chats', hint: 'Ctrl+F', run: () => { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } });
+  cmds.push({ icon: '🔎', label: 'Find in this chat', hint: 'Ctrl+Shift+F', run: () => openFind() });
   cmds.push({ icon: '📤', label: 'Export this chat as Markdown', run: async () => { const r = await cc.exportMd(); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); } });
   cmds.push({ icon: '🎨', label: 'Toggle light / dark theme', run: async () => { const cur = (state.settings || {}).theme; const next = cur === 'light' ? 'dark' : 'light'; applyTheme(next); state.settings = await cc.setSettings({ theme: next }); } });
   cmds.push({ icon: '⚙', label: 'Open settings', run: () => openSettings() });
@@ -911,6 +975,37 @@ $('cmdkBtn').onclick = openCmdk;
 $('shortcutsClose').onclick = () => $('shortcutsModal').classList.add('hidden');
 $('shortcutsModal').addEventListener('click', (e) => { if (e.target === $('shortcutsModal')) $('shortcutsModal').classList.add('hidden'); });
 
+/* ---------------- find in chat (Ctrl+Shift+F) ---------------- */
+let findEls = [], findIdx = -1;
+function ensureFindBar() {
+  let bar = $('findBar'); if (bar) return bar;
+  bar = document.createElement('div'); bar.id = 'findBar'; bar.className = 'find-bar hidden';
+  bar.innerHTML = '<input id="findInput" class="find-input" placeholder="Find in chat…" /><span id="findCount" class="find-count"></span>'
+    + '<button id="findPrev" class="find-btn" title="Previous (Shift+Enter)">↑</button><button id="findNext" class="find-btn" title="Next (Enter)">↓</button><button id="findClose" class="find-btn" title="Close (Esc)">✕</button>';
+  $('main').appendChild(bar);
+  $('findInput').addEventListener('input', () => runFind($('findInput').value));
+  $('findInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); stepFind(e.shiftKey ? -1 : 1); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFind(); } });
+  $('findPrev').onclick = () => stepFind(-1); $('findNext').onclick = () => stepFind(1); $('findClose').onclick = closeFind;
+  return bar;
+}
+function openFind() { ensureFindBar().classList.remove('hidden'); const i = $('findInput'); setTimeout(() => { i.focus(); i.select(); }, 10); if (i.value) runFind(i.value); }
+function closeFind() { const b = $('findBar'); if (b) b.classList.add('hidden'); findEls.forEach((el) => el.classList.remove('find-current', 'find-match')); findEls = []; findIdx = -1; }
+function runFind(q) {
+  findEls.forEach((el) => el.classList.remove('find-current', 'find-match')); findEls = []; findIdx = -1;
+  q = (q || '').trim().toLowerCase(); const cnt = $('findCount');
+  if (!q) { if (cnt) cnt.textContent = ''; return; }
+  transcript.querySelectorAll('.md, .msg.user .bubble, .tool-summary, .tool-body').forEach((el) => { if ((el.textContent || '').toLowerCase().includes(q)) { findEls.push(el); el.classList.add('find-match'); } });
+  if (cnt) cnt.textContent = findEls.length ? ('1/' + findEls.length) : 'No results';
+  if (findEls.length) stepFind(1, true);
+}
+function stepFind(dir, first) {
+  if (!findEls.length) return;
+  if (findIdx >= 0 && findEls[findIdx]) findEls[findIdx].classList.remove('find-current');
+  findIdx = first ? 0 : ((findIdx + dir) % findEls.length + findEls.length) % findEls.length;
+  const el = findEls[findIdx]; el.classList.add('find-current'); el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const cnt = $('findCount'); if (cnt) cnt.textContent = (findIdx + 1) + '/' + findEls.length;
+}
+
 /* ---------------- global shortcuts (Ctrl+K/N/F, Ctrl+/) ---------------- */
 window.addEventListener('keydown', (e) => {
   const ctrl = e.ctrlKey || e.metaKey;
@@ -918,6 +1013,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'k' || e.key === 'K') { e.preventDefault(); if ($('cmdkModal').classList.contains('hidden')) openCmdk(); else closeCmdk(); }
   else if (e.key === '/') { e.preventDefault(); $('shortcutsModal').classList.toggle('hidden'); }
   else if ((e.key === 'n' || e.key === 'N') && !e.shiftKey) { e.preventDefault(); $('newChatBtn').click(); }
+  else if ((e.key === 'f' || e.key === 'F') && e.shiftKey) { e.preventDefault(); openFind(); }
   else if ((e.key === 'f' || e.key === 'F') && !e.shiftKey) { e.preventDefault(); if (state.conversations.length) { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } }
 });
 // Esc stops the current generation (when nothing modal is open).

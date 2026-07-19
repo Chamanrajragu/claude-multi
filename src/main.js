@@ -194,7 +194,7 @@ function finalizeTurn(id, ev) {
   if (!b || !b.blocks.length) return;
   const f = findConvo(id); if (!f) return;
   const log = Array.isArray(f.convo.log) ? f.convo.log.slice() : [];
-  log.push({ role: 'assistant', blocks: b.blocks, usage: (ev && ev.usage) || null, costUsd: (ev && ev.costUsd) || 0 });
+  log.push({ role: 'assistant', blocks: b.blocks, usage: (ev && ev.usage) || null, costUsd: (ev && ev.costUsd) || 0, ts: Date.now() });
   const patch = { log };
   if (!f.convo.title || f.convo.title === 'New chat') { const t = titleFromLog(log); if (t) patch.title = t; }
   updateConvoById(id, patch);
@@ -205,7 +205,7 @@ function appendUserMessage(id, text, attachments) {
   const names = (attachments || []).map((p) => '📎 ' + baseName(p));
   if (names.length) display += (display ? '\n' : '') + names.join('\n');
   const log = Array.isArray(f.convo.log) ? f.convo.log.slice() : [];
-  log.push({ role: 'user', text: display });
+  log.push({ role: 'user', text: display, ts: Date.now() });
   const patch = { log };
   if (!f.convo.title || f.convo.title === 'New chat') { const t = titleFromLog(log); if (t) patch.title = t; }
   updateConvoById(id, patch);
@@ -252,10 +252,13 @@ function conversationList() {
       running: state.sessions.has(c.id),
       awaiting: state.perms.has(c.id),
       accountId: c.lastAccount || '',
+      sortIndex: (typeof c.sortIndex === 'number') ? c.sortIndex : null,
     });
   });
-  // Pinned first, then most-recently-updated.
-  items.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updatedAt || 0) - (a.updatedAt || 0));
+  // Pinned first; then manual drag order (sortIndex) where set, otherwise
+  // most-recently-updated. Non-reordered (e.g. brand-new) chats float to the top.
+  const rank = (c) => (c.sortIndex != null ? c.sortIndex : -(c.updatedAt || 0) / 1e10);
+  items.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || rank(a) - rank(b));
   return { conversations: items, currentConvoId: state.currentConvoId };
 }
 function statePayload() {
@@ -687,6 +690,19 @@ function registerIpc() {
     return { ok: true, running: state.sessions.has(id) };
   });
   ipcMain.handle('chat:renameConvo', (_e, id, title) => { updateConvoById(id, { title: String(title || '').slice(0, 80) || 'New chat' }); pushState(); return { ok: true }; });
+  // Persist a manual drag order (sortIndex) without bumping updatedAt.
+  ipcMain.handle('chat:reorder', (_e, orderedIds) => {
+    if (!Array.isArray(orderedIds)) return { ok: false };
+    const pos = new Map(orderedIds.map((id, i) => [id, i]));
+    const m = store.get('projectChats') || {};
+    for (const folder of Object.keys(m)) {
+      const dd = getProjectData(folder); let changed = false;
+      for (const c of dd.conversations) if (pos.has(c.id)) { c.sortIndex = pos.get(c.id); changed = true; }
+      if (changed) saveProjectData(folder, dd);
+    }
+    pushState();
+    return { ok: true };
+  });
   ipcMain.handle('chat:pinConvo', (_e, id) => {
     const f = findConvo(id);
     if (f) { updateConvoById(id, { pinned: !f.convo.pinned }); pushState(); return { ok: true, pinned: !f.convo.pinned }; }
