@@ -9,6 +9,8 @@ function baseName(p) { return String(p || '').replace(/[\\/]+$/, '').split(/[\\/
 
 let state = { accounts: [], activeAccountId: null, projectDir: '', running: false, generating: false, settings: {}, conversations: [], currentConvoId: '' };
 let attachments = [];
+let drafts = {}; // convoId -> unsent composer text (kept per chat)
+function swapDraft(prev, next) { const inp = $('input'); if (prev != null && prev !== '') drafts[prev] = inp.value; inp.value = (next && drafts[next]) || ''; autoGrow(); updateComposer(); }
 
 function activeAccount() { return state.accounts.find((a) => a.id === state.activeAccountId); }
 function fmtCountdown(ms) { const t = Math.max(0, Math.round(ms / 1000)); const h = Math.floor(t / 3600); const m = Math.floor((t % 3600) / 60); return h > 0 ? `${h}h ${m}m` : (m > 0 ? `${m}m` : `${t}s`); }
@@ -28,6 +30,7 @@ function renderProject() {
 }
 
 let convoFilter = '';
+let contentMatches = {}; // convoId -> snippet (from full-text search across chats)
 let draggingConvo = false;
 function renderConvos() {
   if (draggingConvo) return; // don't rebuild the list mid-drag
@@ -36,7 +39,7 @@ function renderConvos() {
   if (!state.conversations.length) { $('convoSearch').classList.add('hidden'); const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'No chats yet. Click “New chat” and pick a folder.'; list.appendChild(d); return; }
   $('convoSearch').classList.toggle('hidden', state.conversations.length < 6 && !convoFilter);
   const q = convoFilter.trim().toLowerCase();
-  const shown = q ? state.conversations.filter((c) => (c.title || '').toLowerCase().includes(q) || (c.folderName || '').toLowerCase().includes(q)) : state.conversations;
+  const shown = q ? state.conversations.filter((c) => (c.title || '').toLowerCase().includes(q) || (c.folderName || '').toLowerCase().includes(q) || contentMatches[c.id]) : state.conversations;
   if (!shown.length) { const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'No chats match your search.'; list.appendChild(d); return; }
   for (const c of shown) {
     const row = document.createElement('div');
@@ -52,6 +55,7 @@ function renderConvos() {
     const fn = document.createElement('span'); fn.className = 'cf-name'; fn.textContent = c.folderName || ''; sub.appendChild(fn);
     sub.title = c.folder || '';
     meta.appendChild(title); meta.appendChild(sub);
+    if (convoFilter && contentMatches[c.id]) { const sn = document.createElement('div'); sn.className = 'convo-snippet'; sn.textContent = contentMatches[c.id]; meta.appendChild(sn); }
     // Live status: needs-approval (amber) > working spinner > live dot.
     const status = document.createElement('span');
     status.className = 'convo-status' + (c.awaiting ? ' needs' : (c.generating ? ' spin' : (c.running ? ' live' : '')));
@@ -82,7 +86,12 @@ function setupConvoDnD(list) {
     if (after) list.insertBefore(dragging, after); else list.appendChild(dragging);
   });
 }
-$('convoSearch').addEventListener('input', (e) => { convoFilter = e.target.value; renderConvos(); });
+$('convoSearch').addEventListener('input', async (e) => {
+  convoFilter = e.target.value; renderConvos();
+  const q = convoFilter.trim();
+  if (q.length >= 2) { try { const res = await cc.searchAll(q); if (convoFilter.trim() === q) { contentMatches = {}; res.forEach((r) => { contentMatches[r.id] = r.snippet; }); renderConvos(); } } catch { /* noop */ } }
+  else { contentMatches = {}; }
+});
 async function openConvo(id) {
   if (id === state.currentConvoId && state.running) return;
   const r = await cc.openConvo(id);
@@ -546,7 +555,7 @@ async function sendMessage() {
   if (!state.running && !state.activeAccountId) { toast('Choose an account to start this chat', 'err'); return; }
   addUserMessage(text + (attachments.length ? '\n' + attachments.map((p) => '📎 ' + baseName(p)).join('\n') : ''));
   const atts = attachments.slice(); attachments = []; renderAttachments();
-  inp.value = ''; autoGrow(); updateComposer();
+  inp.value = ''; if (state.currentConvoId) delete drafts[state.currentConvoId]; autoGrow(); updateComposer();
   const res = await cc.sendMessage(text, atts);
   if (res && !res.ok) onErrorLine(res.error || 'Could not send');
 }
@@ -563,7 +572,7 @@ function renderAttachments() {
 }
 
 $('sendBtn').onclick = sendMessage;
-$('input').addEventListener('input', () => { autoGrow(); updateComposer(); histIdx = -1; });
+$('input').addEventListener('input', () => { autoGrow(); updateComposer(); histIdx = -1; if (state.currentConvoId) drafts[state.currentConvoId] = $('input').value; });
 // Composer prompt history: ↑ recalls previous prompts (when caret is at the
 // start / already navigating), ↓ moves back toward your draft. Newest first.
 let histItems = [], histIdx = -1;
@@ -927,6 +936,7 @@ function applyAppearance(s) {
   if (s.accent) { rs.setProperty('--accent', s.accent); rs.setProperty('--accent-2', shade(s.accent, 0.82)); }
   else { rs.removeProperty('--accent'); rs.removeProperty('--accent-2'); }
   document.documentElement.setAttribute('data-sidebar', s.sidebarCollapsed ? 'collapsed' : 'open');
+  if (typeof s.zoom === 'number' && cc.setZoom) cc.setZoom(s.zoom);
   if (s.sidebarWidth) { const sb = $('sidebar'); if (sb) { const w = Math.max(220, Math.min(480, s.sidebarWidth)); sb.style.width = w + 'px'; sb.style.minWidth = w + 'px'; } }
 }
 // Drag-to-resize the sidebar; width persists in settings.
@@ -1075,6 +1085,15 @@ window.addEventListener('keydown', (e) => {
   if (document.querySelector('.overlay:not(.hidden)') || document.querySelector('.menu.ctx')) return;
   if (state.generating) { e.preventDefault(); cc.interrupt(); }
 });
+// Alt+↑/↓ switch chats · Ctrl/Cmd +/-/0 zoom the whole UI.
+function cycleChat(dir) { const list = state.conversations || []; if (!list.length) return; let i = list.findIndex((c) => c.id === state.currentConvoId); if (i < 0) i = 0; const n = ((i + dir) % list.length + list.length) % list.length; openConvo(list[n].id); }
+window.addEventListener('keydown', (e) => {
+  if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); cycleChat(e.key === 'ArrowUp' ? -1 : 1); return; }
+  const ctrl = e.ctrlKey || e.metaKey; if (!ctrl) return;
+  if (e.key === '=' || e.key === '+') { e.preventDefault(); const z = cc.zoom(0.5); cc.setSettings({ zoom: z }); }
+  else if (e.key === '-' || e.key === '_') { e.preventDefault(); const z = cc.zoom(-0.5); cc.setSettings({ zoom: z }); }
+  else if (e.key === '0') { e.preventDefault(); cc.zoom(0); cc.setSettings({ zoom: 0 }); }
+});
 
 /* ---------------- drag & drop attachments ---------------- */
 (() => {
@@ -1104,7 +1123,7 @@ let toastTimer = null;
 function toast(msg, kind) { const el = $('toast'); el.textContent = msg; el.className = 'toast' + (kind === 'err' ? ' err' : ''); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.add('hidden'), 2600); }
 
 /* ---------------- boot ---------------- */
-cc.onState((s) => { state = Object.assign(state, s); if (s.settings) applyAppearance(s.settings); renderAll(); });
+cc.onState((s) => { const prev = state.currentConvoId; state = Object.assign(state, s); if (s.settings) applyAppearance(s.settings); renderAll(); if (state.currentConvoId !== prev) swapDraft(prev, state.currentConvoId); });
 (async () => {
   state = await cc.getState();
   applyAppearance(state.settings || {});

@@ -101,6 +101,7 @@ button { font-family: inherit; color: inherit; }
 .convo-acc { flex: none; display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 5px; font-size: 9px; font-weight: 800; color: var(--sidebar); background: linear-gradient(135deg, var(--accent), var(--accent-2, #c96442)); }
 .cf-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .cf-name::before { content: "📁"; font-size: 10px; opacity: .8; }
+.convo-snippet { font-size: 11px; color: var(--muted); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
 .convo-status { width: 12px; height: 12px; flex: none; border-radius: 50%; }
 .convo-status.live { background: var(--info, #6b8afd); box-shadow: 0 0 0 2px var(--bg); }
 .convo-status.needs { background: var(--warn, #e0a458); box-shadow: 0 0 0 2px var(--bg); animation: needspulse 1.2s ease-in-out infinite; }

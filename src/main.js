@@ -672,6 +672,27 @@ function registerIpc() {
     pushState();
     return { ok: true, id: c.id };
   });
+  // Search message CONTENT across every chat; returns { id, snippet } per hit.
+  ipcMain.handle('chat:searchAll', (_e, q) => {
+    q = String(q || '').trim().toLowerCase();
+    if (q.length < 2) return [];
+    const out = [];
+    eachConvo((c) => {
+      const log = c.log || [];
+      for (const m of log) {
+        let text = '';
+        if (m.role === 'user') text = m.text || '';
+        else if (Array.isArray(m.blocks)) text = m.blocks.filter((b) => b.type === 'text').map((b) => b.text || '').join(' ');
+        const idx = text.toLowerCase().indexOf(q);
+        if (idx >= 0) {
+          const start = Math.max(0, idx - 30);
+          out.push({ id: c.id, snippet: (start > 0 ? '…' : '') + text.slice(start, idx + q.length + 50).replace(/\s+/g, ' ').trim() + '…' });
+          break;
+        }
+      }
+    });
+    return out.slice(0, 50);
+  });
   // ---- conversation (history) management ----
   ipcMain.handle('chat:listConvos', () => conversationList());
   ipcMain.handle('chat:openConvo', (_e, id) => {

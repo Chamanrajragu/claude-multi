@@ -1,5 +1,5 @@
 // Secure bridge between the renderer and the main process (chat rebuild).
-const { contextBridge, ipcRenderer, clipboard, webUtils } = require('electron');
+const { contextBridge, ipcRenderer, clipboard, webUtils, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('cc', {
   // ---- state / accounts / project / settings ----
@@ -60,6 +60,10 @@ contextBridge.exposeInMainWorld('cc', {
   appInfo: () => ipcRenderer.invoke('app:info'),
   clipboardRead: () => clipboard.readText(),
   clipboardWrite: (text) => clipboard.writeText(text),
+  // UI zoom (whole window). delta 0 resets. Returns the new zoom level.
+  zoom: (delta) => { const z = delta === 0 ? 0 : Math.max(-3, Math.min(5, webFrame.getZoomLevel() + delta)); webFrame.setZoomLevel(z); return z; },
+  setZoom: (z) => { try { webFrame.setZoomLevel(Math.max(-3, Math.min(5, z || 0))); } catch { /* noop */ } },
+  searchAll: (q) => ipcRenderer.invoke('chat:searchAll', q),
 
   // ---- events (main -> renderer) ----
   onChat: (cb) => ipcRenderer.on('chat:event', (_e, ev) => cb(ev)),
