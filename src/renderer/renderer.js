@@ -253,7 +253,21 @@ function renderWelcome() {
   let n = 1;
   ol.innerHTML = steps.map((s) => `<li class="ob-step${s.done ? ' done' : ''}"><span class="ob-mark">${s.done ? '✓' : (n++)}</span><span class="ob-txt"><b>${escapeHtml(s.label)}</b>${s.hint ? `<span class="ob-hint">${escapeHtml(s.hint)}</span>` : ''}</span></li>`).join('');
 }
-function renderAll() { renderProject(); renderConvos(); renderAccountRow(); renderTop(); updateComposer(); renderAttachments(); renderStarters(); renderUsage(); renderLimitPill(); renderWelcome(); pruneDrafts(); }
+// A folder/account context row above the composer (Claude-desktop style).
+function renderCtxRow() {
+  const row = $('ctxRow'); if (!row) return;
+  if (!state.currentConvoId) { row.classList.add('hidden'); return; }
+  row.classList.remove('hidden'); row.innerHTML = '';
+  const f = state.projectDir;
+  const folder = document.createElement('button'); folder.className = 'ctx-pill';
+  folder.innerHTML = '<span class="ctx-ico">📁</span>' + escapeHtml(f ? baseName(f) : 'Pick a folder');
+  folder.title = f ? ('This chat’s folder: ' + f + '\nClick to change') : 'Click to pick a folder';
+  folder.onclick = () => $('projectBtn').click();
+  row.appendChild(folder);
+  const a = state.accounts.find((x) => x.id === state.activeAccountId);
+  if (a) { const ap = document.createElement('span'); ap.className = 'ctx-pill sub'; ap.innerHTML = '<span class="ctx-dot"></span>' + escapeHtml(a.name); row.appendChild(ap); }
+}
+function renderAll() { renderProject(); renderConvos(); renderAccountRow(); renderTop(); updateComposer(); renderAttachments(); renderStarters(); renderUsage(); renderLimitPill(); renderWelcome(); renderCtxRow(); pruneDrafts(); }
 
 // Topbar pill: shows when signed-in accounts are cooling down and when the
 // soonest one resets, so "how long until I can use it again" is always visible.

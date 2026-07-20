@@ -280,6 +280,13 @@ button { font-family: inherit; color: inherit; }
 .stop-btn { margin-left: auto; padding: 5px 13px; border-radius: 8px; cursor: pointer; font-size: 12px; border: 1px solid var(--border); background: transparent; }
 .stop-btn:hover { border-color: var(--err); color: var(--err); }
 .attach-row { max-width: var(--col); margin: 0 auto 8px; display: flex; flex-wrap: wrap; gap: 7px; }
+/* composer context row (folder + account), Claude-desktop style */
+.ctx-row { max-width: var(--col); margin: 0 auto 7px; display: flex; gap: 8px; align-items: center; }
+.ctx-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--border-soft); border-radius: 8px; padding: 4px 10px; cursor: pointer; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-pill:hover { color: var(--text); border-color: var(--border); }
+.ctx-pill.sub { cursor: default; }
+.ctx-ico { font-size: 11px; opacity: .85; }
+.ctx-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
 .attach-chip { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--border-soft); font-size: 12px; }
 .attach-chip .rm { cursor: pointer; color: var(--muted); }
 .attach-chip .rm:hover { color: var(--err); }

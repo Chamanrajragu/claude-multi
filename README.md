@@ -70,6 +70,7 @@ No credential hacking, nothing against the rules — each account simply gets it
 - 🟢🔴 **Diff view for edits** — every Edit / Write / MultiEdit shows a **red/green diff** of exactly what changed, right in the tool card.
 - 🗂 **Export everything** — one click exports **all** your chats to Markdown files (Settings → Backup, or the command palette).
 - 📊 **Activity & usage dashboard** — one view (📊 in the top bar) for every account's status & cooldown, how many chats are running/working, and this chat's tokens & cost.
+- 🪄 **Claude-desktop look & feel** — a folder/account **context row** above the composer, tuned spacing and colors, and a familiar model menu — the polish of the real thing, in a multi-account app.
 - 💬 **A real chat interface, not a terminal** — talk to Claude in a clean chat window: streamed markdown replies, collapsible **tool cards** (edits, commands, searches), and inline **Allow / Deny** prompts before Claude touches your files.
 - 🛡️ **Permission modes** — keep the safe **Ask every time**, switch to **Auto-accept file edits**, or go hands-free with **Allow everything (no prompts)** — set it once in Settings → Chat.
 - 📎 **Paste & drop attachments** — paste a screenshot or copied image straight into the composer (reads the image bytes directly, so it works even for images copied from a browser or file explorer), or drag files onto the window.
