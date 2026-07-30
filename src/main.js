@@ -220,6 +220,16 @@ function finalizeTurn(id, ev) {
   if (!f.convo.title || f.convo.title === 'New chat') { const t = titleFromLog(log); if (t) patch.title = t; }
   updateConvoById(id, patch);
 }
+// Bill a finished turn to the account that ran it. Cache reads are counted at
+// full weight because that is how they land against a plan's quota.
+function recordAccountUsage(accountId, ev) {
+  if (!accountId || !ev) return;
+  const u = ev.usage || {};
+  const tokens = (u.input_tokens || 0) + (u.output_tokens || 0)
+    + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+  if (!tokens && !ev.costUsd) return;
+  store.recordUsage(accountId, { tokens, costUsd: Number(ev.costUsd) || 0 });
+}
 function appendUserMessage(id, text, attachments) {
   const f = findConvo(id); if (!f) return;
   let display = String(text || '');
@@ -246,6 +256,7 @@ function toRenderer(channel, payload) {
 }
 
 function convoTitle(convoId) { const f = findConvo(convoId); return (f && f.convo.title && f.convo.title !== 'New chat') ? f.convo.title : 'a chat'; }
+function fmtTokens(n) { n = Number(n) || 0; return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'k' : String(n); }
 // Bounce the taskbar/dock when a background chat needs attention (and the window
 // isn't focused), so multitasking users don't miss it.
 function flashWindow() {
@@ -314,6 +325,17 @@ function stopSession(convoId) {
 }
 function stopAllSessions() { for (const id of [...state.sessions.keys()]) stopSession(id); }
 
+// Switch the on-screen chat's model without tearing the session down. Falls
+// back to a restart only if the SDK can't change it live.
+function applyModelToCurrent(model) {
+  const id = state.currentConvoId;
+  const sess = id && state.sessions.get(id);
+  if (!sess) return;
+  if (sess.setModel(model)) return;
+  const f = findConvo(id);
+  if (f && f.convo.lastAccount) useAccountForChat(f.convo.lastAccount, id);
+}
+
 function startSession(convoId, accountId, resumeId) {
   const acc = store.byId(accountId);
   if (!acc) return { ok: false, error: 'Account not found' };
@@ -336,6 +358,10 @@ function startSession(convoId, accountId, resumeId) {
     resumeId: resumeId || '',
     permissionMode: 'default', // SDK stays in default; approvalMode decides prompting
     approvalMode: s.permissionMode || 'ask', // 'ask' | 'acceptEdits' | 'bypass'
+    maxBudgetUsd: s.maxBudgetUsd || 0,
+    maxTurns: s.maxTurns || 0,
+    disallowedTools: Array.isArray(s.disabledTools) ? s.disabledTools : [],
+    autoCompact: s.autoCompact !== false,
     onEvent: (ev) => onChatEvent(convoId, session, accountId, ev),
   });
   state.sessions.set(convoId, session);
@@ -429,11 +455,18 @@ function onChatEvent(convoId, session, accountId, ev) {
       state.genConvos.delete(convoId);
       state.pending.delete(convoId); // completed cleanly — nothing to resume
       state.perms.delete(convoId);
+      recordAccountUsage(accountId, ev);
       finalizeTurn(convoId, ev);
       if (ev.sessionId) updateConvoById(convoId, { sessionId: ev.sessionId, lastAccount: accountId });
       if (convoId !== state.currentConvoId) notify('Claude finished', `“${convoTitle(convoId)}” is ready`);
       pushState();
       break;
+    case 'compacted': {
+      const saved = Math.max(0, (ev.preTokens || 0) - (ev.postTokens || 0));
+      toRenderer('chat:event', { convoId, type: 'info',
+        text: `🗜 Compacted ${ev.trigger === 'auto' ? 'automatically' : ''} — context ${fmtTokens(ev.preTokens)} → ${fmtTokens(ev.postTokens)} (${fmtTokens(saved)} freed).`.replace(/\s+/g, ' ') });
+      break;
+    }
     case 'limit':
       state.genConvos.delete(convoId);
       state.turnBuf.delete(convoId);
@@ -615,6 +648,9 @@ function registerIpc() {
     store.remove(id); pushState(); return statePayload();
   });
   ipcMain.handle('accounts:rename', (_e, id, name) => { store.rename(id, name); pushState(); return statePayload(); });
+  // Undo a cooldown. A limit we misread parks a usable account for hours, so
+  // there has to be a way back without waiting it out.
+  ipcMain.handle('accounts:clearCooldown', (_e, id) => { store.clearCooldown(id); pushState(); return statePayload(); });
 
   // Open the OS folder picker and return the chosen path (does not mutate state;
   // the caller decides what to do with it — new chat, or re-folder this chat).
@@ -657,13 +693,18 @@ function registerIpc() {
   ipcMain.handle('settings:set', (_e, patch) => {
     const s = store.setSettings(patch);
     if (patch && Object.prototype.hasOwnProperty.call(patch, 'startOnLogin')) applyLoginItem(s.startOnLogin);
-    // Model / effort changes take effect by restarting the live session (which
-    // resumes the same conversation).
-    const touchesEngine = patch && (Object.prototype.hasOwnProperty.call(patch, 'model') || Object.prototype.hasOwnProperty.call(patch, 'effort') || Object.prototype.hasOwnProperty.call(patch, 'permissionMode'));
-    // Model / effort / permission changes take effect by restarting the CURRENT
-    // chat's session (it resumes the same conversation). Background chats keep
-    // their current settings until their next turn restarts them.
-    if (touchesEngine && state.sessions.has(state.currentConvoId)) {
+    // Permission mode and model apply to live sessions in place. Only effort
+    // needs a restart, and a restart costs a full transcript re-ingest on the
+    // next turn, so never do one we can avoid.
+    const has = (k) => patch && Object.prototype.hasOwnProperty.call(patch, k);
+    if (has('permissionMode')) for (const sess of state.sessions.values()) sess.setApprovalMode(s.permissionMode);
+    if (has('model')) {
+      const f = state.currentConvoId && findConvo(state.currentConvoId);
+      if (f && typeof f.convo.model !== 'string') applyModelToCurrent(s.model || ''); // a per-chat override wins
+    }
+    if (has('autoCompact')) for (const sess of state.sessions.values()) sess.setAutoCompact(s.autoCompact !== false);
+    // These are baked into the query at spawn time, so they need a restart.
+    if ((has('effort') || has('maxBudgetUsd') || has('maxTurns') || has('disabledTools')) && state.sessions.has(state.currentConvoId)) {
       const f = findConvo(state.currentConvoId);
       if (f && f.convo.lastAccount) useAccountForChat(f.convo.lastAccount);
     }
@@ -719,6 +760,25 @@ function registerIpc() {
     });
     return out.slice(0, 50);
   });
+  // List files in the current chat's folder for @-mentions (bounded, ignore-aware).
+  ipcMain.handle('chat:listFiles', () => {
+    const id = state.currentConvoId; const f = id && findConvo(id);
+    if (!f || !f.folder || !fs.existsSync(f.folder)) return [];
+    const skip = new Set(['node_modules', 'dist', 'build', 'out', '.next', '.venv', 'venv', '__pycache__', '.cache', 'coverage', '.turbo', '.parcel-cache', 'vendor', 'target', 'bin', 'obj']);
+    const out = []; const CAP = 4000;
+    const walk = (dir, rel, depth) => {
+      if (out.length >= CAP || depth > 8) return;
+      let entries; try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      for (const e of entries) {
+        if (out.length >= CAP) return;
+        const rp = rel ? rel + '/' + e.name : e.name;
+        if (e.isDirectory()) { if (skip.has(e.name) || e.name.startsWith('.')) continue; walk(path.join(dir, e.name), rp, depth + 1); }
+        else if (e.isFile()) out.push(rp);
+      }
+    };
+    walk(f.folder, '', 0);
+    return out;
+  });
   // ---- conversation (history) management ----
   ipcMain.handle('chat:listConvos', () => conversationList());
   ipcMain.handle('chat:openConvo', (_e, id) => {
@@ -739,7 +799,7 @@ function registerIpc() {
   ipcMain.handle('chat:renameConvo', (_e, id, title) => { updateConvoById(id, { title: String(title || '').slice(0, 80) || 'New chat' }); pushState(); return { ok: true }; });
   // Per-chat model / effort override (falls back to the global default).
   function restartCurrentIfRunning() { const id = state.currentConvoId; if (id && state.sessions.has(id)) { const f = findConvo(id); if (f && f.convo.lastAccount) useAccountForChat(f.convo.lastAccount, id); } }
-  ipcMain.handle('chat:setModel', (_e, model) => { const id = state.currentConvoId; if (!id) return { ok: false }; updateConvoById(id, { model: String(model || '') }); restartCurrentIfRunning(); pushState(); return { ok: true }; });
+  ipcMain.handle('chat:setModel', (_e, model) => { const id = state.currentConvoId; if (!id) return { ok: false }; updateConvoById(id, { model: String(model || '') }); applyModelToCurrent(String(model || '')); pushState(); return { ok: true }; });
   ipcMain.handle('chat:setEffort', (_e, effort) => { const id = state.currentConvoId; if (!id) return { ok: false }; updateConvoById(id, { effort: String(effort || '') }); restartCurrentIfRunning(); pushState(); return { ok: true }; });
   // Persist a manual drag order (sortIndex) without bumping updatedAt.
   ipcMain.handle('chat:reorder', (_e, orderedIds) => {
@@ -823,6 +883,24 @@ function registerIpc() {
     return { ok: true };
   });
   ipcMain.handle('chat:interrupt', (_e, id) => { const s = state.sessions.get(id || state.currentConvoId); if (s) s.interrupt(); return { ok: true }; });
+  // Where this chat's context window is actually going, item by item.
+  ipcMain.handle('chat:contextUsage', async (_e, id) => {
+    const s = state.sessions.get(id || state.currentConvoId);
+    if (!s) return { ok: false, error: 'Start this chat first — there is no live session to measure.' };
+    const data = await s.contextUsage();
+    if (!data) return { ok: false, error: 'This Claude version does not report a context breakdown.' };
+    return { ok: true, data };
+  });
+  // Summarize the chat so far and drop the intermediate reasoning.
+  ipcMain.handle('chat:compact', (_e, id) => {
+    const cid = id || state.currentConvoId;
+    const s = state.sessions.get(cid);
+    if (!s) return { ok: false, error: 'Start this chat first' };
+    if (!s.compact()) return { ok: false, error: 'This chat has ended' };
+    state.genConvos.add(cid);
+    pushState();
+    return { ok: true };
+  });
   ipcMain.handle('chat:permission', (_e, requestId, allow, message, convoId) => {
     const cid = convoId || state.currentConvoId;
     const s = state.sessions.get(cid);

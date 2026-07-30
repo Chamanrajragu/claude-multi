@@ -34,30 +34,51 @@ function loadSdk() {
   return sdkPromise;
 }
 
+const limits = require('./limits');
+
+// Errors that merely contain the word "limit" but are NOT the plan's usage
+// limit. Calling one of these a usage limit parks a perfectly healthy account
+// in a multi-hour cooldown and rotates away from it, which burns every account
+// in minutes. Checked before the usage-limit patterns.
+const NOT_A_USAGE_LIMIT = new RegExp([
+  'context (?:window|length)', 'prompt is too long', 'too many tokens',
+  'max_tokens', 'output (?:token )?limit', 'exceeds? (?:the )?maximum',
+  'rate[_ ]?limit', '\\b429\\b', 'overloaded', 'concurrent',
+  'character limit', 'file (?:size )?too large', 'request too large',
+  'invalid_request', 'tool result', 'timed? ?out',
+].join('|'), 'i');
+
 function extractResetAt(text, now = Date.now()) {
-  const m = String(text).match(/reset[s]?(?:\s+at)?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
-  if (!m) return 0;
-  let hour = parseInt(m[1], 10);
-  const min = m[2] ? parseInt(m[2], 10) : 0;
-  const ap = (m[3] || '').toLowerCase();
-  if (ap === 'pm' && hour < 12) hour += 12;
-  if (ap === 'am' && hour === 12) hour = 0;
-  const d = new Date(now);
-  d.setHours(hour, min, 0, 0);
-  let t = d.getTime();
-  if (t <= now) t += 24 * 3600e3;
-  return t;
+  return limits.parseResetTime(text, now) || 0;
 }
 
 function classifyError(text) {
   const s = String(text || '');
   if (/not logged in|authentication_failed|please run \/login|invalid api key/i.test(s)) return 'auth';
-  if (/limit/i.test(s)) return 'limit';
+  if (NOT_A_USAGE_LIMIT.test(s)) return 'error';
+  return limits.classify(s).kind === 'reached' ? 'limit' : 'error';
+}
+
+// The CLI tells us *why* a turn stopped. `blocking_limit` is the only reason
+// that means "this account is out of quota" — everything else is an ordinary
+// failure and must never park the account in a cooldown. Falls back to
+// classifyError() when the field is absent (older CLI builds).
+const TERMINAL_REASON_TEXT = {
+  prompt_too_long: 'This chat is too long for the model. Compact it or start a new chat.',
+  max_turns: 'Stopped at the turn cap for this chat (Settings → Budget).',
+  budget_exhausted: 'Stopped at the spend cap for this chat (Settings → Budget).',
+  rapid_refill_breaker: 'Claude paused this account for sending turns too quickly. Wait a moment.',
+};
+function classifyTerminalReason(reason) {
+  if (!reason) return null;
+  if (reason === 'blocking_limit') return 'limit';
+  if (reason === 'completed') return null;
   return 'error';
 }
 
 class ChatSession {
-  constructor({ claudePath, configDir, cwd, model, effort, resumeId, permissionMode, approvalMode, onEvent }) {
+  constructor({ claudePath, configDir, cwd, model, effort, resumeId, permissionMode, approvalMode, onEvent,
+    maxBudgetUsd, maxTurns, disallowedTools, autoCompact }) {
     this.claudePath = claudePath;
     this.configDir = configDir;
     this.cwd = cwd;
@@ -65,6 +86,12 @@ class ChatSession {
     this.effort = effort || '';
     this.resumeId = resumeId || '';
     this.permissionMode = permissionMode || 'default';
+    // Token-budget guards. 0 / empty = no cap.
+    this.maxBudgetUsd = Number(maxBudgetUsd) || 0;
+    this.maxTurns = Number(maxTurns) || 0;
+    // Tools whose schemas are dropped from the system prompt entirely.
+    this.disallowedTools = Array.isArray(disallowedTools) ? disallowedTools.filter(Boolean) : [];
+    this.autoCompact = autoCompact !== false;
     // How to answer tool-permission requests:
     //   'ask'          — prompt the user for every tool (default, safest)
     //   'acceptEdits'  — auto-allow file edits, prompt for the rest
@@ -121,9 +148,23 @@ class ChatSession {
     if (this.model) options.model = this.model;
     if (this.resumeId) options.resume = this.resumeId;
     if (this.claudePath) options.pathToClaudeCodeExecutable = this.claudePath;
-    // Effort → extended-thinking budget. 'low'/'' leaves the model default.
-    const THINK = { medium: 8000, high: 16000, ultra: 31999 };
-    if (this.effort && THINK[this.effort]) options.maxThinkingTokens = THINK[this.effort];
+    // Effort → the SDK's real effort control. The previous mapping set the
+    // deprecated maxThinkingTokens and left 'low' unset, so picking "Low" fell
+    // through to the SDK default ('high') — the slider could only ever raise
+    // token use, never lower it.
+    const EFFORT = { low: 'low', medium: 'medium', high: 'high', ultra: 'max' };
+    const level = EFFORT[this.effort] || 'medium';
+    options.effort = level;
+    options.thinking = level === 'low' ? { type: 'disabled' } : { type: 'adaptive', display: 'summarized' };
+
+    // Hard stops for runaway agent loops — the single most expensive failure
+    // mode on a subscription, since a loop can burn an hour of quota unattended.
+    if (this.maxBudgetUsd > 0) options.maxBudgetUsd = this.maxBudgetUsd;
+    if (this.maxTurns > 0) options.maxTurns = this.maxTurns;
+    // Dropping a tool removes its schema from the system prompt on EVERY turn.
+    if (this.disallowedTools.length) options.disallowedTools = this.disallowedTools.slice();
+    // Auto-compact keeps a long chat from re-sending a full context every turn.
+    options.settings = { autoCompactEnabled: this.autoCompact };
 
     try {
       this.q = query({ prompt: input(), options });
@@ -199,6 +240,44 @@ class ChatSession {
       : { behavior: 'deny', message: message || 'Denied by user' });
   }
 
+  // Live setting changes. Restarting a session to apply these would re-send the
+  // whole transcript on the next turn (a cache miss the size of the chat), so
+  // apply them in place whenever the SDK supports it.
+  setApprovalMode(mode) { this.approvalMode = mode || 'ask'; }
+
+  setAutoCompact(on) {
+    this.autoCompact = on !== false;
+    if (!this.q || typeof this.q.applyFlagSettings !== 'function') return false;
+    this.q.applyFlagSettings({ autoCompactEnabled: this.autoCompact }).catch(() => {});
+    return true;
+  }
+
+  setModel(model) {
+    this.model = model || '';
+    if (!this.q || typeof this.q.setModel !== 'function') return false;
+    this.q.setModel(this.model || undefined).catch(() => {});
+    return true;
+  }
+
+  // The `/context` breakdown: what is actually occupying the context window
+  // (memory files, tool schemas, MCP servers, skills, past messages), each with
+  // a token count. This is what makes the other savings measurable.
+  async contextUsage() {
+    if (!this.q || typeof this.q.getContextUsage !== 'function') return null;
+    try { return await this.q.getContextUsage(); } catch { return null; }
+  }
+
+  // Summarize the conversation so far and drop the intermediate reasoning.
+  // Handled by the CLI as a slash command on the normal input channel.
+  compact(instructions) {
+    if (this._ended) return false;
+    this.busy = true;
+    const text = '/compact' + (instructions ? ' ' + instructions : '');
+    this._queue.push({ type: 'user', message: { role: 'user', content: text } });
+    if (this._wake) { const w = this._wake; this._wake = null; w(); }
+    return true;
+  }
+
   interrupt() {
     if (this.q && typeof this.q.interrupt === 'function') {
       this.q.interrupt().catch(() => {});
@@ -218,6 +297,9 @@ class ChatSession {
         if (msg.subtype === 'init') {
           this.sessionId = msg.session_id || this.sessionId;
           this.onEvent({ type: 'ready', sessionId: this.sessionId, model: msg.model });
+        } else if (msg.subtype === 'compact_boundary') {
+          const m = msg.compact_metadata || {};
+          this.onEvent({ type: 'compacted', trigger: m.trigger || 'auto', preTokens: m.pre_tokens || 0, postTokens: m.post_tokens || 0 });
         }
         break;
       case 'stream_event':
@@ -278,7 +360,8 @@ class ChatSession {
     if (msg.session_id) this.sessionId = msg.session_id;
     if (msg.is_error) {
       this._sawError = true;
-      this._emitError(String(msg.result || ''));
+      const text = String(msg.result || (Array.isArray(msg.errors) ? msg.errors.join('\n') : '') || '');
+      this._emitError(text, msg.terminal_reason);
       return;
     }
     this.onEvent({
@@ -289,11 +372,12 @@ class ChatSession {
     });
   }
 
-  _emitError(text) {
-    const kind = classifyError(text);
+  _emitError(text, terminalReason) {
+    // Prefer the CLI's structured reason; fall back to reading the message.
+    const kind = classifyTerminalReason(terminalReason) || classifyError(text);
     if (kind === 'auth') this.onEvent({ type: 'auth_failed' });
     else if (kind === 'limit') this.onEvent({ type: 'limit', text, resetAt: extractResetAt(text) });
-    else this.onEvent({ type: 'error', text: text || 'Something went wrong.' });
+    else this.onEvent({ type: 'error', text: TERMINAL_REASON_TEXT[terminalReason] || text || 'Something went wrong.' });
   }
 
   _handleThrow(e) {
@@ -307,4 +391,4 @@ class ChatSession {
   }
 }
 
-module.exports = { ChatSession, extractResetAt, classifyError };
+module.exports = { ChatSession, extractResetAt, classifyError, classifyTerminalReason };

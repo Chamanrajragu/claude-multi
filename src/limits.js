@@ -60,6 +60,16 @@ function parseClock(str) {
 function parseResetTime(text, now = Date.now()) {
   const clean = stripAnsi(text);
 
+  // Claude Code's own limit error carries the reset time as a unix epoch, e.g.
+  // "Claude AI usage limit reached|1769812345". Parsing it gives the true reset
+  // instead of falling back to a blanket 5-hour cooldown.
+  const epoch = clean.match(/\|\s*(\d{10}|\d{13})\b/);
+  if (epoch) {
+    const n = parseInt(epoch[1], 10);
+    const ms = epoch[1].length === 10 ? n * 1000 : n;
+    if (ms > now && ms - now <= 7 * 24 * 3600e3) return ms;
+  }
+
   // Relative: "reset in 2 hours", "resets in 45 minutes"
   const rel = clean.match(/reset[s]?\s+in\s+(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m)\b/i);
   if (rel) {

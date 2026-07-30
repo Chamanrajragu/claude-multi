@@ -80,6 +80,7 @@
       <div id="composer" class="composer">
         <div id="genBar" class="gen-bar hidden"><span class="gen-spinner"></span><span id="genText">Claude is working…</span><button id="stopBtn" class="stop-btn">Stop</button></div>
         <div id="attachRow" class="attach-row hidden"></div>
+        <div id="ctxWarn" class="ctx-warn hidden"></div>
         <div id="ctxRow" class="ctx-row hidden"></div>
         <div class="composer-box">
           <textarea id="input" rows="1" placeholder="Describe a task or ask a question"></textarea>
@@ -132,6 +133,7 @@
         <div class="settings-brand">Settings</div>
         <button class="snav active" data-pane="appearance">Appearance</button>
         <button class="snav" data-pane="chat">Chat</button>
+        <button class="snav" data-pane="tokens">Tokens</button>
         <button class="snav" data-pane="startup">Startup</button>
         <button class="snav" data-pane="data">Backup</button>
         <button class="snav" data-pane="about">About</button>
@@ -163,6 +165,20 @@
             <label class="switch"><input type="checkbox" id="setAutoSwitch" /><span class="slider"></span></label></div>
           <div class="setting-row"><div><div class="s-title">Notifications</div></div>
             <label class="switch"><input type="checkbox" id="setNotify" /><span class="slider"></span></label></div>
+        </div>
+        <div class="spane hidden" data-pane="tokens">
+          <h3>Tokens</h3>
+          <div class="s-note">These trade a little capability for a lot of quota. Nothing here is on by default except auto-compact.</div>
+          <div class="setting-row"><div><div class="s-title">Auto-compact long chats</div><div class="s-sub">Summarize before the context fills, instead of re-sending everything each turn</div></div>
+            <label class="switch"><input type="checkbox" id="setAutoCompact" /><span class="slider"></span></label></div>
+          <div class="setting-row"><div><div class="s-title">Warn me when context passes</div><div class="s-sub">Suggests compacting or a fresh chat. 0 turns the warning off.</div></div>
+            <span class="s-num"><input type="number" id="setLongChatWarnPct" min="0" max="95" step="5" /> %</span></div>
+          <div class="setting-row"><div><div class="s-title">Stop a turn after</div><div class="s-sub">Hard cap on agent steps — catches runaway loops. 0 = no cap.</div></div>
+            <span class="s-num"><input type="number" id="setMaxTurns" min="0" max="200" step="5" /> steps</span></div>
+          <div class="setting-row"><div><div class="s-title">Stop a turn costing over</div><div class="s-sub">Hard cap on one turn's spend. 0 = no cap.</div></div>
+            <span class="s-num">$ <input type="number" id="setMaxBudgetUsd" min="0" max="100" step="0.25" /></span></div>
+          <div class="setting-row col"><div><div class="s-title">Turn off tools you don't use</div><div class="s-sub">Every tool's description is re-sent on every single turn. Switching one off removes it for good.</div></div>
+            <div id="setToolList" class="tool-list"></div></div>
         </div>
         <div class="spane hidden" data-pane="startup">
           <h3>Startup</h3>
@@ -222,6 +238,7 @@
         <div class="sc-key">Ctrl / ⌘ + N</div><div class="sc-desc">New chat (same folder)</div>
         <div class="sc-key">Ctrl / ⌘ + F</div><div class="sc-desc">Search chats (title + content)</div>
         <div class="sc-key">Ctrl / ⌘ + Shift + F</div><div class="sc-desc">Find in this chat</div>
+        <div class="sc-key">Ctrl / ⌘ + Shift + K</div><div class="sc-desc">What&rsquo;s using my context</div>
         <div class="sc-key">Ctrl / ⌘ + B</div><div class="sc-desc">Show / hide sidebar</div>
         <div class="sc-key">Alt + ↑ / ↓</div><div class="sc-desc">Previous / next chat</div>
         <div class="sc-key">Ctrl / ⌘ + = / − / 0</div><div class="sc-desc">Zoom in / out / reset</div>
@@ -248,12 +265,25 @@
       <div id="usageCtxSub" class="ul-sub">— tokens left</div>
     </div>
 
+    <div class="usage-actions">
+      <button id="usageInspect" class="usage-act" title="See exactly what is filling this chat's context">🔎 What's using my context</button>
+      <button id="usageCompact" class="usage-act" title="Summarize this chat and free up context">🗜 Compact now</button>
+    </div>
+
     <div class="usage-section-label">Accounts</div>
     <div id="usageAccounts" class="usage-accounts"></div>
 
     <div class="usage-foot">
       <span id="usageFootStats">Context is estimated from the last turn.</span>
       <span id="usageUpdated" class="usage-updated"></span>
+    </div>
+  </div>
+
+  <!-- ============ CONTEXT INSPECTOR ============ -->
+  <div id="ctxModal" class="overlay hidden">
+    <div class="modal ctx-modal">
+      <div class="modal-head"><h2>What&rsquo;s using my context</h2><button id="ctxClose" class="x-btn">✕</button></div>
+      <div id="ctxBody" class="ctx-body"></div>
     </div>
   </div>
 

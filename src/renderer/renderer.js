@@ -285,9 +285,13 @@ function renderLimitPill() {
 /* ---------------- token / usage meter ---------------- */
 // Claude Code runs a 200K-token context window by default (the 1M window is a
 // separate opt-in this app doesn't enable), so we measure fill against that.
-const CONTEXT_WINDOW = 200000;
-let usage = { model: '', ctx: 0, lastOut: 0, lastCache: 0, sessOut: 0, sessCost: 0, turns: 0 };
-function resetUsage() { usage = { model: usage.model || '', ctx: 0, lastOut: 0, lastCache: 0, sessOut: 0, sessCost: 0, turns: 0 }; renderUsage(); }
+const CONTEXT_WINDOW = 200000;   // fallback until the engine tells us the real one
+let usage = { model: '', ctx: 0, lastOut: 0, lastCache: 0, sessOut: 0, sessCost: 0, turns: 0, maxTokens: 0 };
+// The window is per-model (200K, 1M…), so never assume. The context inspector
+// reports the real figure; until it runs we fall back to the conservative one.
+function ctxWindow() { return usage.maxTokens || CONTEXT_WINDOW; }
+function ctxPct() { return Math.max(0, Math.min(100, Math.round((usage.ctx / ctxWindow()) * 100))); }
+function resetUsage() { usage = { model: usage.model || '', ctx: 0, lastOut: 0, lastCache: 0, sessOut: 0, sessCost: 0, turns: 0, maxTokens: usage.maxTokens || 0 }; renderUsage(); }
 function applyTurnUsage(u, costUsd) {
   if (u) {
     const inp = u.input_tokens || 0;
@@ -302,11 +306,36 @@ function applyTurnUsage(u, costUsd) {
   if (costUsd) usage.sessCost += Number(costUsd) || 0;
   usage.turns += 1;
   renderUsage();
+  renderCtxWarn();
 }
+
+// Nudge before a chat gets expensive: past the threshold, every further turn
+// re-sends the whole context. Dismissible, and it stays dismissed until the
+// chat grows another 10%.
+let ctxWarnDismissedAt = 0;
+function renderCtxWarn() {
+  const el = $('ctxWarn'); if (!el) return;
+  const threshold = (state.settings && state.settings.longChatWarnPct != null) ? state.settings.longChatWarnPct : 70;
+  const pct = ctxPct();
+  if (!threshold || pct < threshold || pct < ctxWarnDismissedAt + 10) { el.classList.add('hidden'); return; }
+  el.innerHTML = `<span>This chat is <b>${pct}% full</b> — every turn now re-sends ~${fmtTokens(usage.ctx)} tokens.</span>`
+    + `<button class="ctx-warn-act" data-act="compact">Compact</button>`
+    + `<button class="ctx-warn-act" data-act="new">New chat</button>`
+    + `<button class="ctx-warn-x" data-act="hide" title="Dismiss">✕</button>`;
+  el.classList.remove('hidden');
+}
+$('ctxWarn').addEventListener('click', async (e) => {
+  const act = e.target.closest('[data-act]'); if (!act) return;
+  const which = act.dataset.act;
+  ctxWarnDismissedAt = ctxPct();
+  renderCtxWarn();
+  if (which === 'compact') { const r = await cc.compact(); toast(r.ok ? 'Compacting…' : (r.error || 'Could not compact'), r.ok ? 'ok' : 'err'); }
+  else if (which === 'new') newChat(false);
+});
 function fmtTokens(n) { n = Math.max(0, Math.round(n || 0)); if (n >= 1000) return (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, '') + 'K'; return String(n); }
 function renderUsage() {
-  const pct = Math.max(0, Math.min(100, Math.round((usage.ctx / CONTEXT_WINDOW) * 100)));
-  const left = Math.max(0, CONTEXT_WINDOW - usage.ctx);
+  const pct = ctxPct();
+  const left = Math.max(0, ctxWindow() - usage.ctx);
   // Composer status ring
   const ring = $('usageRingFill');
   if (ring) ring.style.background = `conic-gradient(var(--info) ${pct * 3.6}deg, var(--border) 0deg)`;
@@ -316,7 +345,7 @@ function renderUsage() {
   set('usageModel', usage.model ? shortModelLabel(usage.model) : shortModelLabel((state.settings || {}).model || ''));
   set('usageCtxPct', pct + '% used');
   const bar = $('usageBar'); if (bar) { bar.style.width = pct + '%'; bar.classList.toggle('warn', pct >= 85); }
-  set('usageCtxSub', fmtTokens(left) + ' tokens left of ~' + fmtTokens(CONTEXT_WINDOW));
+  set('usageCtxSub', fmtTokens(left) + ' tokens left of ~' + fmtTokens(ctxWindow()));
   set('usageFootStats', `Session: ${fmtTokens(usage.sessOut)} out · $${(usage.sessCost || 0).toFixed(usage.sessCost >= 1 ? 2 : 4)}`);
   renderUsageAccounts();
 }
@@ -328,7 +357,7 @@ function renderUsageAccounts() {
   box.innerHTML = '';
   const now = Date.now();
   const FULL = 5 * 3600e3; // ~5h reset window used only to scale the cooldown bar
-  const pctCtx = Math.max(0, Math.min(100, Math.round((usage.ctx / CONTEXT_WINDOW) * 100)));
+  const pctCtx = ctxPct();
   let shown = 0;
   for (const a of (state.accounts || [])) {
     if (!a.loggedIn) continue;
@@ -991,6 +1020,11 @@ function openSettings() {
   $('setEffort').value = s.effort || 'medium';
   $('setAutoSwitch').checked = !!s.autoSwitch;
   $('setNotify').checked = s.notify !== false;
+  $('setAutoCompact').checked = s.autoCompact !== false;
+  $('setLongChatWarnPct').value = s.longChatWarnPct != null ? s.longChatWarnPct : 70;
+  $('setMaxTurns').value = s.maxTurns || 0;
+  $('setMaxBudgetUsd').value = s.maxBudgetUsd || 0;
+  renderToolToggles(s.disabledTools || []);
   $('setTray').checked = !!s.minimizeToTray;
   $('setStartup').checked = !!s.startOnLogin;
   cc.appInfo().then((i) => { $('aboutLine').textContent = `Claude Multi v${i.version} · Electron ${i.electron} · Node ${i.node}`; }).catch(() => {});
@@ -999,6 +1033,15 @@ function openSettings() {
 $('settingsTop').onclick = openSettings;
 
 /* ---------------- activity & usage dashboard ---------------- */
+// "How hard have I leaned on this account since it last reset?" — the number
+// you actually want when deciding which account to start the next chat on.
+function accUsageLabel(a) {
+  const u = a.usage;
+  if (!u || !u.turns) return 'unused since reset';
+  const cost = u.costUsd ? ' · $' + u.costUsd.toFixed(u.costUsd >= 1 ? 2 : 3) : '';
+  return `${fmtTokens(u.tokens)} tokens${cost} since reset`;
+}
+
 function renderDashboard() {
   const el = $('dashBody'); if (!el) return;
   const now = Date.now();
@@ -1008,15 +1051,18 @@ function renderDashboard() {
     const using = convs.filter((c) => c.accountId === a.id).length;
     const run = convs.filter((c) => c.accountId === a.id && c.running).length;
     let status = 'Ready', cls = 'ready';
-    if (a.cooldownUntil && a.cooldownUntil > now) { status = 'Cooling · ' + fmtCountdown(a.cooldownUntil - now); cls = 'cool'; }
+    let cooling = false;
+    if (a.cooldownUntil && a.cooldownUntil > now) { status = 'Cooling · ' + fmtCountdown(a.cooldownUntil - now); cls = 'cool'; cooling = true; }
     else if (a.id === state.activeAccountId && state.running) { status = 'Active'; cls = 'active'; }
     return `<div class="dash-acc"><span class="dash-acc-av">${escapeHtml((a.name || '?').charAt(0).toUpperCase())}</span>`
       + `<span class="dash-acc-meta"><span class="dash-acc-name">${escapeHtml(a.name)}</span><span class="dash-acc-sub">${escapeHtml(a.email || 'not signed in')}</span></span>`
       + `<span class="dash-acc-stat ${cls}">${escapeHtml(status)}</span>`
-      + `<span class="dash-acc-num">${using} chat${using === 1 ? '' : 's'}${run ? ' · ' + run + ' running' : ''}</span></div>`;
+      + (cooling ? `<button class="dash-acc-clear" data-clear="${escapeHtml(a.id)}" title="Mark this account available again">Clear</button>` : '')
+      + `<span class="dash-acc-num">${using} chat${using === 1 ? '' : 's'}${run ? ' · ' + run + ' running' : ''}`
+      + `<span class="dash-acc-use">${accUsageLabel(a)}</span></span></div>`;
   }).join('') || '<div class="dash-empty">No signed-in accounts yet.</div>';
-  const pct = Math.max(0, Math.min(100, Math.round((usage.ctx / CONTEXT_WINDOW) * 100)));
-  const left = Math.max(0, CONTEXT_WINDOW - usage.ctx);
+  const pct = ctxPct();
+  const left = Math.max(0, ctxWindow() - usage.ctx);
   const stat = (n, l) => `<div class="dash-stat"><div class="dash-n">${n}</div><div class="dash-l">${l}</div></div>`;
   el.innerHTML = `<div class="dash-stats">${stat(convs.length, 'chats')}${stat(convs.filter((c) => c.running).length, 'running')}${stat(convs.filter((c) => c.generating).length, 'working now')}${stat(loggedIn.length, 'accounts')}</div>`
     + `<div class="dash-sec-label">Accounts</div><div class="dash-accs">${accHtml}</div>`
@@ -1026,6 +1072,73 @@ function renderDashboard() {
     + `<div class="dash-row"><span>Session output</span><b>${fmtTokens(usage.sessOut)} tokens</b></div>`
     + `<div class="dash-row"><span>Session cost</span><b>$${(usage.sessCost || 0).toFixed(usage.sessCost >= 1 ? 2 : 4)}</b></div></div>`;
 }
+$('dashBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-clear]');
+  if (!btn) return;
+  state.accounts = (await cc.clearCooldown(btn.dataset.clear)).accounts;
+  renderDashboard(); renderAccountRow(); renderLimitPill(); renderUsageAccounts();
+  toast('Account marked available', 'ok');
+});
+/* ---------------- context inspector (“/context”) ---------------- */
+// Shows what is actually occupying the context window, item by item, so the
+// token settings stop being guesswork.
+async function openContextInspector() {
+  closeMenus();
+  const body = $('ctxBody');
+  body.innerHTML = '<div class="cx-loading">Measuring…</div>';
+  $('ctxModal').classList.remove('hidden');
+  const res = await cc.contextUsage();
+  if (!res.ok) { body.innerHTML = `<div class="cx-empty">${escapeHtml(res.error || 'Could not read the context breakdown.')}</div>`; return; }
+  const d = res.data;
+  // Authoritative numbers straight from the engine — adopt them so the top-bar
+  // meter and the long-chat warning stop guessing at the window size.
+  if (d.maxTokens) usage.maxTokens = d.maxTokens;
+  if (d.totalTokens) usage.ctx = d.totalTokens;
+  renderUsage(); renderCtxWarn();
+  const max = d.maxTokens || ctxWindow();
+  const pct = (n) => Math.min(100, Math.max(0, (n / max) * 100));
+  const row = (label, tokens, sub) => `<div class="cx-item"><div class="cx-top-line">`
+    + `<span class="cx-label">${escapeHtml(label)}</span><span class="cx-tok">${fmtTokens(tokens)}</span></div>`
+    + `<div class="cx-bar-wrap"><div class="cx-bar" style="width:${pct(tokens).toFixed(1)}%"></div></div>`
+    + (sub ? `<div class="cx-sub">${escapeHtml(sub)}</div>` : '') + '</div>';
+  const section = (title, rows) => rows.length ? `<div class="cx-sec">${escapeHtml(title)}</div>${rows.join('')}` : '';
+
+  const big = (d.categories || []).slice().sort((a, b) => b.tokens - a.tokens).map((c) => row(c.name, c.tokens));
+  const mem = (d.memoryFiles || []).sort((a, b) => b.tokens - a.tokens)
+    .map((m) => row(m.path.split(/[\\/]/).pop(), m.tokens, m.path));
+  const mcp = (d.mcpTools || []).sort((a, b) => b.tokens - a.tokens)
+    .map((t) => row(t.name, t.tokens, 'from ' + t.serverName));
+  const sys = (d.systemPromptSections || []).sort((a, b) => b.tokens - a.tokens).map((s) => row(s.name, s.tokens));
+  const tools = (d.systemTools || []).sort((a, b) => b.tokens - a.tokens).map((t) => row(t.name, t.tokens));
+  const mb = d.messageBreakdown || {};
+
+  const used = d.totalTokens || 0;
+  const usedPct = Math.round(d.percentage != null ? d.percentage : (used / max) * 100);
+  body.innerHTML = `<div class="cx-head">`
+    + `<div class="cx-big">${usedPct}%</div>`
+    + `<div class="cx-big-sub">${fmtTokens(used)} of ${fmtTokens(max)} used · ${escapeHtml(shortModelLabel(d.model || ''))}`
+    + `<br/>${d.isAutoCompactEnabled ? 'Auto-compact is on' : '⚠ Auto-compact is off — turn it on in Settings → Tokens'}</div></div>`
+    + section('Where it goes', big)
+    + section('Memory files (CLAUDE.md)', mem)
+    + section('MCP tools', mcp)
+    + section('Tool descriptions', tools)
+    + section('System prompt', sys)
+    + (mb.toolResultTokens ? section('Conversation', [
+      row('Tool results', mb.toolResultTokens || 0, 'Output from Read/Bash/Grep — usually the biggest thing you control'),
+      row('Tool calls', mb.toolCallTokens || 0),
+    ]) : '')
+    + `<div class="cx-foot">Every item above is re-sent on <b>every turn</b> of this chat. `
+    + `Compacting drops the conversation rows; switching tools off in Settings → Tokens drops the tool rows.</div>`;
+}
+$('usageInspect').onclick = openContextInspector;
+$('usageCompact').onclick = async () => {
+  closeMenus();
+  const r = await cc.compact();
+  toast(r.ok ? 'Compacting…' : (r.error || 'Could not compact'), r.ok ? 'ok' : 'err');
+};
+$('ctxClose').onclick = () => $('ctxModal').classList.add('hidden');
+$('ctxModal').addEventListener('click', (e) => { if (e.target === $('ctxModal')) $('ctxModal').classList.add('hidden'); });
+
 function openDashboard() { renderDashboard(); $('dashModal').classList.remove('hidden'); }
 $('dashBtn').onclick = openDashboard;
 $('dashClose').onclick = () => $('dashModal').classList.add('hidden');
@@ -1040,6 +1153,35 @@ $('setPermission').onchange = async (e) => { state.settings = await cc.setSettin
 $('setModel').onchange = async (e) => { state.settings = await cc.setSettings({ model: e.target.value }); renderModelLabel(); };
 $('setEffort').onchange = async (e) => { state.settings = await cc.setSettings({ effort: e.target.value }); renderModelLabel(); };
 $('setAutoSwitch').onchange = async (e) => { state.settings = await cc.setSettings({ autoSwitch: e.target.checked }); };
+$('setAutoCompact').onchange = async (e) => { state.settings = await cc.setSettings({ autoCompact: e.target.checked }); };
+$('setLongChatWarnPct').onchange = async (e) => { state.settings = await cc.setSettings({ longChatWarnPct: clampNum(e.target.value, 0, 95, 70) }); renderCtxWarn(); };
+$('setMaxTurns').onchange = async (e) => { state.settings = await cc.setSettings({ maxTurns: clampNum(e.target.value, 0, 200, 0) }); };
+$('setMaxBudgetUsd').onchange = async (e) => { state.settings = await cc.setSettings({ maxBudgetUsd: clampNum(e.target.value, 0, 100, 0) }); };
+function clampNum(v, lo, hi, fb) { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fb; }
+
+// The tools you can switch off, each showing what you'd lose.
+const OPTIONAL_TOOLS = [
+  ['Task', 'Subagents', 'Biggest saver — subagents multiply token use'],
+  ['WebSearch', 'Web search', 'Searching the web from chat'],
+  ['WebFetch', 'Web fetch', 'Reading URLs you paste'],
+  ['TodoWrite', 'Todo lists', "Claude tracking its own task list"],
+  ['NotebookEdit', 'Jupyter notebooks', 'Editing .ipynb files'],
+];
+function renderToolToggles(disabled) {
+  const host = $('setToolList'); if (!host) return;
+  const off = new Set(disabled || []);
+  host.innerHTML = OPTIONAL_TOOLS.map(([name, label, hint]) =>
+    `<label class="tool-row"><input type="checkbox" data-tool="${name}"${off.has(name) ? '' : ' checked'} />`
+    + `<span class="tool-meta"><span class="tool-name">${escapeHtml(label)}</span>`
+    + `<span class="tool-hint">${escapeHtml(hint)}</span></span></label>`).join('');
+  host.querySelectorAll('input[data-tool]').forEach((box) => {
+    box.onchange = async () => {
+      const next = [...host.querySelectorAll('input[data-tool]')].filter((b) => !b.checked).map((b) => b.dataset.tool);
+      state.settings = await cc.setSettings({ disabledTools: next });
+      toast(next.length ? `${next.length} tool${next.length === 1 ? '' : 's'} off — applies to this chat now` : 'All tools on', 'ok');
+    };
+  });
+}
 $('setNotify').onchange = async (e) => { state.settings = await cc.setSettings({ notify: e.target.checked }); };
 $('setTray').onchange = async (e) => { state.settings = await cc.setSettings({ minimizeToTray: e.target.checked }); };
 $('setStartup').onchange = async (e) => { state.settings = await cc.setSettings({ startOnLogin: e.target.checked }); };
@@ -1129,6 +1271,8 @@ function buildCommands() {
     cmds.push({ icon: '⚡', label: 'Effort: ' + label, hint: ((state.settings || {}).effort || 'medium') === id ? 'current' : '', run: async () => { state.settings = await cc.setSettings({ effort: id }); renderModelLabel(); toast('Effort: ' + label, 'ok'); } });
   }
   cmds.push({ icon: '📊', label: 'Show token usage for this chat', run: () => { const b = $('usageRingBtn'); if (b && !b.classList.contains('hidden')) b.click(); else toast('Usage appears once a chat is running', 'ok'); } });
+  cmds.push({ icon: '🔎', label: "What's using my context", hint: 'Ctrl+Shift+K', run: () => openContextInspector() });
+  cmds.push({ icon: '🗜', label: 'Compact this chat (free up context)', run: async () => { const r = await cc.compact(); toast(r.ok ? 'Compacting…' : (r.error || 'Could not compact'), r.ok ? 'ok' : 'err'); } });
   cmds.push({ icon: '🐙', label: 'Open project on GitHub', run: () => cc.openExternal('https://github.com/Chamanrajragu/claude-multi') });
   for (const a of state.accounts) {
     const v = accView(a);
@@ -1204,7 +1348,8 @@ function stepFind(dir, first) {
 window.addEventListener('keydown', (e) => {
   const ctrl = e.ctrlKey || e.metaKey;
   if (!ctrl) return;
-  if (e.key === 'k' || e.key === 'K') { e.preventDefault(); if ($('cmdkModal').classList.contains('hidden')) openCmdk(); else closeCmdk(); }
+  if ((e.key === 'k' || e.key === 'K') && e.shiftKey) { e.preventDefault(); openContextInspector(); }
+  else if (e.key === 'k' || e.key === 'K') { e.preventDefault(); if ($('cmdkModal').classList.contains('hidden')) openCmdk(); else closeCmdk(); }
   else if (e.key === '/') { e.preventDefault(); $('shortcutsModal').classList.toggle('hidden'); }
   else if ((e.key === 'n' || e.key === 'N') && !e.shiftKey) { e.preventDefault(); $('newChatBtn').click(); }
   else if (e.key === 'b' || e.key === 'B') { e.preventDefault(); toggleSidebar(); }
