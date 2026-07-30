@@ -1,0 +1,45 @@
+name: Release
+
+# Builds installers and attaches them to a GitHub Release when you push a
+# version tag:
+#
+#   npm version minor && git push --follow-tags
+#
+# Windows is the shipped platform and must succeed. macOS and Linux are built
+# best-effort — they are unsigned and untested, so a failure on those must not
+# block the Windows upload.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            required: true
+          - os: macos-latest
+            required: false
+          - os: ubuntu-latest
+            required: false
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ !matrix.required }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Build installers
+        run: npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
