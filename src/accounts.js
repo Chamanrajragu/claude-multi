@@ -283,9 +283,13 @@ class Store {
   recordUsage(id, { tokens = 0, costUsd = 0 } = {}) {
     const a = this.state.accounts.find((x) => x.id === id);
     if (!a) return;
-    // Totals since this account's last limit reset, plus all-time.
-    if (!a.usage || a.usage.since == null) a.usage = { since: Date.now(), tokens: 0, costUsd: 0, turns: 0 };
-    if (a.lastLimitAt && a.usage.since < a.lastLimitAt) a.usage = { since: a.lastLimitAt, tokens: 0, costUsd: 0, turns: 0 };
+    // Totals since this account's last limit reset, plus all-time. The window
+    // is keyed to WHICH limit it belongs to, not to a timestamp comparison — a
+    // turn and a limit landing in the same millisecond is common on a fast
+    // machine, and `since < lastLimitAt` silently skipped the reset when it did.
+    const limitAt = a.lastLimitAt || 0;
+    if (!a.usage || a.usage.since == null) a.usage = { since: Date.now(), tokens: 0, costUsd: 0, turns: 0, resetFor: limitAt };
+    if ((a.usage.resetFor || 0) !== limitAt) a.usage = { since: limitAt || Date.now(), tokens: 0, costUsd: 0, turns: 0, resetFor: limitAt };
     a.usage.tokens += tokens;
     a.usage.costUsd += costUsd;
     a.usage.turns += 1;

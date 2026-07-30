@@ -31,6 +31,32 @@ test('since-reset totals restart after a limit, lifetime does not', () => {
   assert.strictEqual(got.lifetime.tokens, 1200, 'lifetime keeps accumulating');
 });
 
+// Regression: the window used to be decided by `since < lastLimitAt`, which
+// silently skipped the reset whenever a turn and a limit shared a millisecond.
+test('window resets even when the turn and the limit share a millisecond', () => {
+  const s = tmpStore();
+  const a = s.add('one');
+  const t = Date.now();
+  const acc = s.byId(a.id);
+  s.recordUsage(a.id, { tokens: 1000 });
+  acc.usage.since = t;          // force the exact-collision case
+  acc.lastLimitAt = t;
+  acc.usage.resetFor = 0;       // a limit this window has not been reset for
+  s.recordUsage(a.id, { tokens: 200 });
+  assert.strictEqual(s.byId(a.id).usage.tokens, 200);
+});
+
+test('the window resets once per limit, not on every later turn', () => {
+  const s = tmpStore();
+  const a = s.add('one');
+  s.recordUsage(a.id, { tokens: 1000 });
+  s.setCooldown(a.id, Date.now() + 3600e3, 'limit');
+  s.recordUsage(a.id, { tokens: 200 });
+  s.recordUsage(a.id, { tokens: 300 });
+  assert.strictEqual(s.byId(a.id).usage.tokens, 500, 'both post-limit turns count');
+  assert.strictEqual(s.byId(a.id).lifetime.tokens, 1500);
+});
+
 test('recordUsage on an unknown account is a no-op', () => {
   const s = tmpStore();
   assert.doesNotThrow(() => s.recordUsage('nope', { tokens: 5 }));
