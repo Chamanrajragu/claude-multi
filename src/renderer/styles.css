@@ -184,6 +184,9 @@ button { font-family: inherit; color: inherit; }
 .dash-acc-stat { font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--hover); color: var(--muted); flex: none; }
 .dash-acc-stat.active { color: var(--ok); }
 .dash-acc-stat.cool { color: var(--warn); }
+.dash-acc-use { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.dash-acc-clear { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; flex: none; }
+.dash-acc-clear:hover { background: var(--hover); color: var(--fg); }
 .dash-acc-num { font-size: 11.5px; color: var(--muted); flex: none; }
 .dash-chat { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 10px; padding: 4px 12px; }
 .dash-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
@@ -489,6 +492,47 @@ button { font-family: inherit; color: inherit; }
 .usage-bar { height: 100%; width: 0; background: var(--info); border-radius: 999px; transition: width .25s; }
 .usage-bar.warn { background: var(--warn); }
 .usage-accounts { display: flex; flex-direction: column; gap: 11px; }
+
+/* ---- token-saving UI ---- */
+.usage-actions { display: flex; gap: 6px; margin: 10px 0 4px; }
+.usage-act { flex: 1; padding: 7px 9px; border-radius: 9px; border: 1px solid var(--border); background: transparent; color: var(--text); font-size: 12px; cursor: pointer; text-align: left; }
+.usage-act:hover { background: var(--hover); }
+
+/* Context inspector */
+.ctx-modal { width: 560px; max-width: 92vw; }
+.ctx-body { padding: 4px 2px; max-height: 62vh; overflow-y: auto; }
+.cx-loading, .cx-empty { padding: 28px 4px; text-align: center; color: var(--muted); font-size: 13px; }
+.cx-head { display: flex; align-items: center; gap: 14px; padding: 6px 2px 14px; border-bottom: 1px solid var(--border-soft); }
+.cx-big { font-size: 30px; font-weight: 650; letter-spacing: -0.02em; }
+.cx-big-sub { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.cx-sec { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 16px 0 8px; }
+.cx-item { margin-bottom: 10px; }
+.cx-top-line { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.cx-label { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cx-tok { font-size: 12px; font-weight: 600; color: var(--muted); flex: none; font-variant-numeric: tabular-nums; }
+.cx-bar-wrap { height: 5px; border-radius: 999px; background: var(--hover); margin-top: 5px; overflow: hidden; }
+.cx-bar { height: 100%; border-radius: 999px; background: var(--accent, #d97757); min-width: 2px; }
+.cx-sub { font-size: 11px; color: var(--muted); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cx-foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border-soft); font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+/* Long-chat warning above the composer */
+.ctx-warn { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--hover); font-size: 12.5px; }
+.ctx-warn span { flex: 1; }
+.ctx-warn-act { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 12px; cursor: pointer; flex: none; }
+.ctx-warn-act:hover { background: var(--hover); }
+.ctx-warn-x { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; padding: 2px 4px; flex: none; }
+
+/* Tokens settings pane */
+.s-note { font-size: 12px; color: var(--muted); line-height: 1.6; padding-bottom: 4px; }
+.setting-row.col { flex-direction: column; align-items: stretch; gap: 10px; }
+.s-num { font-size: 13px; color: var(--muted); flex: none; white-space: nowrap; }
+.s-num input { width: 68px; padding: 7px 9px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; }
+.tool-list { display: flex; flex-direction: column; gap: 2px; }
+.tool-row { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 9px; cursor: pointer; }
+.tool-row:hover { background: var(--hover); }
+.tool-meta { display: flex; flex-direction: column; }
+.tool-name { font-size: 13px; }
+.tool-hint { font-size: 11.5px; color: var(--muted); }
 .ua-row { display: flex; flex-direction: column; gap: 5px; }
 .ua-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .ua-name { font-size: 12.5px; font-weight: 500; }

@@ -24,6 +24,12 @@ const DEFAULT_SETTINGS = {
   minimizeToTray: false,   // closing the window hides to the tray instead of quitting
   startOnLogin: false,     // launch the app when the user logs in
   checkUpdates: true,      // check GitHub for a newer release on startup
+  // ---- token savers ----
+  autoCompact: true,       // let the CLI summarize a chat before context overflows
+  maxBudgetUsd: 0,         // stop a turn once it costs this much (0 = no cap)
+  maxTurns: 0,             // stop a turn after this many agent steps (0 = no cap)
+  disabledTools: [],       // tool names whose schemas are dropped from every turn
+  longChatWarnPct: 70,     // warn to compact once context passes this % (0 = off)
 };
 
 function slug(name) {
@@ -269,6 +275,26 @@ class Store {
   clearCooldown(id) {
     const a = this.state.accounts.find((x) => x.id === id);
     if (a) { a.cooldownUntil = 0; a.cooldownHint = ''; this.save(); }
+  }
+
+  // Roll a finished turn into the account's running totals. With several
+  // accounts in rotation the useful question is "which one have I hammered
+  // least since its last reset?" — these numbers answer it.
+  recordUsage(id, { tokens = 0, costUsd = 0 } = {}) {
+    const a = this.state.accounts.find((x) => x.id === id);
+    if (!a) return;
+    // Totals since this account's last limit reset, plus all-time.
+    if (!a.usage || a.usage.since == null) a.usage = { since: Date.now(), tokens: 0, costUsd: 0, turns: 0 };
+    if (a.lastLimitAt && a.usage.since < a.lastLimitAt) a.usage = { since: a.lastLimitAt, tokens: 0, costUsd: 0, turns: 0 };
+    a.usage.tokens += tokens;
+    a.usage.costUsd += costUsd;
+    a.usage.turns += 1;
+    a.lifetime = a.lifetime || { tokens: 0, costUsd: 0, turns: 0 };
+    a.lifetime.tokens += tokens;
+    a.lifetime.costUsd += costUsd;
+    a.lifetime.turns += 1;
+    a.lastUsedAt = Date.now();
+    this.save();
   }
 
   byId(id) { return this.state.accounts.find((a) => a.id === id); }
