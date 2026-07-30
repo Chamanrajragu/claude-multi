@@ -138,6 +138,8 @@ Every turn of a chat re-sends the whole context — the conversation so far, you
 
 **🧠 Right model for the job** — per-chat model overrides mean the hard chat can sit on Opus while routine edits run on Sonnet or Haiku.
 
+**♻️ Switch to the least-used account** — instead of rotating in list order and draining accounts one at a time, Claude Multi can pick whichever account has spent the fewest tokens since its own reset. The dashboard shows those totals per account.
+
 ## Account safety & Anthropic's terms
 
 **Please read this before you use it.** No spin — here's the honest picture.
@@ -244,7 +246,7 @@ The four that matter most, all built in: **compact** long chats so the history i
 Yes — set a **budget cap** in Settings → Tokens. You can stop any single turn after *N* agent steps or *$X* of spend. An unattended agent loop is the most expensive thing that can happen on a subscription, and this bounds it.
 
 ### How do I know which of my accounts to use next?
-The activity dashboard tracks tokens and cost **per account since its last reset**, so you can start a new chat on whichever one you've leaned on least, rather than guessing.
+The activity dashboard tracks tokens and cost **per account since its last reset**, so you can start a new chat on whichever one you've leaned on least. You can also set Settings → Tokens → *When switching accounts, pick* to **the least-used account**, and Claude Multi will choose for you instead of rotating in list order.
 
 ### Is this against Anthropic's terms? Is it a hack?
 It's not a hack, and it's not account sharing or reselling — it's one person using their **own** paid subscriptions, each isolated via `CLAUDE_CONFIG_DIR`. But be aware: since **Feb 2026** Anthropic's terms restrict using a subscription (Pro/Max) login in third-party tools, including the Agent SDK — which is how a tool like this works — with enforcement possible without notice. So this is genuinely **use-at-your-own-risk**, and we can't guarantee against enforcement. Read the full, honest breakdown in [Account safety & Anthropic's terms](#account-safety--anthropics-terms) before you rely on it.

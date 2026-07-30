@@ -61,3 +61,44 @@ test('recordUsage on an unknown account is a no-op', () => {
   const s = tmpStore();
   assert.doesNotThrow(() => s.recordUsage('nope', { tokens: 5 }));
 });
+
+/* ---- persistence: atomic + coalesced writes ---- */
+
+test('writes are atomic — no .tmp is left behind after save', () => {
+  const s = tmpStore();
+  s.add('one');
+  s.save();
+  assert.ok(fs.existsSync(s.filePath), 'store file exists');
+  assert.ok(!fs.existsSync(s.filePath + '.tmp'), 'temp file cleaned up');
+  assert.doesNotThrow(() => JSON.parse(fs.readFileSync(s.filePath, 'utf8')), 'file is valid JSON');
+});
+
+test('a leftover .tmp from a crash is discarded, not loaded', () => {
+  const { Store } = require('../src/accounts');
+  const s = tmpStore();
+  s.add('keeper');
+  s.save();
+  fs.writeFileSync(s.filePath + '.tmp', '{"accounts":[{"id":"gar');   // truncated write
+  const reopened = new Store(s.filePath, s.accountsRoot);
+  assert.strictEqual(reopened.list().length, 1, 'good file still loads');
+  assert.strictEqual(reopened.list()[0].id, 'keeper');
+  assert.ok(!fs.existsSync(s.filePath + '.tmp'), 'partial file removed on load');
+});
+
+test('saveSoon coalesces, and flush forces it to disk', async () => {
+  const { Store } = require('../src/accounts');
+  const s = tmpStore();
+  s.add('one');
+  s.save();
+  s.state.marker = 'pending';
+  s.saveSoon();
+  s.saveSoon();
+  s.saveSoon();
+  // Not on disk yet — that is the point of coalescing.
+  assert.strictEqual(JSON.parse(fs.readFileSync(s.filePath, 'utf8')).marker, undefined);
+  s.flush();
+  assert.strictEqual(JSON.parse(fs.readFileSync(s.filePath, 'utf8')).marker, 'pending');
+  assert.ok(!fs.existsSync(s.filePath + '.tmp'));
+  // flush with nothing pending must not throw
+  assert.doesNotThrow(() => new Store(s.filePath, s.accountsRoot).flush());
+});

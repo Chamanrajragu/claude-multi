@@ -141,7 +141,10 @@ function saveProjectData(project, d) {
   if (!project) return;
   const m = store.get('projectChats') || {};
   m[project] = d;
-  store.set('projectChats', m);
+  // Chat logs are by far the biggest thing in the store and they change on
+  // every turn, so this write is coalesced. store.flush() on quit makes sure
+  // the last one lands.
+  store.setSoon('projectChats', m);
 }
 function createConvo(project) {
   const d = getProjectData(project);
@@ -496,7 +499,7 @@ function onChatEvent(convoId, session, accountId, ev) {
 function handleLimit(convoId, accountId, ev) {
   const until = ev.resetAt || (Date.now() + DEFAULT_COOLDOWN_MS);
   store.setCooldown(accountId, until, ev.text || '');
-  const next = cooldown.pickNext(store.list(), accountId);
+  const next = cooldown.pickNext(store.list(), accountId, Date.now(), store.getSettings().switchStrategy);
   // pickNext falls back to the soonest-to-reset account even when ALL accounts
   // are cooling. We must NOT auto-continue onto a still-limited account, or we'd
   // bounce limit→switch→limit forever, re-sending the prompt and spawning a new
@@ -1154,7 +1157,7 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
     else if (win) { win.show(); win.focus(); }
   });
-  app.on('before-quit', () => { isQuitting = true; });
+  app.on('before-quit', () => { isQuitting = true; try { if (store) store.flush(); } catch { /* noop */ } });
 });
 
 app.on('window-all-closed', () => {

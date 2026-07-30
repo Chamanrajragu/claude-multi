@@ -7,9 +7,13 @@ const os = require('os');
 
 const ACCOUNTS_ROOT = path.join(os.homedir(), '.claude-accounts');
 
+// How long coalesced writes wait for more changes before hitting disk.
+const SAVE_DEBOUNCE_MS = 400;
+
 const DEFAULT_SETTINGS = {
   permissionMode: 'ask',    // tool approvals: 'ask' | 'acceptEdits' | 'bypass'
   autoSwitch: false,        // switch automatically (with a short countdown) vs. ask
+  switchStrategy: 'roundRobin', // who to switch to: 'roundRobin' | 'leastUsed'
   autoSwitchDelay: 6,       // seconds to count down before an auto-switch
   notify: true,            // OS notifications on limit / switch
   theme: 'dark',           // 'dark' | 'light' | 'system'
@@ -59,6 +63,9 @@ class Store {
 
   _load() {
     try {
+      // A .tmp left behind means we crashed mid-write. The real file is still
+      // the last good one, so drop the partial and carry on.
+      try { if (fs.existsSync(this.filePath + '.tmp')) fs.unlinkSync(this.filePath + '.tmp'); } catch { /* noop */ }
       const raw = fs.readFileSync(this.filePath, 'utf8');
       const parsed = JSON.parse(raw);
       this.state = Object.assign(this.state, parsed);
@@ -73,13 +80,41 @@ class Store {
     }
   }
 
-  save() {
+  // Write via a temp file + rename. The previous version truncated the real
+  // file first, so a crash or power loss mid-write took every account, setting
+  // and chat with it — and this file reaches several MB once chats pile up.
+  // Rename is atomic, so readers see either the old file or the new one.
+  _write() {
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    fs.writeFileSync(this.filePath, JSON.stringify(this.state, null, 2));
+    const tmp = this.filePath + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(this.state));   // compact: this file is not read by humans
+    fs.renameSync(tmp, this.filePath);
   }
+
+  // Immediate, durable write. Use when the caller needs the file on disk now.
+  save() {
+    if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+    this._write();
+  }
+
+  // Coalesced write for hot paths (every streamed turn, every usage tick).
+  // Serializing megabytes on the main thread per turn is what made the UI hitch.
+  saveSoon() {
+    if (this._timer) return;
+    this._timer = setTimeout(() => {
+      this._timer = null;
+      try { this._write(); } catch (e) { console.error('[store.saveSoon]', e); }
+    }, SAVE_DEBOUNCE_MS);
+    if (this._timer.unref) this._timer.unref();   // never hold the process open
+  }
+
+  // Force any coalesced write out — call before the app exits.
+  flush() { if (this._timer) this.save(); }
 
   get(key) { return this.state[key]; }
   set(key, value) { this.state[key] = value; this.save(); }
+  // Same as set(), but the write is coalesced. For high-frequency keys.
+  setSoon(key, value) { this.state[key] = value; this.saveSoon(); }
 
   // ---- settings ----
   getSettings() { return { ...DEFAULT_SETTINGS, ...(this.state.settings || {}) }; }
@@ -298,7 +333,7 @@ class Store {
     a.lifetime.costUsd += costUsd;
     a.lifetime.turns += 1;
     a.lastUsedAt = Date.now();
-    this.save();
+    this.saveSoon();   // fires once per turn; not worth a blocking write
   }
 
   byId(id) { return this.state.accounts.find((a) => a.id === id); }

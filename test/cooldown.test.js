@@ -128,3 +128,32 @@ test('fuzz: 10000 random rosters obey the invariants', () => {
     assert.ok(list.some((a) => a.id === n.id));
   }
 });
+
+/* ---- least-used switching ---- */
+const acct = (id, tokens, extra = {}) => ({ id, loggedIn: true, usage: { tokens }, ...extra });
+
+test('leastUsed picks the account with the fewest tokens since its reset', () => {
+  const accounts = [acct('a', 900_000), acct('b', 12_000), acct('c', 400_000)];
+  assert.strictEqual(pickNext(accounts, 'a', Date.now(), 'leastUsed').id, 'b');
+});
+
+test('leastUsed still skips accounts that are cooling down', () => {
+  const now = Date.now();
+  const accounts = [
+    acct('a', 900_000),
+    acct('b', 1_000, { cooldownUntil: now + 3600e3 }),   // cheapest but unavailable
+    acct('c', 400_000),
+  ];
+  assert.strictEqual(pickNext(accounts, 'a', now, 'leastUsed').id, 'c');
+});
+
+test('leastUsed treats an account with no usage data as unused', () => {
+  const accounts = [acct('a', 500_000), { id: 'fresh', loggedIn: true }, acct('c', 9_000)];
+  assert.strictEqual(pickNext(accounts, 'a', Date.now(), 'leastUsed').id, 'fresh');
+});
+
+test('roundRobin remains the default and is unaffected by usage', () => {
+  const accounts = [acct('a', 1_000), acct('b', 900_000), acct('c', 2_000)];
+  assert.strictEqual(pickNext(accounts, 'a').id, 'b', 'default is still positional');
+  assert.strictEqual(pickNext(accounts, 'a', Date.now(), 'roundRobin').id, 'b');
+});

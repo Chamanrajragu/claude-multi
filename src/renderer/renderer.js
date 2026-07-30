@@ -1020,6 +1020,7 @@ function openSettings() {
   $('setEffort').value = s.effort || 'medium';
   $('setAutoSwitch').checked = !!s.autoSwitch;
   $('setNotify').checked = s.notify !== false;
+  $('setSwitchStrategy').value = s.switchStrategy === 'leastUsed' ? 'leastUsed' : 'roundRobin';
   $('setAutoCompact').checked = s.autoCompact !== false;
   $('setLongChatWarnPct').value = s.longChatWarnPct != null ? s.longChatWarnPct : 70;
   $('setMaxTurns').value = s.maxTurns || 0;
@@ -1153,6 +1154,7 @@ $('setPermission').onchange = async (e) => { state.settings = await cc.setSettin
 $('setModel').onchange = async (e) => { state.settings = await cc.setSettings({ model: e.target.value }); renderModelLabel(); };
 $('setEffort').onchange = async (e) => { state.settings = await cc.setSettings({ effort: e.target.value }); renderModelLabel(); };
 $('setAutoSwitch').onchange = async (e) => { state.settings = await cc.setSettings({ autoSwitch: e.target.checked }); };
+$('setSwitchStrategy').onchange = async (e) => { state.settings = await cc.setSettings({ switchStrategy: e.target.value }); };
 $('setAutoCompact').onchange = async (e) => { state.settings = await cc.setSettings({ autoCompact: e.target.checked }); };
 $('setLongChatWarnPct').onchange = async (e) => { state.settings = await cc.setSettings({ longChatWarnPct: clampNum(e.target.value, 0, 95, 70) }); renderCtxWarn(); };
 $('setMaxTurns').onchange = async (e) => { state.settings = await cc.setSettings({ maxTurns: clampNum(e.target.value, 0, 200, 0) }); };

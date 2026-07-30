@@ -169,6 +169,8 @@
         <div class="spane hidden" data-pane="tokens">
           <h3>Tokens</h3>
           <div class="s-note">These trade a little capability for a lot of quota. Nothing here is on by default except auto-compact.</div>
+          <div class="setting-row"><div><div class="s-title">When switching accounts, pick</div><div class="s-sub">Least-used spreads the load instead of draining accounts in order</div></div>
+            <select id="setSwitchStrategy"><option value="roundRobin">The next one in the list</option><option value="leastUsed">The least-used account</option></select></div>
           <div class="setting-row"><div><div class="s-title">Auto-compact long chats</div><div class="s-sub">Summarize before the context fills, instead of re-sending everything each turn</div></div>
             <label class="switch"><input type="checkbox" id="setAutoCompact" /><span class="slider"></span></label></div>
           <div class="setting-row"><div><div class="s-title">Warn me when context passes</div><div class="s-sub">Suggests compacting or a fresh chat. 0 turns the warning off.</div></div>

@@ -25,9 +25,20 @@ function describe(acc, now = Date.now(), activeId = null) {
   return { state: 'ready', label: 'Ready' };
 }
 
-// Choose the next account after `currentId`, preferring ones available now,
-// rotating round-robin, and falling back to the soonest-to-reset otherwise.
-function pickNext(accounts, currentId, now = Date.now()) {
+// Tokens an account has spent since its last reset. Missing data sorts as 0,
+// so a never-used account is always the most attractive.
+function usedSinceReset(acc) {
+  return (acc && acc.usage && acc.usage.tokens) || 0;
+}
+
+// Choose the next account after `currentId`, preferring ones available now and
+// falling back to the soonest-to-reset otherwise.
+//
+// `strategy` decides the order among accounts that are free right now:
+//   'roundRobin' — the next one in the list (default; predictable)
+//   'leastUsed'  — the one with the fewest tokens spent since its own reset,
+//                  which spreads load instead of draining accounts in order
+function pickNext(accounts, currentId, now = Date.now(), strategy = 'roundRobin') {
   const loggedIn = (accounts || []).filter((a) => a.loggedIn);
   const others = loggedIn.filter((a) => a.id !== currentId);
   if (!others.length) return null;
@@ -44,7 +55,14 @@ function pickNext(accounts, currentId, now = Date.now()) {
   }
 
   const available = order.filter((a) => isAvailable(a, now));
-  if (available.length) return available[0];
+  if (available.length) {
+    if (strategy === 'leastUsed') {
+      // Stable: ties keep round-robin order, so behaviour stays predictable
+      // before any usage has been recorded.
+      return available.slice().sort((a, b) => usedSinceReset(a) - usedSinceReset(b))[0];
+    }
+    return available[0];
+  }
 
   // All cooling down: pick the one that resets soonest.
   return order
@@ -69,4 +87,4 @@ function formatCountdown(ms) {
   return `${s}s`;
 }
 
-module.exports = { isAvailable, describe, pickNext, availableCount, formatCountdown };
+module.exports = { isAvailable, describe, pickNext, availableCount, formatCountdown, usedSinceReset };
