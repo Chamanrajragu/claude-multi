@@ -359,7 +359,9 @@ function startSession(convoId, accountId, resumeId) {
     model,
     effort,
     resumeId: resumeId || '',
-    permissionMode: 'default', // SDK stays in default; approvalMode decides prompting
+    // The engine only needs to know about 'plan' (it blocks tool execution);
+    // every other mode is decided by approvalMode in the can_use_tool handshake.
+    permissionMode: (s.permissionMode === 'plan') ? 'plan' : 'default',
     approvalMode: s.permissionMode || 'ask', // 'ask' | 'acceptEdits' | 'bypass'
     maxBudgetUsd: s.maxBudgetUsd || 0,
     maxTurns: s.maxTurns || 0,

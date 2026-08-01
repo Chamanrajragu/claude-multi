@@ -243,7 +243,18 @@ class ChatSession {
   // Live setting changes. Restarting a session to apply these would re-send the
   // whole transcript on the next turn (a cache miss the size of the chat), so
   // apply them in place whenever the SDK supports it.
-  setApprovalMode(mode) { this.approvalMode = mode || 'ask'; }
+  setApprovalMode(mode) {
+    this.approvalMode = mode || 'ask';
+    // 'plan' is the one mode the engine itself has to know about — it stops
+    // tools running at all, so Claude researches and proposes instead of
+    // building. Cheaper than letting it build the wrong thing and redo it.
+    const engineMode = this.approvalMode === 'plan' ? 'plan' : 'default';
+    if (this.permissionMode === engineMode) return true;
+    this.permissionMode = engineMode;
+    if (!this.q || typeof this.q.setPermissionMode !== 'function') return false;
+    this.q.setPermissionMode(engineMode).catch(() => {});
+    return true;
+  }
 
   setAutoCompact(on) {
     this.autoCompact = on !== false;
@@ -364,10 +375,17 @@ class ChatSession {
       this._emitError(text, msg.terminal_reason);
       return;
     }
+    // The result reports the running model's real context window, so the meter
+    // never has to assume 200K. Take the largest if several models ran.
+    let contextWindow = 0;
+    for (const m of Object.values(msg.modelUsage || {})) {
+      if (m && m.contextWindow > contextWindow) contextWindow = m.contextWindow;
+    }
     this.onEvent({
       type: 'turn_end',
       usage: msg.usage || null,
       costUsd: msg.total_cost_usd || 0,
+      contextWindow,
       sessionId: this.sessionId,
     });
   }

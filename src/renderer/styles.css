@@ -546,3 +546,6 @@ button { font-family: inherit; color: inherit; }
 .shortcut-grid { display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; align-items: center; }
 .sc-key { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; background: var(--code-bg); border: 1px solid var(--border-soft); border-radius: 7px; padding: 4px 9px; white-space: nowrap; text-align: center; }
 .sc-desc { font-size: 13px; color: var(--muted); }
+
+/* Plan mode: read-only, so it reads as calm rather than a warning. */
+.perm-chip.plan { border-color: var(--accent, #d97757); color: var(--accent, #d97757); }

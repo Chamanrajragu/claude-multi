@@ -123,3 +123,49 @@ test('classify carries resetAt when a time is present', () => {
   assert.ok(typeof r.resetAt === 'number' && r.resetAt > now);
   assert.ok(/3pm/i.test(r.resetHint));
 });
+
+/* ---- weekly limits report a DATE, not just a clock ---- */
+// Real message observed in the app:
+//   "Error during compaction: You've hit your weekly limit · resets Aug 3, 6:30pm (Asia/Calcutta)"
+// Before this was handled, resetAt came back null and the caller applied a
+// blanket 5-hour cooldown — so the app kept returning to an account that was
+// still three days from resetting.
+const JULY_31 = new Date('2026-07-31T09:54:00').getTime();
+
+test('a weekly limit with a dated reset is parsed, not dropped', () => {
+  const msg = "You've hit your weekly limit · resets Aug 3, 6:30pm (Asia/Calcutta)";
+  const c = classify(msg, JULY_31);
+  assert.strictEqual(c.kind, 'reached');
+  assert.ok(c.resetAt, 'resetAt must not be null — that is what caused the 5h fallback');
+  const d = new Date(c.resetAt);
+  assert.strictEqual(d.getMonth(), 7, 'August');
+  assert.strictEqual(d.getDate(), 3);
+  assert.strictEqual(d.getHours(), 18);
+  assert.strictEqual(d.getMinutes(), 30);
+  assert.ok(c.resetAt - JULY_31 > 2 * 24 * 3600e3, 'cooldown spans days, not hours');
+});
+
+test('dated resets accept the spellings Claude actually emits', () => {
+  for (const s of ['resets Aug 3, 6:30pm', 'resets August 3 at 6:30 pm',
+    'resets Aug. 3rd, 6:30pm', 'reset on Aug 3 6:30pm']) {
+    const at = parseResetTime(s, JULY_31);
+    assert.ok(at, `should parse: ${s}`);
+    assert.strictEqual(new Date(at).getDate(), 3, s);
+    assert.strictEqual(new Date(at).getHours(), 18, s);
+  }
+});
+
+test('the reset hint keeps the date instead of reading back as a bare number', () => {
+  const c = classify("You've hit your weekly limit · resets Aug 3, 6:30pm", JULY_31);
+  assert.match(c.resetHint, /Aug/i);
+  assert.notStrictEqual(c.resetHint, '3');
+});
+
+test('a date months away is treated as a misparse, not a months-long lockout', () => {
+  assert.strictEqual(parseResetTime('resets Jan 2, 9am', JULY_31), null);
+});
+
+test('a plain clock reset still resolves to today or tomorrow', () => {
+  const at = parseResetTime('resets at 10pm', JULY_31);
+  assert.ok(at - JULY_31 < 24 * 3600e3, 'clock-only stays within a day');
+});

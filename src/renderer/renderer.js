@@ -194,7 +194,8 @@ const MODELS = [
 // Legacy aliases → friendly labels, so an older stored setting still reads right.
 const MODEL_ALIASES = { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' };
 const EFFORTS = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Max']];
-const PERMS = [['ask', 'Ask each time'], ['acceptEdits', 'Accept edits'], ['bypass', 'Bypass permissions']];
+const PERM_TOAST = { plan: 'Plan only — Claude will propose, not build', ask: 'Will ask before each tool', acceptEdits: 'Auto-accepting file edits', bypass: 'Allowing all tools — no more prompts' };
+const PERMS = [['plan', 'Plan only'], ['ask', 'Ask each time'], ['acceptEdits', 'Accept edits'], ['bypass', 'Bypass permissions']];
 function labelFor(list, id, fb) { const f = list.find((x) => x[0] === id); if (f) return f[1]; if (list === MODELS && MODEL_ALIASES[id]) return MODEL_ALIASES[id]; return fb; }
 // Short label for the compact chip (drop the "(account)" suffix).
 function shortModelLabel(id) { return labelFor(MODELS, id || '', 'Default').replace(' (account)', ''); }
@@ -211,6 +212,7 @@ function renderModelLabel() {
     $('permChipLabel').textContent = labelFor(PERMS, pm, 'Ask each time');
     pc.classList.toggle('bypass', pm === 'bypass');
     pc.classList.toggle('accept', pm === 'acceptEdits');
+    pc.classList.toggle('plan', pm === 'plan');
   }
 }
 function updateComposer() {
@@ -292,7 +294,9 @@ let usage = { model: '', ctx: 0, lastOut: 0, lastCache: 0, sessOut: 0, sessCost:
 function ctxWindow() { return usage.maxTokens || CONTEXT_WINDOW; }
 function ctxPct() { return Math.max(0, Math.min(100, Math.round((usage.ctx / ctxWindow()) * 100))); }
 function resetUsage() { usage = { model: usage.model || '', ctx: 0, lastOut: 0, lastCache: 0, sessOut: 0, sessCost: 0, turns: 0, maxTokens: usage.maxTokens || 0 }; renderUsage(); }
-function applyTurnUsage(u, costUsd) {
+function applyTurnUsage(u, costUsd, contextWindow) {
+  // The engine tells us the running model's real window; trust it over the default.
+  if (contextWindow > 0) usage.maxTokens = contextWindow;
   if (u) {
     const inp = u.input_tokens || 0;
     const cacheR = u.cache_read_input_tokens || 0;
@@ -616,7 +620,7 @@ cc.onChat((ev) => {
     case 'tool_result': onToolResult(ev.id, ev.isError, ev.text); break;
     case 'permission': onPermission(ev.requestId, ev.tool, ev.input); break;
     case 'info': onInfoLine(ev.text); break;
-    case 'turn_end': applyTurnUsage(ev.usage, ev.costUsd); endTurn({ usage: ev.usage, costUsd: ev.costUsd }); break;
+    case 'turn_end': applyTurnUsage(ev.usage, ev.costUsd, ev.contextWindow); endTurn({ usage: ev.usage, costUsd: ev.costUsd }); break;
     case 'auth_failed': endTurn(); onErrorLine('This account is not signed in. Open the account switcher and Log in.'); break;
     case 'error': endTurn(); onErrorLine(ev.text || 'Something went wrong.'); break;
     case 'limit': endTurn(); break;
@@ -903,7 +907,7 @@ function openPermMenu(anchor) {
   if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
   closeMenus(); menu.innerHTML = '';
   const cur = (state.settings && state.settings.permissionMode) || 'ask';
-  const subs = { ask: 'Approve each tool before it runs', acceptEdits: 'Auto-approve file edits, ask for the rest', bypass: 'Run every tool without asking' };
+  const subs = { plan: 'Research and propose a plan — runs no tools, changes nothing', ask: 'Approve each tool before it runs', acceptEdits: 'Auto-approve file edits, ask for the rest', bypass: 'Run every tool without asking' };
   const lbl = document.createElement('div'); lbl.className = 'm-label'; lbl.textContent = 'Permissions'; menu.appendChild(lbl);
   PERMS.forEach(([id, label]) => {
     const b = document.createElement('button'); b.className = 'perm-row' + (id === 'bypass' ? ' bypass' : '');
@@ -1015,7 +1019,7 @@ function openSettings() {
   $('setWidth').value = s.width === 'wide' ? 'wide' : 'comfortable';
   $('setFontScale').value = ['small', 'large'].includes(s.fontScale) ? s.fontScale : 'normal';
   $('setEnterSends').checked = s.enterSends !== false;
-  $('setPermission').value = ['acceptEdits', 'bypass'].includes(s.permissionMode) ? s.permissionMode : 'ask';
+  $('setPermission').value = ['acceptEdits', 'bypass', 'plan'].includes(s.permissionMode) ? s.permissionMode : 'ask';
   $('setModel').value = s.model || '';
   $('setEffort').value = s.effort || 'medium';
   $('setAutoSwitch').checked = !!s.autoSwitch;
@@ -1150,7 +1154,7 @@ document.querySelectorAll('.snav').forEach((b) => { b.onclick = () => {
   const p = b.dataset.pane; document.querySelectorAll('.spane').forEach((x) => x.classList.toggle('hidden', x.dataset.pane !== p));
 }; });
 $('setTheme').onchange = async (e) => { applyTheme(e.target.value); state.settings = await cc.setSettings({ theme: e.target.value }); };
-$('setPermission').onchange = async (e) => { state.settings = await cc.setSettings({ permissionMode: e.target.value }); renderModelLabel(); toast(e.target.value === 'bypass' ? 'Allowing all tools — no more prompts' : (e.target.value === 'acceptEdits' ? 'Auto-accepting file edits' : 'Will ask before each tool'), 'ok'); };
+$('setPermission').onchange = async (e) => { state.settings = await cc.setSettings({ permissionMode: e.target.value }); renderModelLabel(); toast(PERM_TOAST[e.target.value] || 'Will ask before each tool', 'ok'); };
 $('setModel').onchange = async (e) => { state.settings = await cc.setSettings({ model: e.target.value }); renderModelLabel(); };
 $('setEffort').onchange = async (e) => { state.settings = await cc.setSettings({ effort: e.target.value }); renderModelLabel(); };
 $('setAutoSwitch').onchange = async (e) => { state.settings = await cc.setSettings({ autoSwitch: e.target.checked }); };

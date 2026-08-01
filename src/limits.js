@@ -27,6 +27,12 @@ const REACHED = [
   /limit reached[^\n]*\breset/i,
 ];
 
+// Weekly limits can be days out, but never months. Anything beyond this is
+// treated as a misparse.
+const MAX_RESET_AHEAD_MS = 30 * 24 * 3600e3;
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
 const APPROACHING = [
   /approaching (?:your )?(?:usage|session|weekly) limit/i,
   /nearing your (?:usage|session) limit/i,
@@ -36,6 +42,11 @@ const APPROACHING = [
 // Pull a human-readable reset phrase out of the message, e.g. "resets at 3pm"
 // or "resets 2:10am (Asia/Calcutta)".
 function extractResetHint(text) {
+  // Dated first — otherwise "resets Aug 3, 6:30pm" would read back as "3".
+  const dated = text.match(
+    /reset[s]?(?:\s+(?:at|on))?\s+((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:\s*,)?(?:\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?)?)/i,
+  );
+  if (dated) return dated[1].replace(/\s*,\s*/g, ', ').trim();
   const m = text.match(/reset[s]?(?:\s+at)?\s+([0-9]{1,2}(?::[0-9]{2})?\s*(?:am|pm)?(?:\s*\([^)]+\))?)/i);
   if (m) return m[1].trim();
   const rel = text.match(/reset[s]?\s+in\s+([0-9]+\s*(?:hours?|hrs?|h|minutes?|mins?|m))/i);
@@ -77,6 +88,35 @@ function parseResetTime(text, now = Date.now()) {
     const unit = rel[2].toLowerCase();
     const ms = /^h/.test(unit) ? n * 3600e3 : n * 60e3;
     return now + ms;
+  }
+
+  // Dated: "resets Aug 3, 6:30pm", "resets August 3 at 6:30 pm".
+  // Weekly limits report a calendar date, not just a clock — and they can be
+  // days out. Without this the clock branch below finds nothing, the caller
+  // falls back to a blanket 5-hour cooldown, and the app keeps returning to an
+  // account that is still days from resetting.
+  const dated = clean.match(
+    /reset[s]?(?:\s+(?:at|on))?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,)?(?:\s+(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?))?/i,
+  );
+  if (dated) {
+    const month = MONTHS.indexOf(dated[1].toLowerCase());
+    const day = parseInt(dated[2], 10);
+    if (month !== -1 && day >= 1 && day <= 31) {
+      const c = dated[3] ? parseClock(dated[3]) : { h: 0, m: 0 };
+      if (c) {
+        const ref = new Date(now);
+        const target = new Date(now);
+        target.setMonth(month, day);
+        target.setHours(c.h, c.m, 0, 0);
+        // A date already behind us means it belongs to next year (Dec → Jan).
+        if (target.getTime() <= now) target.setFullYear(ref.getFullYear() + 1);
+        // Sanity bound. No plan limit resets months out, so anything that far
+        // ahead is a misparse — better to fall back to the default cooldown
+        // than to lock a working account away until next year.
+        if (target.getTime() - now > MAX_RESET_AHEAD_MS) return null;
+        return target.getTime();
+      }
+    }
   }
 
   // Clock: "reset at 3pm", "resets 2:10am"
