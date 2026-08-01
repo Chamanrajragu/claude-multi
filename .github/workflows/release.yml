@@ -5,8 +5,14 @@ name: Release
 #
 #   npm version minor && git push --follow-tags
 #
-# Windows is the shipped platform and must succeed. macOS and Linux are built
-# best-effort — they are unsigned and untested, so a failure on those must not
+# Build and publish are deliberately separate. When each matrix job published
+# for itself, the three jobs raced and each created its OWN draft release, so
+# the assets ended up split across two drafts — publishing one of them shipped
+# a release with no Windows build. Now every job only builds and uploads an
+# artifact; a single job afterwards creates one draft and attaches everything.
+#
+# Windows is the shipped platform and must succeed. macOS and Linux are
+# best-effort — they are unsigned and untested, so a failure there must not
 # block the Windows upload.
 on:
   push:
@@ -40,6 +46,47 @@ jobs:
       - run: npm ci
       - run: npm test
       - name: Build installers
-        run: npx electron-builder --publish always
+        run: npx electron-builder --publish never
+      - name: Collect installers
+        shell: bash
+        run: |
+          mkdir -p out
+          # Installers only — skip unpacked build trees and debug output.
+          find dist -maxdepth 1 -type f \
+            \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' \
+               -o -name '*.blockmap' -o -name 'latest*.yml' \) \
+            -exec cp {} out/ \;
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: out/
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    # Runs as long as the Windows build produced something; a failed mac/linux
+    # job must not stop the release.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Verify the Windows build is present
+        run: |
+          ls -la artifacts
+          test -n "$(find artifacts -name '*.exe' -print -quit)" \
+            || { echo '::error::No Windows installer produced — refusing to publish.'; exit 1; }
+      - name: Create draft release with every artifact
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --draft \
+            --generate-notes \
+            artifacts/*
