@@ -845,6 +845,42 @@ $('accountBtn').onclick = (e) => { e.stopPropagation(); openAccountMenu(e.curren
 $('switchPill').onclick = (e) => { e.stopPropagation(); openAccountMenu(e.currentTarget); };
 $('topTitle').onclick = async () => { const c = state.conversations.find((x) => x.id === state.currentConvoId); if (!c) return; const t = await uiPrompt('Rename chat:', c.title, 'Rename'); if (t && t.trim()) cc.renameConvo(c.id, t.trim()); };
 
+// Rename / remove menu for one account.
+function openAccountActions(a, anchor) {
+  closeMenus();
+  const m = document.createElement('div'); m.className = 'menu ctx'; m.style.minWidth = '200px';
+  const mk = (label, fn, danger) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (danger) b.className = 'menu-danger';
+    b.onclick = async () => { closeMenus(); await fn(); };
+    m.appendChild(b);
+  };
+  mk('✎  Rename…', async () => {
+    const name = await uiPrompt('Rename this account:', a.name, 'Rename');
+    if (name && name.trim()) { state.accounts = (await cc.renameAccount(a.id, name.trim())).accounts; renderAll(); }
+  });
+  if (a.cooldownUntil && a.cooldownUntil > Date.now()) {
+    mk('↺  Clear cooldown', async () => { await cc.clearCooldown(a.id); toast('Cooldown cleared', 'ok'); });
+  }
+  mk('🗑  Remove account…', async () => {
+    // Removing forgets the login for this account, so make the consequence
+    // explicit and require the name to be typed back.
+    const typed = await uiPrompt(
+      `Remove “${a.name}”? This signs it out and forgets its saved login. Chats stay, but they will need another account.\n\nType the account name to confirm:`,
+      '', 'Remove',
+    );
+    if (!typed || typed.trim() !== a.name) { if (typed !== null) toast('Name did not match — nothing removed', 'err'); return; }
+    await cc.removeAccount(a.id);
+    toast(`Removed ${a.name}`, 'ok');
+  });
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(r.left - 120, window.innerWidth - 210)) + 'px';
+  if (r.top > window.innerHeight / 2) m.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  else m.style.top = (r.bottom + 6) + 'px';
+}
+
 async function addAccount() {
   const name = await uiPrompt('Name this account (e.g. "Personal", "Work"):', '', 'Add account');
   if (name == null) return;
@@ -939,9 +975,35 @@ let loginTerm = null, loginFit = null;
 function openLogin(a) {
   if (!a) return;
   $('loginTitle').textContent = 'Sign in — ' + a.name; $('loginStatus').textContent = ''; $('loginModal').classList.remove('hidden');
+  // A URL from a previous attempt would be stale and point at the wrong account.
+  loginUrl = ''; loginUrlBuf = ''; $('loginUrlRow').classList.add('hidden');
   if (!loginTerm) {
-    loginTerm = new Terminal({ fontFamily: 'Cascadia Mono, Consolas, monospace', fontSize: 13, cursorBlink: true, theme: { background: '#12100e', foreground: '#e6e2da', cursor: '#d9795a' } });
+    loginTerm = new Terminal({
+      fontFamily: 'Cascadia Mono, Consolas, monospace', fontSize: 13, cursorBlink: true,
+      theme: { background: '#12100e', foreground: '#e6e2da', cursor: '#d9795a' },
+      // Claude Code emits OSC 8 hyperlinks for the sign-in URL. xterm's default
+      // handler pops a "this link could potentially be dangerous" confirm and
+      // then calls window.open, which inside Electron opens nothing — so the
+      // browser never appeared. Hand the URL to the OS instead.
+      linkHandler: { activate: (_ev, uri) => cc.openExternal(uri) },
+    });
     loginFit = new FitAddon.FitAddon(); loginTerm.loadAddon(loginFit); loginTerm.open($('loginTerm')); loginTerm.onData((d) => cc.loginInput(d));
+    // Ctrl/Cmd+C copies the selection instead of sending SIGINT when text is
+    // selected; the sign-in URL is the whole reason people select in here.
+    loginTerm.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown') return true;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && (e.key === 'c' || e.key === 'C') && loginTerm.hasSelection()) {
+        cc.clipboardWrite(loginTerm.getSelection());
+        toast('Copied', 'ok');
+        return false;
+      }
+      if (mod && (e.key === 'v' || e.key === 'V')) {
+        const t = cc.clipboardRead(); if (t) cc.loginInput(t);
+        return false;
+      }
+      return true;
+    });
   } else loginTerm.clear();
   setTimeout(() => { try { loginFit.fit(); cc.loginResize(loginTerm.cols, loginTerm.rows); loginTerm.focus(); } catch {} }, 60);
   cc.loginStart(a.id);
@@ -949,7 +1011,28 @@ function openLogin(a) {
 function closeLogin() { cc.loginStop(); $('loginModal').classList.add('hidden'); }
 $('loginClose').onclick = closeLogin;
 $('loginTerm').addEventListener('contextmenu', (e) => { e.preventDefault(); const t = cc.clipboardRead(); if (t) cc.loginInput(t); });
-cc.onLoginData((d) => { if (loginTerm) loginTerm.write(d); });
+// The sign-in URL is long, wraps across terminal rows and is painful to select
+// by hand — so pull it out of the stream and offer it as plain buttons.
+let loginUrlBuf = '';
+let loginUrl = '';
+function scanForLoginUrl(chunk) {
+  // Keep a rolling tail: the URL frequently arrives split across writes.
+  loginUrlBuf = (loginUrlBuf + chunk).slice(-4000);
+  // Strip ANSI and OSC-8 wrappers, then drop the line-wrap artefacts xterm adds.
+  const plain = loginUrlBuf
+    .replace(/\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\)/g, '')   // eslint-disable-line no-control-regex
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')                 // eslint-disable-line no-control-regex
+    .replace(/\r?\n/g, '');
+  const m = plain.match(/https:\/\/claude\.(?:ai|com)\/[^\s"'<>]*oauth[^\s"'<>]*/i);
+  if (!m || m[0] === loginUrl) return;
+  loginUrl = m[0];
+  $('loginUrlText').textContent = loginUrl;
+  $('loginUrlRow').classList.remove('hidden');
+}
+$('loginUrlOpen').onclick = () => { if (loginUrl) cc.openExternal(loginUrl); };
+$('loginUrlCopy').onclick = () => { if (loginUrl) { cc.clipboardWrite(loginUrl); toast('Sign-in link copied', 'ok'); } };
+
+cc.onLoginData((d) => { if (loginTerm) loginTerm.write(d); scanForLoginUrl(d); });
 cc.onLoginExit(() => { if (loginTerm) loginTerm.write('\r\n[session ended]\r\n'); });
 cc.onLoginSuccess((info) => { $('loginStatus').textContent = '✓ Signed in as ' + (info.email || 'your account') + '. You can close this and start chatting.'; toast('Signed in: ' + (info.email || ''), 'ok'); setTimeout(() => { if (!$('loginModal').classList.contains('hidden')) closeLogin(); }, 2000); });
 
@@ -1063,6 +1146,8 @@ function renderDashboard() {
       + `<span class="dash-acc-meta"><span class="dash-acc-name">${escapeHtml(a.name)}</span><span class="dash-acc-sub">${escapeHtml(a.email || 'not signed in')}</span></span>`
       + `<span class="dash-acc-stat ${cls}">${escapeHtml(status)}</span>`
       + (cooling ? `<button class="dash-acc-clear" data-clear="${escapeHtml(a.id)}" title="Mark this account available again">Clear</button>` : '')
+      + `<button class="dash-acc-clear" data-rename="${escapeHtml(a.id)}" title="Rename this account">Rename</button>`
+      + `<button class="dash-acc-clear danger" data-remove="${escapeHtml(a.id)}" title="Sign out and forget this account">Remove</button>`
       + `<span class="dash-acc-num">${using} chat${using === 1 ? '' : 's'}${run ? ' · ' + run + ' running' : ''}`
       + `<span class="dash-acc-use">${accUsageLabel(a)}</span></span></div>`;
   }).join('') || '<div class="dash-empty">No signed-in accounts yet.</div>';
@@ -1078,11 +1163,45 @@ function renderDashboard() {
     + `<div class="dash-row"><span>Session cost</span><b>$${(usage.sessCost || 0).toFixed(usage.sessCost >= 1 ? 2 : 4)}</b></div></div>`;
 }
 $('dashBody').addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-clear]');
-  if (!btn) return;
-  state.accounts = (await cc.clearCooldown(btn.dataset.clear)).accounts;
-  renderDashboard(); renderAccountRow(); renderLimitPill(); renderUsageAccounts();
-  toast('Account marked available', 'ok');
+  const refresh = () => { renderDashboard(); renderAccountRow(); renderLimitPill(); renderUsageAccounts(); };
+  const clearBtn = e.target.closest('[data-clear]');
+  if (clearBtn) {
+    state.accounts = (await cc.clearCooldown(clearBtn.dataset.clear)).accounts;
+    refresh();
+    toast('Account marked available', 'ok');
+    return;
+  }
+  const renameBtn = e.target.closest('[data-rename]');
+  if (renameBtn) {
+    const a = state.accounts.find((x) => x.id === renameBtn.dataset.rename);
+    if (!a) return;
+    const name = await uiPrompt('Rename this account:', a.name, 'Rename');
+    if (!name || !name.trim()) return;
+    state.accounts = (await cc.renameAccount(a.id, name.trim())).accounts;
+    refresh();
+    toast('Renamed', 'ok');
+    return;
+  }
+  const removeBtn = e.target.closest('[data-remove]');
+  if (removeBtn) {
+    const a = state.accounts.find((x) => x.id === removeBtn.dataset.remove);
+    if (!a) return;
+    // Removing forgets a saved login, so make the consequence explicit and
+    // require the name typed back rather than a single mis-clickable OK.
+    const typed = await uiPrompt(
+      `Remove “${a.name}”?
+
+This signs it out and forgets its saved login. Your chats stay, but any chat using this account will need a different one.
+
+Type the account name to confirm:`,
+      '', 'Remove',
+    );
+    if (typed === null) return;
+    if (typed.trim() !== a.name) { toast('Name did not match — nothing was removed', 'err'); return; }
+    state.accounts = (await cc.removeAccount(a.id)).accounts;
+    refresh();
+    toast(`Removed ${a.name}`, 'ok');
+  }
 });
 /* ---------------- context inspector (“/context”) ---------------- */
 // Shows what is actually occupying the context window, item by item, so the
