@@ -52,10 +52,15 @@ jobs:
         run: |
           mkdir -p out
           # Installers only — skip unpacked build trees and debug output.
+          # electron-builder names these with spaces ("Claude Multi Setup.exe");
+          # normalise to hyphens, because `gh release create` rewrites spaces to
+          # dots and users would download "Claude.Multi.Setup.1.21.1.exe".
           find dist -maxdepth 1 -type f \
             \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' \
                -o -name '*.blockmap' -o -name 'latest*.yml' \) \
-            -exec cp {} out/ \;
+            -print0 | while IFS= read -r -d '' f; do
+              cp "$f" "out/$(basename "$f" | tr ' ' '-')"
+            done
           ls -la out
       - uses: actions/upload-artifact@v4
         with:
