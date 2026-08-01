@@ -578,16 +578,61 @@ let hostBuf = '';
 let loginAccountId = null;
 let loginPoll = null;
 
+// Locate the system Node. The pty host must run under real Node (not Electron)
+// so the prebuilt node-pty binary matches the ABI, so process.execPath is no
+// help here.
+function findNodePath() {
+  const candidates = [
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'nodejs', 'node.exe'),
+    '/usr/local/bin/node',
+    '/opt/homebrew/bin/node',
+    '/usr/bin/node',
+  ];
+  for (const c of candidates) { try { if (fs.existsSync(c)) return c; } catch { /* noop */ } }
+  try {
+    const cmd = process.platform === 'win32' ? 'where node' : 'command -v node';
+    const out = execSync(cmd, { encoding: 'utf8' }).split(/\r?\n/)[0].trim();
+    if (out) return out;
+  } catch { /* not found */ }
+  return 'node'; // last resort: hope it is on PATH
+}
+
+// Anything that stops the login terminal starting has to reach the user. This
+// used to go to console.error only, so a failure looked like an empty terminal
+// that never did anything.
+function loginError(text) { toRenderer('login:data', `\r\n[error] ${text}\r\n`); }
+
 function startHost() {
   if (host) return;
-  host = spawn('node', [path.join(__dirname, 'pty-host.js')], {
-    cwd: APP_ROOT, shell: true, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
+  // No `shell: true` here. With a shell, Windows concatenates the argv without
+  // quoting, so any install path containing a space — "D:\Claude Multi\…",
+  // anything under "Program Files" — was split and Node tried to load
+  // "D:\Claude". Login could never work from such a path.
+  try {
+    host = spawn(findNodePath(), [path.join(__dirname, 'pty-host.js')], {
+      cwd: APP_ROOT, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
+    });
+  } catch (e) {
+    loginError(`Could not start the login terminal: ${e.message}\r\nInstall Node.js 18+ and make sure it is on your PATH.`);
+    host = null;
+    return;
+  }
+  host.on('error', (e) => {
+    loginError(`Could not start the login terminal: ${e.message}\r\nInstall Node.js 18+ and make sure it is on your PATH.`);
+    host = null;
   });
   host.stdout.setEncoding('utf8');
   host.stdout.on('data', onHostData);
+  // Buffer stderr rather than streaming it into the terminal: the host emits
+  // harmless warnings that would otherwise appear as noise above Claude's own
+  // output. It is only worth showing if the host actually dies.
+  let hostErr = '';
   host.stderr.setEncoding('utf8');
-  host.stderr.on('data', (d) => console.error('[pty-host]', d));
-  host.on('exit', () => { host = null; });
+  host.stderr.on('data', (d) => { hostErr = (hostErr + d).slice(-2000); console.error('[pty-host]', d); });
+  host.on('exit', (code) => {
+    if (code) loginError(`Login terminal stopped unexpectedly (exit ${code}).${hostErr ? '\r\n' + hostErr.trim() : ''}`);
+    host = null;
+  });
 }
 function sendToHost(obj) { if (host && host.stdin.writable) host.stdin.write(JSON.stringify(obj) + '\n'); }
 function onHostData(chunk) {
