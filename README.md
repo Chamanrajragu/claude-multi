@@ -1,166 +1,100 @@
 <div align="center">
 
-<img src="src/renderer/icon.png" width="104" alt="Claude Multi logo" />
+<img src="src/renderer/icon.png" width="96" alt="Claude Multi" />
 
 # Claude Multi
 
-**Run [Claude Code](https://claude.com/claude-code) with several accounts in one app — and switch automatically the moment one hits its usage limit.**
+### The free desktop app that runs all your Claude accounts in one window
 
-[![Latest release](https://img.shields.io/github/v/release/Chamanrajragu/claude-multi?color=d97757&label=release)](https://github.com/Chamanrajragu/claude-multi/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/Chamanrajragu/claude-multi/total?color=brightgreen&label=downloads)](https://github.com/Chamanrajragu/claude-multi/releases)
-[![Stars](https://img.shields.io/github/stars/Chamanrajragu/claude-multi?style=flat&color=f5c518)](https://github.com/Chamanrajragu/claude-multi/stargazers)
-[![Last commit](https://img.shields.io/github/last-commit/Chamanrajragu/claude-multi?color=blue)](https://github.com/Chamanrajragu/claude-multi/commits/main)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
-[![Download](https://img.shields.io/badge/⬇%20download-Windows%20.exe-d97757)](https://github.com/Chamanrajragu/claude-multi/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/Chamanrajragu/claude-multi?color=d97757&label=Latest)](https://github.com/Chamanrajragu/claude-multi/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Chamanrajragu/claude-multi/total?color=4ec98a&label=Downloads)](https://github.com/Chamanrajragu/claude-multi/releases)
+[![Stars](https://img.shields.io/github/stars/Chamanrajragu/claude-multi?style=flat&color=f5c518&label=Stars)](https://github.com/Chamanrajragu/claude-multi/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
-**A free, open-source desktop app (GUI) for Claude Code — manage up to 20 Claude accounts, pick an account per project, and auto-switch when you hit a usage limit. Built-in token-saving tools show exactly what's filling your context and let you cap runaway spend. Runs entirely on your machine and never stores or sends your credentials.**
-
-<sub>Keywords: Claude Code GUI · Claude Code desktop app · multiple Claude accounts · Claude usage limit / rate limit workaround · reduce Claude Code token usage · Claude Code token optimization · context window inspector · Anthropic · multi-account account switcher · Windows · macOS · Linux</sub>
-
-<br/>
-
-<img src="docs/screenshot-main.png" width="820" alt="Claude Multi main window" />
-
-<br/>
-
-### 🎬 See it in action
-
-<img src="docs/demo.gif" width="820" alt="Claude Multi — parallel chats, voice, and auto-continue on usage limits" />
-
-**▶️ [Watch the full 2-minute feature tour (with narration + sound)](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.9.0/claude-multi-tour-1080p.mp4)**
+**[⬇ Download for Windows](https://github.com/Chamanrajragu/claude-multi/releases/latest) · [All Releases](https://github.com/Chamanrajragu/claude-multi/releases) · [Quick Start](#quick-start)**
 
 </div>
 
 ---
 
-## ⬇️ Download
+## What is Claude Multi?
 
-**[Get the latest Windows build →](https://github.com/Chamanrajragu/claude-multi/releases/latest)**
+**Claude Multi** is a free, open-source desktop app that lets you run [Claude Code](https://claude.com/claude-code) with **multiple Claude accounts** in one window — and automatically switches accounts the moment one hits its usage limit.
 
-Two options on the [Releases](https://github.com/Chamanrajragu/claude-multi/releases/latest) page:
+If you have ever hit Claude's 5-hour usage limit mid-task and watched everything stop, this fixes that. Claude Multi detects the limit, switches to your next available account, carries your conversation over, and **continues the task automatically** — without you doing anything.
 
-- **Installer** — `Claude Multi Setup <version>.exe` — run it, choose a folder, get Start-menu and uninstall entries.
-- **Portable** — `Claude Multi <version>.exe` — run it directly, no install.
+> **No API key required.** Works with your normal Claude Pro / Max / Team subscription. 100% local — no telemetry, no servers, your data never leaves your machine.
 
-You'll still need [Node.js](https://nodejs.org) and [Claude Code](https://claude.com/claude-code) installed. The build isn't code-signed yet, so Windows SmartScreen may show a prompt on first run — click **More info → Run anyway**. Prefer to run from source? See [Quick start](#quick-start).
+---
 
-## Why?
+## Key Features
 
-If you pay for more than one Claude plan, you've felt this: you're deep in a session, you hit the usage limit, and everything stops for hours — even though you have *another* account sitting idle.
+<table>
+<tr>
+<td width="50%">
 
-**Claude Multi** keeps all of your accounts in one window. When the active account runs out, it detects the limit, carries your conversation over to the next available account, and continues it there — so you barely lose a beat.
+**🔄 Auto-switch on usage limit**  
+Hits a limit? Automatically switches to your next account and re-issues the interrupted instruction — task continues without a pause.
 
-No credential hacking, nothing against the rules — each account simply gets its own isolated config directory (the officially supported `CLAUDE_CONFIG_DIR` mechanism). These are **your** paid accounts.
+**🤖 24/7 Auto-loop**  
+Set a prompt once. Claude Multi rotates through all your accounts, sends the prompt, waits for the 5-hour reset, and repeats — forever, even while you sleep.
 
-## Features
+**🧵 Parallel chats**  
+Run multiple chats simultaneously, each on its own folder and account. A live spinner shows which are busy.
 
-- 🖥️ **Looks and feels like the Claude desktop app** — the same near-black interface, composer, model picker, effort slider, permission-mode pill, and a **usage panel** modeled on Claude's own "usage limits" view.
-- 🧵 **Run many chats in parallel, each on its own folder** — start Claude on project A, then spin up a second chat pointed at project B and keep working while the first one runs. Each chat keeps its own folder and its own session; a live spinner in the sidebar shows which chats are busy.
-- 🎤 **Voice to text** — a mic button in the composer lets you dictate a prompt instead of typing.
-- ♻️ **Never lose work to a usage limit** — when an account hits its limit mid-task, Claude Multi carries the chat to another account **and automatically re-sends the interrupted instruction**, so the new account picks up exactly where the last one left off — no copy-pasting.
-- ⏳ **Tokens left & reset countdown, always visible** — a top-bar pill shows when a rate-limited account frees up ("resets in 2h 14m"), alongside the context/token meter for the current chat.
-- ⚡ **Built for flow** — **New chat** reuses the current folder instantly (Alt-click to pick another), **↑/↓ recalls your recent prompts**, **↻ Retry** regenerates the last response, **Esc** stops generation, **Duplicate** forks a chat, and the **sidebar is drag-to-resize**. Each chat shows a small **account badge** so you always know which account it's on.
-- 🔔 **Never miss a background chat** — when a chat you're *not* looking at finishes or needs your approval, you get a desktop notification and a taskbar flash; the sidebar marks it with an amber dot, and the window title shows how many chats are working.
-- 🧰 **Editor-grade touches** — **syntax-highlighted** code blocks, **Find in chat** (Ctrl/Cmd+Shift+F), **message timestamps**, **drag-to-reorder** chats, **edit & resend** any message, and a live **onboarding checklist**.
-- 🎨 **Make it yours** — pick an **accent color**, collapse the sidebar (Ctrl/Cmd+B) for a focus view, and enjoy tool cards with per-tool icons (📖 read, ✏️ edit, ⌨️ bash…), light/dark themes, and adjustable width & text size.
-- 🔦 **Find anything, fast** — search **across all chats by message content** (not just titles), keep an unsent **draft per chat**, switch chats with **Alt+↑/↓**, and **zoom** the whole UI with Ctrl/Cmd+= / − / 0.
-- 🧠 **Per-chat model & effort** — give each chat its **own model and thinking effort** (Opus for the hard one, Haiku for the quick one) — it overrides the global default just for that chat.
-- 📋 **Prompt templates** — save and reuse your go-to prompts from a one-click menu in the composer.
-- 🟢🔴 **Diff view for edits** — every Edit / Write / MultiEdit shows a **red/green diff** of exactly what changed, right in the tool card.
-- 🗂 **Export everything** — one click exports **all** your chats to Markdown files (Settings → Backup, or the command palette).
-- 📊 **Activity & usage dashboard** — one view (📊 in the top bar) for every account's status & cooldown, how many chats are running/working, and this chat's tokens & cost.
-- 🪄 **Claude-desktop look & feel** — a folder/account **context row** above the composer, tuned spacing and colors, and a familiar model menu — the polish of the real thing, in a multi-account app.
-- 💬 **A real chat interface, not a terminal** — talk to Claude in a clean chat window: streamed markdown replies, collapsible **tool cards** (edits, commands, searches), and inline **Allow / Deny** prompts before Claude touches your files.
-- 🛡️ **Permission modes** — keep the safe **Ask every time**, switch to **Auto-accept file edits**, or go hands-free with **Allow everything (no prompts)** — set it once in Settings → Chat.
-- 📎 **Paste & drop attachments** — paste a screenshot or copied image straight into the composer (reads the image bytes directly, so it works even for images copied from a browser or file explorer), or drag files onto the window.
-- 🔎 **See exactly what's eating your quota** — a **context inspector** breaks the window down item by item (memory files, MCP schemas, each tool's description, tool output) with token counts, plus **compact on demand**, **budget caps** that stop runaway agent loops, and switches to drop tools you never use. See [Making your quota last](#making-your-quota-last-settings--tokens).
-- 📊 **Live token meter** — a top-bar pill shows how much of the context window this chat has used and **how many tokens are left**; open it for a full breakdown (context used, cache reads, session output tokens and cost) plus the model actually running.
-- 🔁 **One conversation, any account** — your chat belongs to the **project**, not the account. Switch accounts and the conversation is carried over and continues right where it left off; the full history stays visible when you switch back or reopen the app.
-- 🔄 **Auto-switch on usage limit** — the moment an account hits its Claude usage/session limit, Claude Multi rotates to the next available account (or asks first). No more waiting hours for a reset when you have another account idle.
-- ⏳ **Cooldown tracking** — remembers when each rate-limited account resets and skips accounts that are still cooling down, picking the one that frees up soonest.
-- 🧑‍🤝‍🧑 **Multiple accounts, fully isolated** — every account gets its own login/config directory (`CLAUDE_CONFIG_DIR`). No interference, no logging in and out by hand.
-- 🎛️ **Model + effort picker** — a Claude-desktop-style **Models** menu (**Fable 5, Opus 4.8 / 4.7 / 4.6, Sonnet 5 / 4.6, Haiku 4.5**) and a **Faster ↔ Smarter** effort slider, right in the composer or from the command palette.
-- 🛂 **Permission-mode pill in the composer** — flip between **Ask each time**, **Accept edits**, and **Bypass permissions** (highlighted amber) without opening Settings.
-- 📁 **A preferred account per project** — each project folder remembers which account it uses.
-- 🔐 **Subscription login, no API key** — sign in each account once with your normal Claude subscription (Pro / Max / Team). Nothing is billed per token.
-- 🔔 **Desktop notifications** when a limit is hit or an account switches.
-- 🎨 **Themes that fit you** — dark, light, or **match your system**, plus adjustable **message width** and **text size**.
-- ⌨️ **Command palette (Ctrl/Cmd + K)** — jump to any account, chat, or action; a built-in **shortcuts sheet** (Ctrl/Cmd + /) is one keystroke away.
-- 📋 **One-click copy** — copy any assistant reply or individual **code block**, and **export a whole chat to Markdown**.
-- 📌 **Pin & search chats** — keep important conversations at the top and filter the list instantly.
-- ✨ **Starter prompts, drag-and-drop attachments, per-reply token/cost readout**, and a floating **scroll-to-latest** button.
-- 🔒 **100% local** — no telemetry, no analytics, and your logins never leave your machine.
+**⏳ Live cooldown timers**  
+See which accounts are ready and exactly how long until a cooling one resets — updated every second.
 
-## Why a desktop app instead of the raw terminal?
+</td>
+<td width="50%">
 
-Claude Code is fantastic, but juggling several accounts by hand is painful: you log out and back in, you lose your place when you hit a limit, and there's no way to say "this project uses that account." Claude Multi gives you a clean chat window where every account is one click away, each project remembers its account, and hitting a limit just rotates to the next account — your conversation comes with you.
+**📊 Context inspector**  
+See exactly what is filling your context window — every file, tool, and memory item with a token count.
 
-## Screenshots
+**🔎 @file autocomplete**  
+Type `@` in the composer to pick any file from your project. Tab to insert, arrows to navigate.
+
+**🎨 Beautiful, familiar UI**  
+Looks like the Claude desktop app. Dark/light themes, accent colors, syntax-highlighted code blocks with language labels.
+
+**🔒 100% private**  
+No telemetry, no analytics, no servers. Logins, chats, and settings live only on your computer.
+
+</td>
+</tr>
+</table>
+
+---
+
+## Download
 
 <div align="center">
 
-| Activity & usage dashboard | Diff view for every edit |
-| --- | --- |
-| <img src="docs/screenshot-dashboard.png" width="410" alt="Activity & usage dashboard: chats, running/working counts, per-account status and cooldowns, and this chat's tokens and cost" /> | <img src="docs/screenshot-main.png" width="410" alt="Chat with a red/green diff shown in an Edit tool card" /> |
-| Usage panel (tokens left, per account) | Model selector |
-| <img src="docs/screenshot-usage.png" width="410" alt="Usage panel showing context used, tokens remaining, per-account reset timers and session cost" /> | <img src="docs/screenshot-models.png" width="410" alt="Model selector: Fable 5, Opus 4.8 / 4.7 / 4.6, Sonnet 5 / 4.6, Haiku 4.5" /> |
-| Effort slider (Faster ↔ Smarter) | Permission modes |
-| <img src="docs/screenshot-effort.png" width="410" alt="Effort slider from Faster to Smarter" /> | <img src="docs/screenshot-permissions.png" width="410" alt="Permission modes: Ask each time, Accept edits, Bypass permissions" /> |
-| Account switcher (Ctrl/Cmd + 1–9) | Auto-switch on limit |
-| <img src="docs/screenshot-accounts.png" width="410" alt="Account switcher showing multiple Claude accounts with cooldown status" /> | <img src="docs/screenshot-limit.png" width="410" alt="Usage limit reached — switch account dialog" /> |
-| Settings | Light theme |
-| <img src="docs/screenshot-settings.png" width="410" alt="Settings" /> | <img src="docs/screenshot-light.png" width="410" alt="Light theme" /> |
+| Platform | File |
+|----------|------|
+| **Windows — Installer** (recommended) | [Claude-Multi-Setup-1.26.0.exe](https://github.com/Chamanrajragu/claude-multi/releases/latest) |
+| **Windows — Portable** (no install) | [Claude-Multi-1.26.0.exe](https://github.com/Chamanrajragu/claude-multi/releases/latest) |
+| **macOS** | [Claude-Multi-1.26.0-arm64.dmg](https://github.com/Chamanrajragu/claude-multi/releases/latest) |
+| **Linux** | [Claude-Multi-1.26.0.AppImage](https://github.com/Chamanrajragu/claude-multi/releases/latest) |
 
 </div>
 
-## How it works
+> **Windows SmartScreen warning:** The app is not code-signed yet. Click **More info → Run anyway**. The source is fully open — [read it yourself](src/).
 
-Each account gets its own `CLAUDE_CONFIG_DIR` (`~/.claude-accounts/<id>/`), so their logins never collide. Chatting is powered by the official **Claude Agent SDK** using that account's **subscription** login — no API key. Signing in runs the real `claude` `/login` once per account in a small terminal window (the OAuth step can't run headless).
+**Requirements:** [Node.js 18+](https://nodejs.org) and [Claude Code](https://claude.com/claude-code) installed on your machine.
 
-Every chat owns its **own folder** and its **own live session**, so you can run several at once without them interfering — start a task in one folder and, while it works, open another chat in a different folder and keep going. Transcripts are assembled in the main process, so chats running in the background still save their results.
+---
 
-When a reply comes back as a usage-limit error, the account is stamped with a cooldown (parsed from the reset time). If another account is free, Claude Multi copies the chat's transcript over, resumes the session, and **re-issues the instruction that was cut off** so the work continues on the new account automatically. If every account is cooling down, it tells you which one frees up soonest rather than bouncing between rate-limited accounts.
+## Quick Start
 
-## Making your quota last (Settings → Tokens)
+**Option A — Download installer** (easiest)
 
-Every turn of a chat re-sends the whole context — the conversation so far, your CLAUDE.md, and a description of every tool Claude can use. That's what actually drains a subscription, and most of it is under your control. Claude Multi gives you the same levers Claude Code has, plus a way to see where the tokens are going.
+1. Grab the installer from [Releases](https://github.com/Chamanrajragu/claude-multi/releases/latest)
+2. Run it and follow the steps
+3. Open Claude Multi
 
-**🔎 What's using my context** — open the token pill → *What's using my context*. It breaks the context window down item by item, with a token count on each: memory files, MCP tool schemas, individual tool descriptions, system prompt sections, and how much of the chat is tool output. Nothing else here is guesswork once you've looked at this.
-
-**🗜 Compact** — summarizes the chat so far and drops the intermediate reasoning, which is usually the single biggest win on a long chat. Auto-compact runs before the window fills; **Compact now** runs it on demand. When a chat crosses your warning threshold, a bar above the composer offers **Compact** or **New chat** right there.
-
-**⚡ Effort** — the *Faster ↔ Smarter* slider maps to Claude's real effort levels. **Low** disables extended thinking entirely, which is the fastest and cheapest setting; Medium and above let the model decide how much to think.
-
-**🛑 Budget guards** — cap a single turn at *N* agent steps or *$X* of spend. A runaway agent loop is the most expensive thing that can happen on a subscription, and this stops it unattended. Off by default.
-
-**🧰 Turn off tools you don't use** — every tool's description is re-sent on every turn. Switching off **Subagents** (the biggest saver), **Web search**, **Web fetch**, **Todo lists**, or **Jupyter notebooks** removes them from the prompt for good.
-
-**🧠 Right model for the job** — per-chat model overrides mean the hard chat can sit on Opus while routine edits run on Sonnet or Haiku.
-
-**♻️ Switch to the least-used account** — instead of rotating in list order and draining accounts one at a time, Claude Multi can pick whichever account has spent the fewest tokens since its own reset. The dashboard shows those totals per account.
-
-## Account safety & Anthropic's terms
-
-**Please read this before you use it.** No spin — here's the honest picture.
-
-**What this is (and isn't).** Claude Multi is for one person using **their own** Claude subscriptions. Each account is a separate plan you pay for, signed in through the normal `/login`, kept isolated with `CLAUDE_CONFIG_DIR`. It doesn't share, pool, resell, or crack accounts, and it doesn't raise any single account's limit — when one hits its cap you just continue on **another account you own**, with its own quota. This is very different from the account-stacking / reselling setups (e.g. someone running a dozen subscriptions) that Anthropic's abuse detection is built to catch.
-
-**The part you need to weigh.** Around **February 2026 Anthropic tightened its Claude Code terms** to say that using the OAuth login from Free/Pro/Max accounts in **other tools — including the Agent SDK** — isn't permitted; it's meant for Claude Code and claude.ai only. They have server-side enforcement and reserve the right to act **without notice** (they softened this somewhat in April 2026 toward a pay-as-you-go model, but the direction is clear). Claude Multi drives the Agent SDK with your subscription login, so that policy **does apply to a tool like this** — regardless of the fact that the accounts are yours.
-
-**So, honestly:**
-- We're not affiliated with Anthropic and can't speak for how they enforce. This is **use-at-your-own-risk**, and we can't promise you won't be actioned.
-- If you want zero risk, use **Claude Code / claude.ai as intended**, or **API-key billing** for anything custom.
-- If you use this anyway: keep it to accounts that are genuinely **yours**, stay within each one's normal limits, and don't stack throwaway accounts to dodge limits.
-
-Read the [Consumer Terms](https://www.anthropic.com/legal/consumer-terms) and [Usage Policy](https://www.anthropic.com/legal/aup) and decide for yourself.
-
-## Requirements
-
-- [Node.js](https://nodejs.org) 18+ (Node 20+ recommended)
-- [Claude Code](https://claude.com/claude-code) installed and on your `PATH` (or point to it in Settings)
-
-## Quick start
+**Option B — Run from source**
 
 ```bash
 git clone https://github.com/Chamanrajragu/claude-multi.git
@@ -169,53 +103,176 @@ npm install
 npm start
 ```
 
-Then:
+**First-time setup:**
 
-1. Click **New chat** and pick the **folder** for that chat — the folder Claude will work in.
-2. Open the **account switcher** (bottom-left) → **Add account**.
-3. Click **Log in** and sign in when your browser opens (paste the code back with **Ctrl+V**).
-4. Repeat for each account.
-5. Choose an account and start chatting. Start **another** chat in a different folder and they run side by side.
-6. When an account runs out, Claude Multi carries the chat to a free account and continues the interrupted task automatically.
+1. Click **New chat** and pick your project folder
+2. Open the **account switcher** (bottom-left) → **Add account**
+3. Click **Log in** and sign in when your browser opens
+4. Repeat for each Claude account you have
+5. Choose an account and start chatting — Claude Multi handles the rest ✓
 
-## Building installers
+---
 
-```bash
-npm run dist        # build for your current OS into ./dist
-npm run dist:win    # Windows (NSIS installer + portable .exe)
-npm run dist:mac    # macOS (.dmg)
-npm run dist:linux  # Linux (AppImage)
-```
+## Full Feature List
 
-> The packaged app keeps `asar` disabled so the PTY host and its prebuilt native binary load cleanly, and it expects Node.js on the user's `PATH`. Running from source (`npm start`) is the most reliable path.
+### Multi-Account Management
+- Add up to 20 Claude accounts, each fully isolated via `CLAUDE_CONFIG_DIR`
+- **Auto-switch on usage limit** — switches and re-issues the interrupted instruction automatically
+- **One-click switching** with `Ctrl/Cmd + 1…9`
+- Conversation **carried over** to the new account — no copy-pasting ever
+- Per-project account memory — each folder remembers which account to use
+- Activity dashboard showing every account's status, cooldown, and token usage since last reset
+- Clear cooldown manually if needed
 
-### Releasing
+### 24/7 Auto-Loop
+- Set a prompt once — runs on all accounts in rotation, indefinitely
+- Creates a **fresh chat per account per round** to keep context minimal and cheap
+- Live status table: each account's round status and cooldown countdown
+- Round counter, total sends, wait-reason display
+- Auto-loop status visible in the **system tray** — stop it without opening the app
 
-CI and release automation live in [`.github/workflows/`](.github/workflows/):
+### Chat Experience
+- Run **multiple parallel chats**, each with its own folder and session
+- Real-time streamed markdown rendering
+- **Syntax-highlighted code blocks** with language labels and one-click copy
+- **Red/green diff view** for every file Claude edits
+- Collapsible **tool cards** (📖 Read · ✏️ Edit · ⌨️ Bash · 🔍 Search · 🌐 Web)
+- Inline **Allow / Deny** permission cards before Claude touches files
+- **Thinking blocks** in collapsible details panels
+- **Edit & resend** any previous message
+- **Retry** to regenerate the last response
+- `/compact` in the composer to compact instantly
 
-- `ci.yml` — runs the test suite on Node 18, 20 and 22 for every push and PR.
-- `release.yml` — on a `vX.Y.Z` tag, builds the installers and attaches them to a GitHub Release. Windows must succeed; macOS and Linux are best-effort so an unsigned-build failure there never blocks the Windows upload.
+### Composer
+- **@file autocomplete** — type `@` to search and insert any project file
+- **Voice to text** — mic button for hands-free dictation
+- **Prompt templates** — save and reuse your best prompts
+- **Paste images** directly — screenshots, browser images, any format
+- **Drag and drop files** onto the window
+- **Character counter** at 200+ chars, red warning at 8K
+- **Prompt history** — Up/Down to recall previous messages
+- **Per-chat draft saving** — unsent text kept when switching chats
 
-Cutting a release is one command:
+### Token & Quota Management
+- **Context inspector** (`Ctrl/Cmd + Shift + K`) — item-by-item breakdown with token counts
+- **Live token meter** — % used and tokens remaining, always visible
+- **Auto-compact** — summarizes before context overflows
+- **Long-chat warning** — suggests compact or new chat at your threshold
+- **Budget caps** — stop a turn after N steps or $X spend (catches runaway loops)
+- **Turn off unused tools** — drop subagents, web search, fetch, todos, notebooks
+- **Per-chat model and effort** — Opus for hard work, Haiku for quick edits
+- **Least-used account switching** — always start on the account with the most quota
 
-```bash
-npm version minor && git push --follow-tags
-```
+### Navigation & UI
+- **Command palette** (`Ctrl/Cmd + K`) — every action, chat, and account in one place
+- **Full-text search** across all chats (`Ctrl/Cmd + F`)
+- **Find in chat** (`Ctrl/Cmd + Shift + F`)
+- **Drag-to-reorder** chats in the sidebar
+- **Pin chats** to keep important ones at the top
+- `Alt + ↑/↓` to cycle between chats
+- **Recent projects** — right-click New Chat to jump to a recent folder instantly
+- Resizable sidebar with drag handle
+- **Zoom** the whole UI (`Ctrl/Cmd + = / − / 0`)
 
-(Pushing files under `.github/workflows/` requires a token with the `workflow` scope — run `gh auth refresh -s workflow` once if needed.)
+### Reliability & Privacy
+- **Session auto-restart** — stale sessions detected and restarted transparently with a toast
+- **Background chat saving** — off-screen chats save correctly even when you are not looking
+- **Desktop notifications** when a chat finishes or needs approval
+- **Export to Markdown** — single chat or all chats at once
+- **Backup and restore** — export/import accounts and settings (no credentials)
+- Zero telemetry · Zero analytics · Zero outbound requests
 
-## Keyboard shortcuts
+---
+
+## Keyboard Shortcuts
 
 | Shortcut | Action |
-| --- | --- |
-| `Ctrl/Cmd + K` | Command palette (accounts, chats, actions) |
+|----------|--------|
+| `Ctrl/Cmd + K` | Command palette |
+| `Ctrl/Cmd + N` | New chat (same folder) |
+| `Ctrl/Cmd + F` | Search all chats |
+| `Ctrl/Cmd + Shift + F` | Find in this chat |
+| `Ctrl/Cmd + Shift + K` | Context inspector |
+| `Ctrl/Cmd + B` | Toggle sidebar |
 | `Ctrl/Cmd + /` | Keyboard shortcuts sheet |
-| `Ctrl/Cmd + N` | New chat |
-| `Ctrl/Cmd + F` | Search chats |
-| `Ctrl/Cmd + 1…9` | Switch to the Nth account |
-| `Enter` / `Shift + Enter` | Send message / new line (configurable in Settings) |
-| `Ctrl/Cmd + V` | Paste (also into the login code box) |
-| `Esc` | Close a dialog / the login window |
+| `Ctrl/Cmd + 1…9` | Switch to Nth account |
+| `Alt + ↑ / ↓` | Previous / next chat |
+| `Ctrl/Cmd + = / − / 0` | Zoom in / out / reset |
+| `↑ / ↓` (empty composer) | Recall previous prompts |
+| `Enter` | Send message |
+| `Shift + Enter` | New line |
+| `Esc` | Stop generation / close dialog |
+| `/compact` in composer | Compact this chat |
+
+---
+
+## How It Works
+
+Each account gets its own `~/.claude-accounts/<id>/` directory — the officially documented `CLAUDE_CONFIG_DIR` mechanism — so logins never collide.
+
+Chats run through the **official Claude Agent SDK** using your **subscription login**. Signing in runs `claude /login` once per account in a small terminal (OAuth needs an interactive session). After that: clean chat window.
+
+**When a usage limit hits:**
+1. Account stamped with cooldown (reset time parsed from the server response)
+2. If another account is free → transcript copied, session resumed with `--resume`
+3. Interrupted instruction **re-issued automatically** on the new account
+4. Work continues — you barely notice
+
+---
+
+## Making Your Quota Last
+
+Every turn re-sends the full context: conversation history + CLAUDE.md + all tool descriptions. Claude Multi gives you precise control:
+
+| Action | Where | Effect |
+|--------|--------|--------|
+| `/compact` in composer | Composer | Summarizes the chat, drops reasoning |
+| **Low effort** | Effort slider | Disables extended thinking entirely |
+| **Turn off Subagents** | Settings → Tokens | Single biggest token saver |
+| **Budget cap** | Settings → Tokens | Stops runaway agent loops |
+| **Context inspector** | `Ctrl + Shift + K` | Shows exactly what is costing you |
+| **Haiku for quick tasks** | Model picker | Fraction of Opus cost |
+
+---
+
+## Account Safety & Anthropic Terms
+
+Claude Multi is for **one person, their own accounts** — not account sharing, pooling, or reselling. Each account uses its normal subscription login via `CLAUDE_CONFIG_DIR` and stays within its own quota.
+
+Since February 2026, Anthropic's terms restrict using a Pro/Max subscription login in third-party tools (including the Agent SDK). This tool does that. Enforcement can happen without notice.
+
+**Honest summary:** use at your own risk. Zero risk = use Claude Code/claude.ai directly. Read [Anthropic's terms](https://www.anthropic.com/legal/consumer-terms) yourself before proceeding.
+
+---
+
+## Privacy
+
+Claude Multi is **100% local** — verify everything in the [source code](src/):
+
+- No telemetry, no analytics, no crash reporting, no update beacons
+- No outbound network requests from the app itself
+- Your conversations travel only between your local `claude` process and Anthropic
+- OAuth tokens are written by Claude Code locally — Claude Multi never reads or transmits them
+- Settings and chat history stay in Electron's local `userData` folder
+
+---
+
+## Build from Source
+
+```bash
+npm run dist          # current platform
+npm run dist:win      # Windows installer + portable .exe
+npm run dist:mac      # macOS .dmg
+npm run dist:linux    # Linux AppImage
+```
+
+Tag a release and GitHub Actions builds and uploads automatically:
+
+```bash
+git tag v1.X.0 && git push --follow-tags
+```
+
+---
 
 ## Tests
 
@@ -223,95 +280,50 @@ npm version minor && git push --follow-tags
 npm test
 ```
 
-The suite covers the pure logic — usage-limit detection, reset-time parsing, account selection/cooldown, and the persistent store — including thousands of fuzzed cases.
+Covers usage-limit detection, reset-time parsing, account selection, cooldown logic, and the store — including thousands of fuzzed inputs.
+
+---
 
 ## FAQ
 
-### How do I use multiple Claude accounts at once?
-Install Claude Multi, add each account, and sign in once per account. Claude Multi keeps every account in a single window and lets you switch between them with one click — each account stays fully isolated in its own config directory, so there's no logging in and out by hand.
+**Do I need an API key?**  
+No. Works with your Claude Pro / Max / Team subscription — same as Claude Code.
 
-### How do I avoid hitting the Claude Code usage limit?
-You can't raise a single account's limit, but if you have more than one Claude plan you can keep working by switching accounts. Claude Multi detects the moment an account hits its usage/session limit and automatically continues your conversation on the next available account, so you don't have to wait hours for a reset.
+**Is it free?**  
+Yes — 100% free and open source (MIT). No paid tier, no account, no ads, no monetization.
 
-### Can I run two (or three) Claude accounts on the same computer?
-Yes. Claude Multi is built for exactly this — run 2, 3, or more Claude accounts side by side, each isolated, and switch instantly. Your conversation carries over when you switch.
+**What platforms?**  
+Windows, macOS, and Linux.
 
-### Why is Claude Code burning through tokens so fast?
-Usually it's the context, not the prompts. Every turn re-sends the whole conversation, your `CLAUDE.md`, and a description of every tool Claude can use — so a long chat gets more expensive with each message, and connected MCP servers can add 10,000–20,000 tokens before you type anything. Claude Multi ships a **context inspector** (Ctrl/⌘ + Shift + K) that breaks the window down item by item with token counts, so you can see which of those it actually is.
+**Is it against Anthropic's terms?**  
+Not account-sharing. But Anthropic's Feb 2026 terms restrict subscription logins in third-party tools. Use at your own risk. See [Account Safety](#account-safety--anthropic-terms).
 
-### How do I reduce Claude Code token usage?
-The four that matter most, all built in: **compact** long chats so the history is summarized instead of re-sent; drop to **Low effort** for routine work, which turns off extended thinking entirely; switch off **tools you never use** (subagents especially) so their descriptions leave the prompt; and run routine edits on **Sonnet or Haiku** instead of Opus. See [Making your quota last](#making-your-quota-last-settings--tokens).
+**How many accounts can I add?**  
+Up to 20.
 
-### Can I stop Claude Code from running away and eating my quota?
-Yes — set a **budget cap** in Settings → Tokens. You can stop any single turn after *N* agent steps or *$X* of spend. An unattended agent loop is the most expensive thing that can happen on a subscription, and this bounds it.
+**Why is Claude burning through my tokens so fast?**  
+Usually the context, not your prompts. Open the **Context Inspector** (`Ctrl/Cmd + Shift + K`) — it shows exactly what is using your quota. See [Making Your Quota Last](#making-your-quota-last).
 
-### How do I know which of my accounts to use next?
-The activity dashboard tracks tokens and cost **per account since its last reset**, so you can start a new chat on whichever one you've leaned on least. You can also set Settings → Tokens → *When switching accounts, pick* to **the least-used account**, and Claude Multi will choose for you instead of rotating in list order.
+**Can it run while I sleep?**  
+Yes — the **Auto-loop** feature sends your prompt on all accounts in rotation, waits for resets, and repeats indefinitely.
 
-### Is this against Anthropic's terms? Is it a hack?
-It's not a hack, and it's not account sharing or reselling — it's one person using their **own** paid subscriptions, each isolated via `CLAUDE_CONFIG_DIR`. But be aware: since **Feb 2026** Anthropic's terms restrict using a subscription (Pro/Max) login in third-party tools, including the Agent SDK — which is how a tool like this works — with enforcement possible without notice. So this is genuinely **use-at-your-own-risk**, and we can't guarantee against enforcement. Read the full, honest breakdown in [Account safety & Anthropic's terms](#account-safety--anthropics-terms) before you rely on it.
+**Can I run multiple Claude accounts on the same computer?**  
+Yes — that is exactly what Claude Multi is for. Each account is fully isolated; switching is one click.
 
-### Do I need an API key?
-No. Claude Multi uses your normal Claude **subscription** login (Pro, Max, or Team) — the same one Claude Code uses. Nothing is billed per token.
-
-### Does it work with Claude Pro and Claude Max?
-Yes — any plan that works with Claude Code works here, including Pro, Max, Team, and Enterprise subscription logins.
-
-### Is Claude Multi free?
-Yes, 100% free and open source (MIT). No telemetry, no accounts on our side, and your logins never leave your machine.
-
-### What platforms are supported?
-Windows today (portable build). The app is built with Electron and the codebase targets macOS and Linux as well.
-
-## Free & open source
-
-Claude Multi is **completely free** and **open source (MIT)**. There is no paid tier, no account to create, no ads, and **no monetization of any kind** — the author earns nothing from it. Use it, fork it, and modify it however you like.
-
-## 🔒 Your data & privacy
-
-> **Summary:** Claude Multi is a **local-only** desktop application. It has **no servers, no developer-side accounts, and no way to see, collect, or receive your data.** Everything — your logins, your settings, and your entire chat history — is created and stored **on your own computer**. The author of Claude Multi never receives any of it.
-
-This statement describes exactly how the application handles data. Because the project is open source (MIT), every claim below can be independently verified by reading the [source code](src/).
-
-### 1. Credentials never reach us — or anyone
-When you sign in to an account, authentication is performed by **Claude Code itself** through its normal `/login` (OAuth) flow. The resulting login is written by Claude Code into that account's **own local configuration directory** on your device (`~/.claude-accounts/<id>/`). Claude Multi does **not** read, copy, export, transmit, or otherwise handle your authentication tokens. It merely points Claude Code at the correct per-account folder using the officially documented `CLAUDE_CONFIG_DIR` environment variable.
-
-### 2. All data is stored locally, on your machine only
-Everything the application persists lives on **your** computer, in your operating-system user profile — never on any remote server:
-
-| Data | Where it is stored | Contains credentials? |
-| --- | --- | --- |
-| Account logins (OAuth tokens) | `~/.claude-accounts/<id>/` (written by Claude Code) | Yes — **local only**, never touched by Claude Multi |
-| Account labels & app settings | Electron `userData` folder (`accounts.json`) | **No** — names/preferences only |
-| Chat history & transcripts | Electron `userData` folder | **No** — your conversations, kept on your device |
-
-Nothing in the above is transmitted to the author or to any third party controlled by this project.
-
-### 3. No telemetry, no analytics, no tracking
-The application contains **no analytics, no tracking, no usage reporting, and no "phone-home" of any kind.** It makes **no outbound network requests of its own** — there is no update-checker beacon, no crash reporter, no server it talks to. Your Claude conversations travel only between your **local `claude` process and Anthropic**, exactly as they would if you used Claude Code directly; Claude Multi does not sit in the middle of, log, or forward that traffic. (Clicking a "GitHub" link simply opens the page in **your own browser** — the app itself connects to nothing.)
-
-### 4. Single user, by design
-Claude Multi is built for **one person using their own accounts on their own machine.** It provides no facility to share, sync, upload, export credentials, or make an account available to anyone else. If another person installs the app, their logins are created and stored on **their** computer — never yours, and never the author's.
-
-### 5. Open source & auditable
-There is no hidden behaviour to take on trust. The [entire source is public](src/); the network and file-system behaviour described here can be confirmed line by line.
-
-> **Important — this is a privacy statement, not a compliance guarantee.** "Stored locally and private" is **not** the same as "permitted by Anthropic." How you access Anthropic's Services is governed by Anthropic's terms, and using a subscription login with automated tooling is a real consideration — please read [**Account safety & Anthropic's terms**](#account-safety--anthropics-terms) above and decide for yourself. This section only describes how *your data* is handled by *this app*.
-
-## Limitations
-
-- A usage limit is enforced server-side, so a session can't be handed off mid-request. The switch ends the current session and resumes on the next account — near-seamless, not literally invisible.
-- Signing in still uses a small terminal window for the one-time `/login` per account (OAuth can't run headless); day-to-day chatting is a normal chat window.
-- Limit detection reads the structured error the engine returns ([`src/chat.js`](src/chat.js)); wording can change over time but is easy to extend.
+---
 
 ## Author
 
-Made by **Chaman Raj** — [github.com/Chamanrajragu](https://github.com/Chamanrajragu)
+Built by **Chaman Raj** — [github.com/Chamanrajragu](https://github.com/Chamanrajragu)
 
-If this saved you from a mid-session usage wall, a ⭐ on the repo is appreciated!
+If Claude Multi saved you from a usage wall, a ⭐ on this repo helps others find it!
+
+---
 
 ## License
 
 [MIT](LICENSE) © 2026 Chaman Raj
 
 > Not affiliated with Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic.
+
+<!-- SEO keywords: Claude Multi · Claude Code GUI · Claude Code desktop app · multiple Claude accounts · Claude usage limit workaround · Claude rate limit fix · Claude Code multi-account · auto-switch Claude accounts · Claude Pro multi-account · Claude Max multiple accounts · Claude Code token saver · reduce Claude token usage · Claude context window inspector · Anthropic Claude desktop app · Claude Code Windows · Claude Code Mac · Claude 5-hour reset · Claude usage limit bypass · Claude account switcher · open source Claude client · claudemulti · claude-multi · Claude Code interface · Claude parallel chats · Claude Code electron app -->
