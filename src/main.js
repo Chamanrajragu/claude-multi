@@ -492,9 +492,10 @@ function onChatEvent(convoId, session, accountId, ev) {
         const f2 = findConvo(convoId);
         const accId = f2 && f2.convo.lastAccount;
         if (accId) {
-          toRenderer('chat:event', { convoId, type: 'info', text: '↻ Session expired — starting a fresh session. Your transcript is intact.' });
+          toRenderer('chat:event', { convoId, type: 'info', text: '↻ Session expired — restarting automatically. Your transcript is intact.' });
+          toRenderer('app:toast', { text: 'Session expired — restarted automatically', kind: 'ok' });
           startSession(convoId, accId, '');
-          return; // don't pushState twice or forward the error to the renderer
+          return;
         }
       }
       notifyAutoLoopWaiters(convoId);
@@ -678,6 +679,7 @@ function startLoginPoll(accountId) {
   const acc = store.byId(accountId);
   if (!acc) return;
   loginPoll = setInterval(() => {
+    store.invalidateInfoCache(accountId); // force fresh read from disk
     const info = readAccountInfo(acc.configDir);
     if (info.loggedIn) {
       stopLoginPoll();
@@ -1004,6 +1006,7 @@ function notifyAutoLoopWaiters(convoId) {
 // ---- IPC ------------------------------------------------------------------
 function registerIpc() {
   ipcMain.handle('app:getState', () => statePayload());
+  ipcMain.handle('app:recentProjects', () => store.get('recentProjects') || []);
   ipcMain.handle('accounts:add', (_e, name) => { store.add(name); pushState(); return statePayload(); });
   ipcMain.handle('accounts:remove', (_e, id) => {
     // Stop any running chats that were using the account being removed.
@@ -1461,8 +1464,17 @@ function buildTrayMenu() {
       click: () => { if (win) { win.show(); win.focus(); } if (hasCurrent && a.loggedIn) useAccountForChat(a.id); },
     }))
     : [{ label: 'No accounts yet', enabled: false }];
+  const loopItems = autoLoop.active
+    ? [
+      { label: `🔄 Auto-loop: Round ${autoLoop.roundNum + 1} · ${autoLoop.sendCount} sends`, enabled: false },
+      { label: autoLoop.waitReason || autoLoop.status, enabled: false },
+      { label: 'Stop auto-loop', click: () => { autoLoopStop(); if (win) { win.show(); win.focus(); } } },
+    ]
+    : [{ label: '🔄 Auto-loop: off', enabled: false }];
   return Menu.buildFromTemplate([
     { label: win && win.isVisible() ? 'Hide window' : 'Show window', click: toggleWindow },
+    { type: 'separator' },
+    ...loopItems,
     { type: 'separator' },
     { label: 'Use account', submenu: accItems },
     { type: 'separator' },

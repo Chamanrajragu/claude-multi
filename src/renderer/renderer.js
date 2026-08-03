@@ -40,6 +40,7 @@ let contentMatches = {}; // convoId -> snippet (from full-text search across cha
 let draggingConvo = false;
 function renderConvos() {
   if (draggingConvo) return; // don't rebuild the list mid-drag
+  convoDnDReady = false; // reset so setupConvoDnD re-attaches after innerHTML wipe
   const list = $('convoList');
   list.innerHTML = '';
   if (!state.conversations.length) { $('convoSearch').classList.add('hidden'); const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'No chats yet. Click “New chat” and pick a folder.'; list.appendChild(d); return; }
@@ -494,12 +495,18 @@ function highlightCode(scope) {
     code.innerHTML = out;
   });
 }
-// Add a copy button to every code block inside a scope (idempotent).
+// Add a copy button + language label to every code block inside a scope (idempotent).
 function addCodeCopy(scope) {
   scope.querySelectorAll('pre').forEach((pre) => {
     if (pre.querySelector('.code-copy')) return;
+    const code = pre.querySelector('code');
+    const lang = code && (code.className.match(/language-([\w-]+)/) || [])[1];
+    if (lang) {
+      const lbl = document.createElement('span'); lbl.className = 'code-lang'; lbl.textContent = lang;
+      pre.appendChild(lbl);
+    }
     const b = document.createElement('button'); b.className = 'code-copy'; b.textContent = 'Copy';
-    b.onclick = (e) => { e.stopPropagation(); const code = pre.querySelector('code'); copyText((code || pre).innerText, b); };
+    b.onclick = (e) => { e.stopPropagation(); copyText((code || pre).innerText, b); };
     pre.appendChild(b);
   });
 }
@@ -645,6 +652,13 @@ function flashProject() { const b = $('projectBtn'); b.style.color = 'var(--err)
 async function sendMessage() {
   const inp = $('input'); const text = inp.value.trim();
   if (!text && !attachments.length) return;
+  // /compact slash command — compact directly from the composer
+  if (text === '/compact' && !attachments.length) {
+    inp.value = ''; autoGrow(); updateComposer();
+    const r = await cc.compact();
+    toast(r.ok ? 'Compacting…' : (r.error || 'Could not compact'), r.ok ? 'ok' : 'err');
+    return;
+  }
   if (!state.running && !state.activeAccountId) { toast('Choose an account to start this chat', 'err'); return; }
   addUserMessage(text + (attachments.length ? '\n' + attachments.map((p) => '📎 ' + baseName(p)).join('\n') : ''));
   const atts = attachments.slice(); attachments = []; renderAttachments();
@@ -658,7 +672,27 @@ async function regenerate() {
   if (res && !res.ok) { toast(res.error || 'Could not regenerate', 'err'); return; }
   scrollDown(true);
 }
-function autoGrow() { const i = $('input'); i.style.height = 'auto'; i.style.height = Math.min(200, i.scrollHeight) + 'px'; }
+function autoGrow() {
+  const i = $('input');
+  i.style.height = 'auto';
+  i.style.height = Math.min(200, i.scrollHeight) + 'px';
+  // Character counter — show once user has typed something
+  let counter = $('inputCounter');
+  if (!counter) {
+    counter = document.createElement('div');
+    counter.id = 'inputCounter';
+    counter.className = 'input-counter hidden';
+    i.parentNode.appendChild(counter);
+  }
+  const len = i.value.length;
+  if (len > 200) {
+    counter.textContent = len >= 1000 ? (len / 1000).toFixed(1) + 'k chars' : len + ' chars';
+    counter.classList.remove('hidden');
+    counter.classList.toggle('warn', len > 8000);
+  } else {
+    counter.classList.add('hidden');
+  }
+}
 function renderAttachments() {
   const row = $('attachRow'); row.innerHTML = ''; row.classList.toggle('hidden', !attachments.length);
   attachments.forEach((p, i) => { const c = document.createElement('div'); c.className = 'attach-chip'; c.innerHTML = `📎 ${escapeHtml(baseName(p))} <span class="rm">✕</span>`; c.querySelector('.rm').onclick = () => { attachments.splice(i, 1); renderAttachments(); }; row.appendChild(c); });
@@ -887,14 +921,37 @@ $('tplBtn').onclick = (e) => { e.stopPropagation(); openTemplateMenu(e.currentTa
   btn.onclick = () => { if (listening) stop(); else start(); };
 })();
 async function newChat(chooseFolder) {
-  // Reuse the current chat's folder by default (no dialog); pass chooseFolder
-  // to explicitly pick a different one.
   const folder = chooseFolder ? '' : (state.projectDir || '');
   const r = await cc.newChat(folder);
   if (r && r.canceled) return;
   if (r && !r.ok) toast(r.error || 'Could not start', 'err');
 }
-$('newChatBtn').onclick = (e) => newChat(e && (e.altKey || e.shiftKey)); // Alt/Shift+click = pick a folder
+async function openRecentProjects(anchor) {
+  closeMenus();
+  const recent = await cc.recentProjects().catch(() => []);
+  if (!recent.length) { newChat(true); return; }
+  const m = document.createElement('div'); m.className = 'menu ctx';
+  const lbl = document.createElement('div'); lbl.className = 'm-label'; lbl.textContent = 'Recent folders'; m.appendChild(lbl);
+  recent.forEach((dir) => {
+    const b = document.createElement('button');
+    b.innerHTML = `<span class="rp-name">${escapeHtml(baseName(dir))}</span><span class="rp-path">${escapeHtml(dir)}</span>`;
+    b.className = 'rp-item';
+    b.onclick = () => { closeMenus(); cc.newChat(dir).then((r) => { if (r && !r.ok && !r.canceled) toast(r.error || 'Could not start', 'err'); }); };
+    m.appendChild(b);
+  });
+  const sep = document.createElement('div'); sep.className = 'm-sep'; m.appendChild(sep);
+  const browse = document.createElement('button'); browse.textContent = '📁 Browse for folder…';
+  browse.onclick = () => { closeMenus(); newChat(true); };
+  m.appendChild(browse);
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect();
+  m.style.left = r.left + 'px'; m.style.top = (r.bottom + 4) + 'px';
+}
+$('newChatBtn').onclick = (e) => {
+  if (e && (e.altKey || e.shiftKey)) openRecentProjects(e.currentTarget);
+  else newChat(false);
+};
+$('newChatBtn').addEventListener('contextmenu', (e) => { e.preventDefault(); openRecentProjects(e.currentTarget); });
 async function toggleSidebar() { const v = !(state.settings || {}).sidebarCollapsed; state.settings = await cc.setSettings({ sidebarCollapsed: v }); applyAppearance(state.settings); }
 $('sidebarToggle').onclick = toggleSidebar;
 $('projectBtn').onclick = async () => {
@@ -1788,6 +1845,7 @@ $('alStop').onclick = async () => {
   applyAlStatus({ active: false, sendCount: 0, roundNum: 0, status: 'idle', accounts: [], prompt: alStatus ? alStatus.prompt : '', folder: alFolder });
 };
 cc.onAutoLoopStatus((s) => { applyAlStatus(s); });
+cc.onToast((t) => { if (t && t.text) toast(t.text, t.kind || 'ok'); });
 
 /* ---------------- toast ---------------- */
 let toastTimer = null;

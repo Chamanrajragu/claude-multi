@@ -152,10 +152,23 @@ class Store {
   // ---- accounts ----
   list() {
     // Enrich each account with live login info read from its config dir.
-    return this.state.accounts.map((a) => ({
-      ...a,
-      ...readAccountInfo(a.configDir),
-    }));
+    // Cache the fs reads for 2 seconds — list() is called on every state push
+    // and readAccountInfo() does a file read per account, which adds up.
+    const now = Date.now();
+    if (!this._infoCache) this._infoCache = new Map();
+    return this.state.accounts.map((a) => {
+      let info = this._infoCache.get(a.id);
+      if (!info || now - info._ts > 2000) {
+        info = { ...readAccountInfo(a.configDir), _ts: now };
+        this._infoCache.set(a.id, info);
+      }
+      return { ...a, ...info };
+    });
+  }
+
+  // Invalidate the login info cache for one account (call after login/logout).
+  invalidateInfoCache(id) {
+    if (this._infoCache) this._infoCache.delete(id);
   }
 
   add(name) {

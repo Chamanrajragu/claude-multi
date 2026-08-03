@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('cc', {
   setZoom: (z) => { try { webFrame.setZoomLevel(Math.max(-3, Math.min(5, z || 0))); } catch { /* noop */ } },
   searchAll: (q) => ipcRenderer.invoke('chat:searchAll', q),
   listFiles: () => ipcRenderer.invoke('chat:listFiles'),
+  recentProjects: () => ipcRenderer.invoke('app:recentProjects'),
 
   // ---- events (main -> renderer) ----
   onChat: (cb) => ipcRenderer.on('chat:event', (_e, ev) => cb(ev)),
@@ -87,4 +88,5 @@ contextBridge.exposeInMainWorld('cc', {
   autoLoopStatus: () => ipcRenderer.invoke('autoloop:status'),
   autoLoopPickFolder: () => ipcRenderer.invoke('autoloop:pickFolder'),
   onAutoLoopStatus: (cb) => ipcRenderer.on('autoloop:status', (_e, s) => cb(s)),
+  onToast: (cb) => ipcRenderer.on('app:toast', (_e, t) => cb(t)),
 });

@@ -403,6 +403,7 @@ class ChatSession {
     // The SDK throws on an error result; if we already surfaced it via the
     // result event, don't double-report.
     if (this._sawError) return;
+    this._sawError = true; // prevent any subsequent exit event from re-reporting
     // Strip the SDK's wrapper prefix.
     const clean = text.replace(/^Claude Code returned an error result:\s*/i, '');
     // A stale/expired session ID produces "No conversation found with session ID".
