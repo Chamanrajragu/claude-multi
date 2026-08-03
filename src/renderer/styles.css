@@ -382,22 +382,53 @@ button { font-family: inherit; color: inherit; }
 .prompt-input { width: 100%; padding: 10px 13px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 14px; outline: none; }
 .prompt-input:focus { border-color: var(--accent); }
 
-/* =============== AUTO-LOOP MODAL =============== */
-.autoloop-modal { width: 520px; max-width: 92vw; }
+/* =============== AUTO-LOOP MODAL v2 =============== */
+.autoloop-modal { width: 560px; max-width: 94vw; }
 .al-section { margin-bottom: 18px; }
 .al-prompt { width: 100%; box-sizing: border-box; resize: vertical; min-height: 90px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; font-family: inherit; outline: none; margin-top: 6px; }
 .al-prompt:focus { border-color: var(--accent); }
+/* Running badge */
+.al-running-badge { display: inline-flex; align-items: center; gap: 5px; background: var(--ok); color: #fff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; margin-bottom: 10px; }
+.al-running-badge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #fff; opacity: .9; }
+/* Stats bar */
+.al-stats-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.al-stat { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 10px; padding: 8px 14px; min-width: 90px; }
+.al-stat-wide { min-width: 140px; flex: 1; }
+.al-stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 3px; }
+.al-stat-value { font-size: 18px; font-weight: 700; color: var(--text); }
+/* Account table */
+.al-acc-table { border: 1px solid var(--border-soft); border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
+.al-acc-table-head, .al-tr { display: grid; grid-template-columns: 1fr auto auto; }
+.al-acc-table-head { background: var(--panel); padding: 6px 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); gap: 8px; }
+.al-tr { padding: 7px 12px; gap: 8px; align-items: center; border-top: 1px solid var(--border-soft); font-size: 12.5px; }
+.al-tr.cur { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.al-tr.done { opacity: .65; }
+.al-td { display: flex; align-items: center; gap: 6px; }
+.al-round-mark { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.al-tr.cur .al-round-mark { color: var(--accent); font-weight: 700; }
+.al-cd { font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 70px; text-align: right; justify-content: flex-end; }
+/* Avatar small */
+.al-av-sm { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+/* Setup form account list */
 .al-acc-list { display: flex; flex-direction: column; gap: 6px; }
 .al-acc-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--border-soft); border-radius: 8px; cursor: pointer; }
 .al-acc-row:hover { background: var(--hover); }
 .al-acc-row input[type=checkbox] { flex: none; width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
 .al-av { flex: none; width: 28px; height: 28px; font-size: 12px; }
-.al-acc-name { font-weight: 600; font-size: 13px; flex: 1; }
+.al-acc-meta { display: flex; flex-direction: column; gap: 1px; flex: 1; }
+.al-acc-name { font-weight: 600; font-size: 13px; }
 .al-acc-sub { font-size: 11px; color: var(--muted); }
-.al-status { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--hover); border: 1px solid var(--border-soft); border-radius: 10px; margin-bottom: 14px; font-size: 13px; }
-.al-status #alStatusIcon { font-size: 18px; }
-.al-status #alStatusText { flex: 1; }
-.al-count { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent); color: #fff; }
+/* Folder row */
+.al-folder-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--border-soft); border-radius: 8px; margin-top: 6px; }
+.al-folder-label { flex: 1; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.al-folder-btn { flex: none; padding: 5px 12px; border-radius: 7px; border: 1px solid var(--border); background: var(--hover); color: var(--text); font-size: 12px; cursor: pointer; font-family: inherit; }
+.al-folder-btn:hover { background: var(--panel); }
+/* Wait line */
+.al-wait-line { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 10px; margin-bottom: 14px; font-size: 13px; }
+.al-wait-icon { font-size: 18px; }
+.al-wait-text { flex: 1; color: var(--text); }
+.al-countdown { font-weight: 700; color: var(--accent); font-size: 14px; min-width: 70px; text-align: right; }
+/* Top-bar button active */
 #autoloopBtn.al-active { color: var(--accent); position: relative; }
 #autoloopBtn.al-active::after { content: ''; position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 

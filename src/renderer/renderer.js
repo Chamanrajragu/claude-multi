@@ -1527,78 +1527,180 @@ window.addEventListener('keydown', (e) => {
 })();
 
 /* ---------------- auto-loop ---------------- */
-let alLoopActive = false;
+let alStatus = null;           // last known status from main
+let alFolder = '';             // folder picked in the UI
+let alCountdownTimer = null;   // interval for live countdown
+
+function fmtCountdownMs(ms) {
+  ms = Math.max(0, ms);
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
 
 function openAutoLoop() {
-  renderAlAccounts();
-  // Pre-fill prompt from the current composer text or leave blank.
-  const inp = $('input');
-  if (inp && inp.value.trim() && !$('alPromptInput').value.trim()) {
-    $('alPromptInput').value = inp.value.trim();
-  }
   $('autoloopModal').classList.remove('hidden');
   cc.autoLoopStatus().then(applyAlStatus).catch(() => {});
+  // Pre-fill folder from current chat if nothing chosen yet
+  if (!alFolder && state.projectDir) { alFolder = state.projectDir; renderAlFolder(); }
+  renderAlAccounts();
+  startAlCountdown();
 }
+
+function renderAlFolder() {
+  const lbl = $('alFolderLabel'); if (!lbl) return;
+  lbl.textContent = alFolder ? alFolder : 'No folder chosen';
+  lbl.title = alFolder || '';
+}
+
 function renderAlAccounts() {
   const list = $('alAccountList'); if (!list) return;
+  // Don't rebuild while running (checkboxes would reset)
+  if (alStatus && alStatus.active) return;
   list.innerHTML = '';
   const loggedIn = (state.accounts || []).filter((a) => a.loggedIn);
-  if (!loggedIn.length) { list.innerHTML = '<div class="s-sub">No signed-in accounts. Log in first.</div>'; return; }
+  if (!loggedIn.length) { list.innerHTML = '<div class="s-sub" style="padding:8px 0">No signed-in accounts. Log in first.</div>'; return; }
   loggedIn.forEach((a) => {
     const lbl = document.createElement('label'); lbl.className = 'al-acc-row';
     const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = a.id; cb.checked = true;
     const av = document.createElement('span'); av.className = 'ac-avatar al-av'; av.textContent = (a.name || '?').charAt(0).toUpperCase();
+    const meta = document.createElement('span'); meta.className = 'al-acc-meta';
     const nm = document.createElement('span'); nm.className = 'al-acc-name'; nm.textContent = a.name;
     const em = document.createElement('span'); em.className = 'al-acc-sub'; em.textContent = a.email || '';
-    lbl.appendChild(cb); lbl.appendChild(av); lbl.appendChild(nm); lbl.appendChild(em);
+    meta.appendChild(nm); meta.appendChild(em);
+    lbl.appendChild(cb); lbl.appendChild(av); lbl.appendChild(meta);
     list.appendChild(lbl);
   });
 }
+
+function renderAlTable(s) {
+  const body = $('alAccTableBody'); if (!body) return;
+  if (!s || !s.accounts || !s.accounts.length) { body.innerHTML = ''; return; }
+  const now = Date.now();
+  body.innerHTML = s.accounts.map((a) => {
+    const isCur = a.isCurrent;
+    const used = a.usedThisRound;
+    const cd = a.cooldownUntil && a.cooldownUntil > now ? fmtCountdownMs(a.cooldownUntil - now) : '—';
+    const roundMark = isCur ? '⚡ running' : (used ? '✓ done' : '—');
+    const cls = isCur ? 'al-tr cur' : (used ? 'al-tr done' : 'al-tr');
+    return `<div class="${cls}">
+      <span class="al-td"><span class="al-av-sm">${escapeHtml((a.name || '?').charAt(0).toUpperCase())}</span>${escapeHtml(a.name)}</span>
+      <span class="al-td al-round-mark">${roundMark}</span>
+      <span class="al-td al-cd">${escapeHtml(cd)}</span>
+    </div>`;
+  }).join('');
+}
+
 function applyAlStatus(s) {
   if (!s) return;
-  alLoopActive = s.active;
-  const statusEl = $('alStatus'); const startBtn = $('alStart'); const stopBtn = $('alStop');
-  if (!statusEl || !startBtn || !stopBtn) return;
+  alStatus = s;
+  const setup = $('alSetup');
+  const statsBar = $('alStatsBar');
+  const accTable = $('alAccTable');
+  const startBtn = $('alStart');
+  const stopBtn = $('alStop');
+  const badge = $('alRunningBadge');
+  const waitLine = $('alWaitLine');
+  const topBtn = $('autoloopBtn');
+
   if (s.active) {
-    statusEl.classList.remove('hidden');
-    $('alStatusIcon').textContent = s.status === 'running' ? '⚡' : '⏳';
-    const waitInfo = s.waitReason ? ` — ${s.waitReason}` : (s.nextAt > Date.now() ? ` — next in ${Math.round((s.nextAt - Date.now()) / 1000)}s` : '');
-    $('alStatusText').textContent = s.status === 'running' ? 'Sending prompt…' : ('Waiting' + waitInfo);
-    $('alLoopCount').textContent = s.loopCount > 0 ? `Loop #${s.loopCount}` : '';
-    startBtn.classList.add('hidden');
-    stopBtn.classList.remove('hidden');
-    // Also show active state on the topbar button.
-    const btn = $('autoloopBtn'); if (btn) btn.classList.add('al-active');
-    $('alPromptInput').disabled = true;
-    document.querySelectorAll('#alAccountList input[type=checkbox]').forEach((cb) => { cb.disabled = true; });
+    // Show live view
+    if (setup) setup.classList.add('hidden');
+    if (statsBar) statsBar.classList.remove('hidden');
+    if (accTable) accTable.classList.remove('hidden');
+    if (badge) badge.classList.remove('hidden');
+    if (startBtn) startBtn.classList.add('hidden');
+    if (stopBtn) stopBtn.classList.remove('hidden');
+    if (topBtn) topBtn.classList.add('al-active');
+
+    // Stats
+    const rEl = $('alStatRound'); if (rEl) rEl.textContent = s.roundNum;
+    const sEl = $('alStatSends'); if (sEl) sEl.textContent = s.sendCount;
+    const stEl = $('alStatStatus');
+    if (stEl) {
+      if (s.status === 'sending' || s.status === 'waiting_turn') {
+        const cur = s.accounts && s.accounts.find((a) => a.isCurrent);
+        stEl.textContent = cur ? `⚡ ${cur.name}` : 'Starting…';
+      } else if (s.status === 'waiting_reset') {
+        stEl.textContent = '⏳ Waiting reset';
+      } else {
+        stEl.textContent = s.status;
+      }
+    }
+
+    // Account table
+    renderAlTable(s);
+
+    // Wait line
+    if (s.waitReason && s.status === 'waiting_reset') {
+      if (waitLine) waitLine.classList.remove('hidden');
+      const wt = $('alWaitText'); if (wt) wt.textContent = s.waitReason;
+    } else {
+      if (waitLine) waitLine.classList.add('hidden');
+    }
+
   } else {
-    statusEl.classList.add('hidden');
-    startBtn.classList.remove('hidden');
-    stopBtn.classList.add('hidden');
-    const btn = $('autoloopBtn'); if (btn) btn.classList.remove('al-active');
-    $('alPromptInput').disabled = false;
-    document.querySelectorAll('#alAccountList input[type=checkbox]').forEach((cb) => { cb.disabled = false; });
+    // Show setup form
+    if (setup) setup.classList.remove('hidden');
+    if (statsBar) statsBar.classList.add('hidden');
+    if (accTable) accTable.classList.add('hidden');
+    if (badge) badge.classList.add('hidden');
+    if (startBtn) startBtn.classList.remove('hidden');
+    if (stopBtn) stopBtn.classList.add('hidden');
+    if (waitLine) waitLine.classList.add('hidden');
+    if (topBtn) topBtn.classList.remove('al-active');
+    // Restore saved prompt if any
+    if (s.prompt && $('alPromptInput') && !$('alPromptInput').value) $('alPromptInput').value = s.prompt;
+    if (s.folder && !alFolder) { alFolder = s.folder; renderAlFolder(); }
   }
 }
+
+function startAlCountdown() {
+  if (alCountdownTimer) return;
+  alCountdownTimer = setInterval(() => {
+    if (!alStatus || !alStatus.active) return;
+    // Update countdown in the wait line
+    if (alStatus.nextAt > 0) {
+      const cd = $('alCountdown');
+      if (cd) cd.textContent = fmtCountdownMs(alStatus.nextAt - Date.now());
+    }
+    // Also refresh the account table countdowns
+    renderAlTable(alStatus);
+    // Refresh status stats
+    const stEl = $('alStatStatus');
+    if (stEl && alStatus.status === 'waiting_reset' && alStatus.nextAt) {
+      stEl.textContent = '⏳ ' + fmtCountdownMs(alStatus.nextAt - Date.now());
+    }
+  }, 1000);
+}
+
 $('autoloopBtn').onclick = () => openAutoLoop();
 $('autoloopClose').onclick = () => $('autoloopModal').classList.add('hidden');
 $('autoloopModal').addEventListener('click', (e) => { if (e.target === $('autoloopModal')) $('autoloopModal').classList.add('hidden'); });
+$('alFolderBtn').onclick = async () => {
+  const f = await cc.autoLoopPickFolder();
+  if (f) { alFolder = f; renderAlFolder(); }
+};
 $('alStart').onclick = async () => {
   const prompt = ($('alPromptInput').value || '').trim();
-  if (!prompt) { toast('Enter a prompt first', 'err'); return; }
+  if (!prompt) { toast('Enter a prompt first', 'err'); $('alPromptInput').focus(); return; }
+  if (!alFolder) { toast('Choose a project folder first', 'err'); return; }
   const checkedIds = Array.from($('alAccountList').querySelectorAll('input[type=checkbox]:checked')).map((cb) => cb.value);
   if (!checkedIds.length) { toast('Select at least one account', 'err'); return; }
-  const r = await cc.autoLoopStart({ prompt, accountIds: checkedIds, convoId: state.currentConvoId });
+  const r = await cc.autoLoopStart({ prompt, accountIds: checkedIds, folder: alFolder });
   if (r && !r.ok) { toast(r.error || 'Could not start loop', 'err'); return; }
-  toast('Auto-loop started — Claude will keep working!', 'ok');
+  toast('🔄 Auto-loop running — Claude will work 24/7!', 'ok');
   cc.autoLoopStatus().then(applyAlStatus).catch(() => {});
 };
 $('alStop').onclick = async () => {
   await cc.autoLoopStop();
   toast('Auto-loop stopped', 'ok');
-  applyAlStatus({ active: false, loopCount: 0, status: 'idle' });
+  applyAlStatus({ active: false, sendCount: 0, roundNum: 0, status: 'idle', accounts: [], prompt: alStatus ? alStatus.prompt : '', folder: alFolder });
 };
-cc.onAutoLoopStatus((s) => applyAlStatus(s));
+cc.onAutoLoopStatus((s) => { applyAlStatus(s); });
 
 /* ---------------- toast ---------------- */
 let toastTimer = null;

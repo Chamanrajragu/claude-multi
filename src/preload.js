@@ -84,5 +84,6 @@ contextBridge.exposeInMainWorld('cc', {
   autoLoopStart: (opts) => ipcRenderer.invoke('autoloop:start', opts),
   autoLoopStop: () => ipcRenderer.invoke('autoloop:stop'),
   autoLoopStatus: () => ipcRenderer.invoke('autoloop:status'),
+  autoLoopPickFolder: () => ipcRenderer.invoke('autoloop:pickFolder'),
   onAutoLoopStatus: (cb) => ipcRenderer.on('autoloop:status', (_e, s) => cb(s)),
 });

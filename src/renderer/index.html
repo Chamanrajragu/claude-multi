@@ -299,27 +299,55 @@
   <!-- ============ AUTO-LOOP MODAL ============ -->
   <div id="autoloopModal" class="overlay hidden">
     <div class="modal autoloop-modal">
-      <div class="modal-head"><h2>🔄 Auto-Loop</h2><button id="autoloopClose" class="x-btn">✕</button></div>
-      <p class="s-sub" style="margin:0 0 14px">Automatically re-sends your prompt every time an account becomes available after its 5-hour reset. Claude will keep working on your task without you having to do anything.</p>
+      <div class="modal-head">
+        <h2>🔄 Auto-Loop <span id="alRunningBadge" class="al-running-badge hidden">RUNNING</span></h2>
+        <button id="autoloopClose" class="x-btn">✕</button>
+      </div>
+      <p class="s-sub" style="margin:0 0 16px">Runs your prompt on every account, back-to-back, then waits for the 5-hour reset and starts again — automatically, forever, even while you sleep. Claude never sits idle.</p>
 
-      <div class="al-section">
-        <label class="s-title" for="alPromptInput">Your prompt</label>
-        <textarea id="alPromptInput" class="al-prompt" rows="4" placeholder="Describe the task you want Claude to keep working on…"></textarea>
+      <!-- Live stats bar (visible only when running) -->
+      <div id="alStatsBar" class="al-stats-bar hidden">
+        <div class="al-stat"><div class="al-stat-n" id="alStatRound">0</div><div class="al-stat-l">rounds</div></div>
+        <div class="al-stat"><div class="al-stat-n" id="alStatSends">0</div><div class="al-stat-l">total sends</div></div>
+        <div class="al-stat al-stat-wide"><div class="al-stat-n" id="alStatStatus">—</div><div class="al-stat-l">status</div></div>
       </div>
 
-      <div class="al-section">
-        <div class="s-title">Accounts to use</div>
-        <div class="s-sub" style="margin-bottom:8px">Only signed-in accounts are shown. All selected accounts will be used in rotation.</div>
-        <div id="alAccountList" class="al-acc-list"></div>
+      <!-- Account live table (always visible when running) -->
+      <div id="alAccTable" class="al-acc-table hidden">
+        <div class="al-acc-table-head">
+          <span>Account</span><span>This round</span><span>Resets in</span>
+        </div>
+        <div id="alAccTableBody"></div>
       </div>
 
-      <div id="alStatus" class="al-status hidden">
-        <span id="alStatusIcon">⏳</span>
-        <span id="alStatusText">Waiting…</span>
-        <span id="alLoopCount" class="al-count"></span>
+      <!-- Setup form (hidden when running) -->
+      <div id="alSetup">
+        <div class="al-section">
+          <label class="s-title" for="alPromptInput">Your prompt <span class="s-sub">(Claude will receive this at the start of every turn)</span></label>
+          <textarea id="alPromptInput" class="al-prompt" rows="5" placeholder="Example: Continue building the website. Add the next feature on the list. Fix any bugs you find. Keep the code clean and commit your changes."></textarea>
+        </div>
+
+        <div class="al-section">
+          <div class="s-title">Project folder <span class="s-sub">(a new chat is created here for every account × round)</span></div>
+          <div class="al-folder-row">
+            <span id="alFolderLabel" class="al-folder-label">No folder chosen</span>
+            <button id="alFolderBtn" class="btn-ghost al-folder-btn">📁 Choose folder…</button>
+          </div>
+        </div>
+
+        <div class="al-section">
+          <div class="s-title">Accounts to use <span class="s-sub">(all selected accounts run each round)</span></div>
+          <div id="alAccountList" class="al-acc-list"></div>
+        </div>
       </div>
 
-      <div class="modal-actions">
+      <!-- Wait reason line -->
+      <div id="alWaitLine" class="al-wait-line hidden">
+        <span id="alWaitIcon">⏳</span> <span id="alWaitText"></span>
+        <span id="alCountdown" class="al-countdown"></span>
+      </div>
+
+      <div class="modal-actions" style="margin-top:16px">
         <button id="alStop" class="btn-ghost hidden">⏹ Stop loop</button>
         <button id="alStart" class="btn-primary">▶ Start loop</button>
       </div>

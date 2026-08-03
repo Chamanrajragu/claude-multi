@@ -711,68 +711,125 @@ function startLogin(accountId) {
 }
 function stopLogin() { sendToHost({ t: 'kill' }); stopLoginPoll(); loginAccountId = null; return { ok: true }; }
 
-// ---- auto-loop (scheduled prompt that maximizes account utilization) ------
-// One loop runs at a time. It picks the least-recently-used / most-available
-// account, sends the saved prompt, waits for the turn to complete, then repeats.
-// If every account is on cooldown it sleeps until the soonest reset.
+// ---- auto-loop (zero-waste Claude usage across all accounts) --------------
+//
+// Goal: fully utilise every 5-hour usage window on every account, forever,
+// without the user needing to be present.
+//
+// How it works:
+//   Round = one pass through all selected accounts.
+//   Each account gets its OWN fresh chat per round so context never bloats.
+//   After every account in the round has either finished its turn OR hit its
+//   limit, we wait for the soonest reset and start a new round.
+//   This repeats indefinitely until the user stops it.
+//
+// State machine per tick:
+//   idle   → (start) → pick_account → send → wait_turn
+//   wait_turn → (turn done) → pick_account  (next account in round)
+//              → (all accounts exhausted) → wait_reset → pick_account (new round)
+//
 const autoLoop = {
   active: false,
   prompt: '',
-  accountIds: [],      // subset of accounts the user chose, or [] = all
-  convoId: '',         // which chat to run in
-  loopCount: 0,
-  nextAt: 0,           // epoch ms when the next send is planned (0 = now)
-  timer: null,
-  status: 'idle',      // 'idle' | 'running' | 'waiting'
+  accountIds: [],        // IDs of accounts chosen by user
+  // Per-round tracking: which accounts have already run this round
+  roundNum: 0,           // how many full rounds completed
+  sendCount: 0,          // total sends ever
+  usedThisRound: new Set(), // accountIds that have already sent this round
+  currentAccountId: '',  // account currently running
+  currentConvoId: '',    // convoId currently in use (one per account per round)
+  // UI state
+  status: 'idle',        // 'idle' | 'sending' | 'waiting_turn' | 'waiting_reset'
   waitReason: '',
+  nextAt: 0,             // epoch ms of next wake (for countdown display)
+  timer: null,
+  // Saved settings (persisted in store so they survive app restarts)
+  folder: '',            // project folder for new chats
 };
 
 function autoLoopStatus() {
+  const allAccounts = store.list();
+  const eligible = allAccounts.filter((a) => a.loggedIn && autoLoop.accountIds.includes(a.id));
+  const now = Date.now();
   return {
     active: autoLoop.active,
-    loopCount: autoLoop.loopCount,
     status: autoLoop.status,
-    nextAt: autoLoop.nextAt,
     waitReason: autoLoop.waitReason,
+    nextAt: autoLoop.nextAt,
+    roundNum: autoLoop.roundNum,
+    sendCount: autoLoop.sendCount,
+    currentAccountId: autoLoop.currentAccountId,
     prompt: autoLoop.prompt,
     accountIds: autoLoop.accountIds,
-    convoId: autoLoop.convoId,
+    folder: autoLoop.folder,
+    // Rich per-account status so the UI can draw a live table
+    accounts: eligible.map((a) => ({
+      id: a.id,
+      name: a.name,
+      email: a.email || '',
+      usedThisRound: autoLoop.usedThisRound.has(a.id),
+      isCurrent: a.id === autoLoop.currentAccountId,
+      cooldownUntil: a.cooldownUntil || 0,
+      available: !a.cooldownUntil || a.cooldownUntil <= now,
+    })),
   };
 }
 
+function _alBroadcast() { toRenderer('autoloop:status', autoLoopStatus()); }
+
 function autoLoopStop() {
   autoLoop.active = false;
+  autoLoop.currentAccountId = '';
+  autoLoop.currentConvoId = '';
   if (autoLoop.timer) { clearTimeout(autoLoop.timer); autoLoop.timer = null; }
   autoLoop.status = 'idle';
   autoLoop.waitReason = '';
-  toRenderer('autoloop:status', autoLoopStatus());
+  autoLoop.nextAt = 0;
+  _alBroadcast();
 }
 
-function autoLoopStart(prompt, accountIds, convoId) {
+function autoLoopStart(prompt, accountIds, folder) {
   if (!prompt || !prompt.trim()) return { ok: false, error: 'Prompt cannot be empty' };
   const allAccounts = store.list().filter((a) => a.loggedIn);
   const chosen = accountIds && accountIds.length
     ? allAccounts.filter((a) => accountIds.includes(a.id))
     : allAccounts;
   if (!chosen.length) return { ok: false, error: 'No signed-in accounts selected. Log in to at least one account first.' };
-  // Resolve or create the chat to use.
-  let targetConvo = convoId || state.currentConvoId;
-  if (!targetConvo || !findConvo(targetConvo)) return { ok: false, error: 'Open or create a chat first, then start the loop.' };
+
+  // Need a folder for creating fresh chats each round.
+  const chatFolder = folder || state.lastFolder || store.get('lastProjectDir') || '';
+  if (!chatFolder || !fs.existsSync(chatFolder)) return { ok: false, error: 'Pick a project folder first (New chat → pick folder), then start the loop.' };
+
+  // Stop any existing loop first.
+  if (autoLoop.active) autoLoopStop();
 
   autoLoop.active = true;
   autoLoop.prompt = prompt.trim();
   autoLoop.accountIds = chosen.map((a) => a.id);
-  autoLoop.convoId = targetConvo;
-  autoLoop.loopCount = 0;
-  autoLoop.status = 'running';
+  autoLoop.folder = chatFolder;
+  autoLoop.roundNum = 0;
+  autoLoop.sendCount = 0;
+  autoLoop.usedThisRound = new Set();
+  autoLoop.currentAccountId = '';
+  autoLoop.currentConvoId = '';
+  autoLoop.status = 'sending';
   autoLoop.waitReason = '';
-  toRenderer('autoloop:status', autoLoopStatus());
-  notify('Auto-loop started', `Will send your prompt on ${chosen.length} account${chosen.length > 1 ? 's' : ''} in rotation.`);
-  autoLoopTick();
+  autoLoop.nextAt = 0;
+
+  // Persist settings so they survive if the user navigates away and re-opens.
+  store.setSettings({
+    _autoLoopPrompt: autoLoop.prompt,
+    _autoLoopAccountIds: autoLoop.accountIds,
+    _autoLoopFolder: autoLoop.folder,
+  });
+
+  _alBroadcast();
+  notify('Auto-loop started', `${chosen.length} account${chosen.length > 1 ? 's' : ''} · will run 24/7`);
+  _alTick();
   return { ok: true };
 }
 
-async function autoLoopTick() {
+async function _alTick() {
   if (!autoLoop.active) return;
 
   const now = Date.now();
@@ -781,84 +838,150 @@ async function autoLoopTick() {
 
   if (!eligible.length) {
     autoLoopStop();
-    toRenderer('autoloop:status', autoLoopStatus());
-    notify('Auto-loop stopped', 'No signed-in accounts remain. Log in and restart the loop.');
+    notify('Auto-loop stopped', 'No signed-in accounts. Log in and restart.');
     return;
   }
 
-  // Pick an available (non-cooling) account: least-recently-used first so we
-  // spread load evenly instead of hammering the same account twice in a row.
-  const available = eligible
-    .filter((a) => !a.cooldownUntil || a.cooldownUntil <= now)
-    .sort((a, b) => (a.lastUsedAt || 0) - (b.lastUsedAt || 0));
+  // ── Pick the next account for this round ───────────────────────────────
+  // An account is a candidate if:
+  //   (a) it hasn't run this round yet, AND
+  //   (b) it isn't on cooldown right now
+  const candidates = eligible.filter(
+    (a) => !autoLoop.usedThisRound.has(a.id) && (!a.cooldownUntil || a.cooldownUntil <= now)
+  );
 
-  if (!available.length) {
-    // All cooling — wait for the soonest reset.
-    const soonest = eligible.slice().sort((a, b) => (a.cooldownUntil || 0) - (b.cooldownUntil || 0))[0];
-    const waitMs = Math.max(5000, (soonest.cooldownUntil || now) - now + 5000); // +5s buffer
-    autoLoop.status = 'waiting';
-    autoLoop.nextAt = now + waitMs;
-    const waitMins = Math.round(waitMs / 60000);
-    autoLoop.waitReason = `All accounts cooling. Waiting for ${soonest.name} to reset in ${waitMins > 60 ? Math.round(waitMins / 60) + 'h' : waitMins + 'm'}…`;
-    toRenderer('autoloop:status', autoLoopStatus());
-    autoLoop.timer = setTimeout(autoLoopTick, waitMs);
+  if (candidates.length > 0) {
+    // Use the account that was used least recently (fair rotation).
+    candidates.sort((a, b) => (a.lastUsedAt || 0) - (b.lastUsedAt || 0));
+    await _alRunAccount(candidates[0]);
     return;
   }
 
-  const account = available[0];
-  autoLoop.status = 'running';
+  // ── No candidate available right now ──────────────────────────────────
+  // Check if ALL accounts have been used this round (round is complete).
+  const allUsed = eligible.every((a) => autoLoop.usedThisRound.has(a.id));
+
+  if (allUsed) {
+    // Round complete — start a new round once ANY account is available.
+    autoLoop.roundNum += 1;
+    autoLoop.usedThisRound = new Set();
+    _alBroadcast();
+    notify('Auto-loop round complete', `Round ${autoLoop.roundNum} done · ${autoLoop.sendCount} total sends. Waiting for next reset…`);
+  }
+  // else: some accounts are not yet used but are cooling — wait for soonest.
+
+  // Find the soonest-to-reset account among those NOT yet used this round.
+  const waiting = eligible.filter((a) => !autoLoop.usedThisRound.has(a.id) && a.cooldownUntil && a.cooldownUntil > now);
+  const soonest = waiting.sort((a, b) => (a.cooldownUntil || 0) - (b.cooldownUntil || 0))[0];
+
+  if (!soonest) {
+    // Should not happen, but retry in 30s as safety net.
+    autoLoop.timer = setTimeout(_alTick, 30000);
+    return;
+  }
+
+  const waitMs = Math.max(10000, soonest.cooldownUntil - now + 8000); // 8s buffer after reset
+  autoLoop.status = 'waiting_reset';
+  autoLoop.nextAt = soonest.cooldownUntil + 8000;
+  const h = Math.floor(waitMs / 3600000);
+  const m = Math.floor((waitMs % 3600000) / 60000);
+  const s = Math.floor((waitMs % 60000) / 1000);
+  const hms = h > 0 ? `${h}h ${m}m` : (m > 0 ? `${m}m ${s}s` : `${s}s`);
+  autoLoop.waitReason = `Waiting for ${soonest.name} to reset — ${hms} remaining`;
+  _alBroadcast();
+
+  // Poll every 30s so the countdown stays accurate on screen, and actually
+  // wake up right at the reset time using a precise timer.
+  autoLoop.timer = setTimeout(_alTick, Math.min(waitMs, 30000));
+}
+
+async function _alRunAccount(account) {
+  if (!autoLoop.active) return;
+
+  autoLoop.currentAccountId = account.id;
+  autoLoop.status = 'sending';
   autoLoop.waitReason = '';
   autoLoop.nextAt = 0;
-  autoLoop.loopCount += 1;
-  toRenderer('autoloop:status', autoLoopStatus());
-  toRenderer('chat:event', { convoId: autoLoop.convoId, type: 'info', text: `🔄 Auto-loop #${autoLoop.loopCount} — sending prompt on ${account.name}` });
+  _alBroadcast();
 
-  // Ensure this chat uses the chosen account.
-  const f = findConvo(autoLoop.convoId);
-  if (!f) { autoLoopStop(); return; }
-
-  // Start/resume the session on this account.
-  const startRes = startSession(autoLoop.convoId, account.id, f.convo.sessionId || '');
-  if (!startRes.ok) {
-    toRenderer('chat:event', { convoId: autoLoop.convoId, type: 'error', text: `Auto-loop: could not start session — ${startRes.error}` });
-    // Retry in 10 s.
-    autoLoop.timer = setTimeout(autoLoopTick, 10000);
+  // Create a FRESH chat for every account × round combination.
+  // This keeps context small (cheap) and gives Claude a clean slate each time.
+  const chatFolder = autoLoop.folder;
+  if (!chatFolder || !fs.existsSync(chatFolder)) {
+    toRenderer('autoloop:status', { ...autoLoopStatus(), waitReason: `Folder not found: ${chatFolder}. Stop loop and fix the folder.` });
+    autoLoop.timer = setTimeout(_alTick, 60000);
     return;
   }
 
-  updateConvoById(autoLoop.convoId, { lastAccount: account.id });
-
-  const session = state.sessions.get(autoLoop.convoId);
-  if (!session) { autoLoop.timer = setTimeout(autoLoopTick, 5000); return; }
-
-  appendUserMessage(autoLoop.convoId, autoLoop.prompt, []);
-  session.send(autoLoop.prompt, []);
-  state.genConvos.add(autoLoop.convoId);
+  const c = createConvo(chatFolder);
+  autoLoop.currentConvoId = c.id;
+  // Make this new chat the visible one so the user can watch it.
+  state.currentConvoId = c.id;
+  toRenderer('chat:history', { log: [] });
   pushState();
 
-  // Wait for the turn to finish (turn_end / limit / error / exit), then tick again.
+  // Start the session on this account.
+  const startRes = startSession(c.id, account.id, '');
+  if (!startRes.ok) {
+    toRenderer('chat:event', { convoId: c.id, type: 'error', text: `Auto-loop: could not start session on ${account.name} — ${startRes.error}` });
+    autoLoop.usedThisRound.add(account.id); // skip this account this round
+    autoLoop.currentAccountId = '';
+    autoLoop.currentConvoId = '';
+    autoLoop.timer = setTimeout(_alTick, 5000);
+    return;
+  }
+
+  updateConvoById(c.id, { lastAccount: account.id });
+
+  const session = state.sessions.get(c.id);
+  if (!session) {
+    autoLoop.usedThisRound.add(account.id);
+    autoLoop.currentAccountId = '';
+    autoLoop.timer = setTimeout(_alTick, 5000);
+    return;
+  }
+
+  autoLoop.sendCount += 1;
+  autoLoop.status = 'waiting_turn';
+  autoLoop.waitReason = `Running on ${account.name} (send #${autoLoop.sendCount})`;
+  _alBroadcast();
+
+  toRenderer('chat:event', {
+    convoId: c.id, type: 'info',
+    text: `🔄 Auto-loop · Round ${autoLoop.roundNum + 1} · ${account.name} · Send #${autoLoop.sendCount}`,
+  });
+
+  appendUserMessage(c.id, autoLoop.prompt, []);
+  session.send(autoLoop.prompt, []);
+  state.genConvos.add(c.id);
+  pushState();
+
+  // Wait for Claude to finish (turn_end), hit a limit, error, or exit.
   await new Promise((resolve) => {
     const cleanup = () => {
-      // Remove our one-shot listener.
       const idx = autoLoopWaiters.indexOf(waiter);
       if (idx >= 0) autoLoopWaiters.splice(idx, 1);
       resolve();
     };
-    const waiter = { convoId: autoLoop.convoId, resolve: cleanup };
+    const waiter = { convoId: c.id, resolve: cleanup };
     autoLoopWaiters.push(waiter);
-    // Safety timeout: if no event arrives in 30 min, continue anyway.
-    const safety = setTimeout(() => { cleanup(); }, 30 * 60 * 1000);
-    waiter.safety = safety;
+    // Hard safety timeout: 45 min — in case the turn never fires an end event.
+    waiter.safety = setTimeout(cleanup, 45 * 60 * 1000);
   });
+
+  // Mark this account as used for this round regardless of how the turn ended.
+  autoLoop.usedThisRound.add(account.id);
+  autoLoop.currentAccountId = '';
+  autoLoop.currentConvoId = '';
 
   if (!autoLoop.active) return;
 
-  // Brief pause before the next iteration so we're not hammering instantly.
-  autoLoop.status = 'waiting';
-  autoLoop.waitReason = 'Turn complete — checking next available account…';
-  autoLoop.nextAt = Date.now() + 3000;
-  toRenderer('autoloop:status', autoLoopStatus());
-  autoLoop.timer = setTimeout(autoLoopTick, 3000);
+  autoLoop.status = 'sending'; // will immediately re-evaluate in next tick
+  autoLoop.waitReason = '';
+  _alBroadcast();
+
+  // Small pause before moving to the next account.
+  autoLoop.timer = setTimeout(_alTick, 2000);
 }
 
 // Waiters that want to know when a conversation's turn ends.
@@ -1295,8 +1418,17 @@ function registerIpc() {
   //   3. Waits for all accounts to cool down (if any are cooling).
   //   4. Picks the next available account and repeats from step 1.
   // If every account is cooling, it waits for the soonest reset then tries again.
-  ipcMain.handle('autoloop:start', (_e, { prompt, accountIds, convoId }) => {
-    return autoLoopStart(prompt, accountIds, convoId);
+  ipcMain.handle('autoloop:start', (_e, { prompt, accountIds, folder }) => {
+    return autoLoopStart(prompt, accountIds, folder);
+  });
+  ipcMain.handle('autoloop:pickFolder', async () => {
+    const res = await dialog.showOpenDialog(win, {
+      title: 'Choose the project folder for auto-loop chats',
+      properties: ['openDirectory'],
+      defaultPath: state.lastFolder || store.get('lastProjectDir') || os.homedir(),
+    });
+    if (res.canceled || !res.filePaths[0]) return '';
+    return res.filePaths[0];
   });
   ipcMain.handle('autoloop:stop', () => { autoLoopStop(); return { ok: true }; });
   ipcMain.handle('autoloop:status', () => autoLoopStatus());
