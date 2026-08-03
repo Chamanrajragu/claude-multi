@@ -55,6 +55,7 @@
           <button id="limitPill" class="pill limit-pill hidden" title="Usage limit — when an account resets"></button>
           <button id="switchPill" class="pill" title="Switch account"><span id="switchDot" class="dot off"></span><span id="switchName">No account</span></button>
           <button id="dashBtn" class="icon-btn" title="Activity &amp; usage">📊</button>
+          <button id="autoloopBtn" class="icon-btn" title="Auto-loop — keep sending your prompt across all accounts">🔄</button>
           <button id="settingsTop" class="icon-btn" title="Settings">⚙</button>
         </div>
       </header>
@@ -292,6 +293,36 @@
     <div class="modal ctx-modal">
       <div class="modal-head"><h2>What&rsquo;s using my context</h2><button id="ctxClose" class="x-btn">✕</button></div>
       <div id="ctxBody" class="ctx-body"></div>
+    </div>
+  </div>
+
+  <!-- ============ AUTO-LOOP MODAL ============ -->
+  <div id="autoloopModal" class="overlay hidden">
+    <div class="modal autoloop-modal">
+      <div class="modal-head"><h2>🔄 Auto-Loop</h2><button id="autoloopClose" class="x-btn">✕</button></div>
+      <p class="s-sub" style="margin:0 0 14px">Automatically re-sends your prompt every time an account becomes available after its 5-hour reset. Claude will keep working on your task without you having to do anything.</p>
+
+      <div class="al-section">
+        <label class="s-title" for="alPromptInput">Your prompt</label>
+        <textarea id="alPromptInput" class="al-prompt" rows="4" placeholder="Describe the task you want Claude to keep working on…"></textarea>
+      </div>
+
+      <div class="al-section">
+        <div class="s-title">Accounts to use</div>
+        <div class="s-sub" style="margin-bottom:8px">Only signed-in accounts are shown. All selected accounts will be used in rotation.</div>
+        <div id="alAccountList" class="al-acc-list"></div>
+      </div>
+
+      <div id="alStatus" class="al-status hidden">
+        <span id="alStatusIcon">⏳</span>
+        <span id="alStatusText">Waiting…</span>
+        <span id="alLoopCount" class="al-count"></span>
+      </div>
+
+      <div class="modal-actions">
+        <button id="alStop" class="btn-ghost hidden">⏹ Stop loop</button>
+        <button id="alStart" class="btn-primary">▶ Start loop</button>
+      </div>
     </div>
   </div>
 

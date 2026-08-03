@@ -320,6 +320,11 @@ button { font-family: inherit; color: inherit; }
 .menu button:hover { background: var(--hover); }
 .menu .m-sep { height: 1px; background: var(--border-soft); margin: 6px 4px; }
 .menu .m-search { width: 100%; margin: 2px 0 6px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); outline: none; font-size: 12.5px; }
+.menu-acc-row { display: flex; align-items: center; }
+.menu-acc-row .menu-acc { flex: 1; min-width: 0; border-radius: 8px 0 0 8px; }
+.menu-acc-more { flex-shrink: 0; padding: 6px 8px; border-radius: 0 8px 8px 0; font-size: 14px; color: var(--muted); background: transparent; border: none; cursor: pointer; opacity: 0; transition: opacity 0.15s; width: auto; }
+.menu-acc-row:hover .menu-acc-more { opacity: 1; }
+.menu-acc-more:hover { background: var(--hover) !important; color: var(--text) !important; }
 .menu-acc { display: flex; align-items: center; gap: 9px; }
 .menu-acc .ac-avatar { width: 26px; height: 26px; font-size: 12px; }
 .menu-acc .ma-meta { flex: 1; min-width: 0; }
@@ -376,6 +381,25 @@ button { font-family: inherit; color: inherit; }
 .prompt-label { margin: 0 0 12px; font-size: 14px; }
 .prompt-input { width: 100%; padding: 10px 13px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 14px; outline: none; }
 .prompt-input:focus { border-color: var(--accent); }
+
+/* =============== AUTO-LOOP MODAL =============== */
+.autoloop-modal { width: 520px; max-width: 92vw; }
+.al-section { margin-bottom: 18px; }
+.al-prompt { width: 100%; box-sizing: border-box; resize: vertical; min-height: 90px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; font-family: inherit; outline: none; margin-top: 6px; }
+.al-prompt:focus { border-color: var(--accent); }
+.al-acc-list { display: flex; flex-direction: column; gap: 6px; }
+.al-acc-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--border-soft); border-radius: 8px; cursor: pointer; }
+.al-acc-row:hover { background: var(--hover); }
+.al-acc-row input[type=checkbox] { flex: none; width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+.al-av { flex: none; width: 28px; height: 28px; font-size: 12px; }
+.al-acc-name { font-weight: 600; font-size: 13px; flex: 1; }
+.al-acc-sub { font-size: 11px; color: var(--muted); }
+.al-status { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--hover); border: 1px solid var(--border-soft); border-radius: 10px; margin-bottom: 14px; font-size: 13px; }
+.al-status #alStatusIcon { font-size: 18px; }
+.al-status #alStatusText { flex: 1; }
+.al-count { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent); color: #fff; }
+#autoloopBtn.al-active { color: var(--accent); position: relative; }
+#autoloopBtn.al-active::after { content: ''; position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 200; box-shadow: var(--shadow); }
 .toast.err { background: var(--err); color: #fff; }

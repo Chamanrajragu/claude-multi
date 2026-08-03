@@ -405,6 +405,12 @@ class ChatSession {
     if (this._sawError) return;
     // Strip the SDK's wrapper prefix.
     const clean = text.replace(/^Claude Code returned an error result:\s*/i, '');
+    // A stale/expired session ID produces "No conversation found with session ID".
+    // Signal this specially so the caller can retry without --resume.
+    if (/no conversation found with session id/i.test(clean)) {
+      this.onEvent({ type: 'error', text: clean, code: 'session_not_found' });
+      return;
+    }
     this._emitError(clean);
   }
 }

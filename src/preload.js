@@ -79,4 +79,10 @@ contextBridge.exposeInMainWorld('cc', {
   onLoginData: (cb) => ipcRenderer.on('login:data', (_e, d) => cb(d)),
   onLoginExit: (cb) => ipcRenderer.on('login:exit', (_e, code) => cb(code)),
   onLoginSuccess: (cb) => ipcRenderer.on('login:success', (_e, info) => cb(info)),
+
+  // ---- auto-loop (scheduled prompt) ----
+  autoLoopStart: (opts) => ipcRenderer.invoke('autoloop:start', opts),
+  autoLoopStop: () => ipcRenderer.invoke('autoloop:stop'),
+  autoLoopStatus: () => ipcRenderer.invoke('autoloop:status'),
+  onAutoLoopStatus: (cb) => ipcRenderer.on('autoloop:status', (_e, s) => cb(s)),
 });

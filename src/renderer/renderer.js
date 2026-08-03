@@ -153,6 +153,7 @@ function openAccountMenu(anchor) {
     if (!shown.length) { const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'No accounts.'; body.appendChild(d); }
     shown.forEach((a, i) => {
       const v = accView(a);
+      const row = document.createElement('div'); row.className = 'menu-acc-row';
       const b = document.createElement('button'); b.className = 'menu-acc';
       const idx = state.accounts.indexOf(a);
       b.innerHTML = `<span class="ac-avatar">${escapeHtml((a.name || '?').charAt(0).toUpperCase())}</span>` +
@@ -160,7 +161,10 @@ function openAccountMenu(anchor) {
         `<span class="ma-sub">${escapeHtml(v.needLogin ? 'Not signed in — click to log in' : v.label)}</span></span>` +
         `<span class="dot ${v.dot}"></span>${idx < 9 ? `<span class="ma-sub">⌘${idx + 1}</span>` : ''}`;
       b.onclick = () => { closeMenus(); if (v.needLogin) openLogin(a); else useAccount(a.id); };
-      body.appendChild(b);
+      const more = document.createElement('button'); more.className = 'menu-acc-more'; more.textContent = '⋯'; more.title = 'Rename or remove this account';
+      more.onclick = (e) => { e.stopPropagation(); closeMenus(); openAccountActions(a, more); };
+      row.appendChild(b); row.appendChild(more);
+      body.appendChild(row);
     });
     const sep = document.createElement('div'); sep.className = 'm-sep'; body.appendChild(sep);
     const add = document.createElement('button'); add.textContent = '＋  Add account'; add.onclick = () => { closeMenus(); addAccount(); }; body.appendChild(add);
@@ -350,7 +354,7 @@ function renderUsage() {
   set('usageCtxPct', pct + '% used');
   const bar = $('usageBar'); if (bar) { bar.style.width = pct + '%'; bar.classList.toggle('warn', pct >= 85); }
   set('usageCtxSub', fmtTokens(left) + ' tokens left of ~' + fmtTokens(ctxWindow()));
-  set('usageFootStats', `Session: ${fmtTokens(usage.sessOut)} out · $${(usage.sessCost || 0).toFixed(usage.sessCost >= 1 ? 2 : 4)}`);
+  set('usageFootStats', `Session: ${fmtTokens(usage.sessOut)} tokens out`);
   renderUsageAccounts();
 }
 // Per-account bars (maps our multi-account cooldowns onto Claude-desktop's
@@ -521,7 +525,6 @@ function decorateAssistant(msgEl, meta) {
   if (meta && !body.querySelector('.turn-meta')) {
     const parts = [];
     if (meta.usage) { const t = (meta.usage.input_tokens || 0) + (meta.usage.output_tokens || 0); if (t) parts.push('🔢 ' + t.toLocaleString() + ' tokens'); }
-    if (meta.costUsd) parts.push('💲 $' + Number(meta.costUsd).toFixed(4));
     if (parts.length) { const m = document.createElement('div'); m.className = 'turn-meta'; parts.forEach((p) => { const s = document.createElement('span'); s.textContent = p; m.appendChild(s); }); body.insertBefore(m, body.querySelector('.msg-actions')); }
   }
 }
@@ -871,7 +874,9 @@ function openAccountActions(a, anchor) {
       '', 'Remove',
     );
     if (!typed || typed.trim() !== a.name) { if (typed !== null) toast('Name did not match — nothing removed', 'err'); return; }
-    await cc.removeAccount(a.id);
+    const res = await cc.removeAccount(a.id);
+    if (res && res.accounts) state.accounts = res.accounts;
+    renderAll();
     toast(`Removed ${a.name}`, 'ok');
   });
   document.body.appendChild(m);
@@ -1126,8 +1131,7 @@ $('settingsTop').onclick = openSettings;
 function accUsageLabel(a) {
   const u = a.usage;
   if (!u || !u.turns) return 'unused since reset';
-  const cost = u.costUsd ? ' · $' + u.costUsd.toFixed(u.costUsd >= 1 ? 2 : 3) : '';
-  return `${fmtTokens(u.tokens)} tokens${cost} since reset`;
+  return `${fmtTokens(u.tokens)} tokens since reset`;
 }
 
 function renderDashboard() {
@@ -1160,7 +1164,7 @@ function renderDashboard() {
     + `<div class="dash-row"><span>Model</span><b>${escapeHtml(shortModelLabel(usage.model || effModel()))}</b></div>`
     + `<div class="dash-row"><span>Context used</span><b>${pct}% · ${fmtTokens(left)} left</b></div>`
     + `<div class="dash-row"><span>Session output</span><b>${fmtTokens(usage.sessOut)} tokens</b></div>`
-    + `<div class="dash-row"><span>Session cost</span><b>$${(usage.sessCost || 0).toFixed(usage.sessCost >= 1 ? 2 : 4)}</b></div></div>`;
+    + `</div>`;
 }
 $('dashBody').addEventListener('click', async (e) => {
   const refresh = () => { renderDashboard(); renderAccountRow(); renderLimitPill(); renderUsageAccounts(); };
@@ -1521,6 +1525,80 @@ window.addEventListener('keydown', (e) => {
     if (added) { renderAttachments(); toast(added + ' image' + (added > 1 ? 's' : '') + ' attached', 'ok'); }
   });
 })();
+
+/* ---------------- auto-loop ---------------- */
+let alLoopActive = false;
+
+function openAutoLoop() {
+  renderAlAccounts();
+  // Pre-fill prompt from the current composer text or leave blank.
+  const inp = $('input');
+  if (inp && inp.value.trim() && !$('alPromptInput').value.trim()) {
+    $('alPromptInput').value = inp.value.trim();
+  }
+  $('autoloopModal').classList.remove('hidden');
+  cc.autoLoopStatus().then(applyAlStatus).catch(() => {});
+}
+function renderAlAccounts() {
+  const list = $('alAccountList'); if (!list) return;
+  list.innerHTML = '';
+  const loggedIn = (state.accounts || []).filter((a) => a.loggedIn);
+  if (!loggedIn.length) { list.innerHTML = '<div class="s-sub">No signed-in accounts. Log in first.</div>'; return; }
+  loggedIn.forEach((a) => {
+    const lbl = document.createElement('label'); lbl.className = 'al-acc-row';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = a.id; cb.checked = true;
+    const av = document.createElement('span'); av.className = 'ac-avatar al-av'; av.textContent = (a.name || '?').charAt(0).toUpperCase();
+    const nm = document.createElement('span'); nm.className = 'al-acc-name'; nm.textContent = a.name;
+    const em = document.createElement('span'); em.className = 'al-acc-sub'; em.textContent = a.email || '';
+    lbl.appendChild(cb); lbl.appendChild(av); lbl.appendChild(nm); lbl.appendChild(em);
+    list.appendChild(lbl);
+  });
+}
+function applyAlStatus(s) {
+  if (!s) return;
+  alLoopActive = s.active;
+  const statusEl = $('alStatus'); const startBtn = $('alStart'); const stopBtn = $('alStop');
+  if (!statusEl || !startBtn || !stopBtn) return;
+  if (s.active) {
+    statusEl.classList.remove('hidden');
+    $('alStatusIcon').textContent = s.status === 'running' ? '⚡' : '⏳';
+    const waitInfo = s.waitReason ? ` — ${s.waitReason}` : (s.nextAt > Date.now() ? ` — next in ${Math.round((s.nextAt - Date.now()) / 1000)}s` : '');
+    $('alStatusText').textContent = s.status === 'running' ? 'Sending prompt…' : ('Waiting' + waitInfo);
+    $('alLoopCount').textContent = s.loopCount > 0 ? `Loop #${s.loopCount}` : '';
+    startBtn.classList.add('hidden');
+    stopBtn.classList.remove('hidden');
+    // Also show active state on the topbar button.
+    const btn = $('autoloopBtn'); if (btn) btn.classList.add('al-active');
+    $('alPromptInput').disabled = true;
+    document.querySelectorAll('#alAccountList input[type=checkbox]').forEach((cb) => { cb.disabled = true; });
+  } else {
+    statusEl.classList.add('hidden');
+    startBtn.classList.remove('hidden');
+    stopBtn.classList.add('hidden');
+    const btn = $('autoloopBtn'); if (btn) btn.classList.remove('al-active');
+    $('alPromptInput').disabled = false;
+    document.querySelectorAll('#alAccountList input[type=checkbox]').forEach((cb) => { cb.disabled = false; });
+  }
+}
+$('autoloopBtn').onclick = () => openAutoLoop();
+$('autoloopClose').onclick = () => $('autoloopModal').classList.add('hidden');
+$('autoloopModal').addEventListener('click', (e) => { if (e.target === $('autoloopModal')) $('autoloopModal').classList.add('hidden'); });
+$('alStart').onclick = async () => {
+  const prompt = ($('alPromptInput').value || '').trim();
+  if (!prompt) { toast('Enter a prompt first', 'err'); return; }
+  const checkedIds = Array.from($('alAccountList').querySelectorAll('input[type=checkbox]:checked')).map((cb) => cb.value);
+  if (!checkedIds.length) { toast('Select at least one account', 'err'); return; }
+  const r = await cc.autoLoopStart({ prompt, accountIds: checkedIds, convoId: state.currentConvoId });
+  if (r && !r.ok) { toast(r.error || 'Could not start loop', 'err'); return; }
+  toast('Auto-loop started — Claude will keep working!', 'ok');
+  cc.autoLoopStatus().then(applyAlStatus).catch(() => {});
+};
+$('alStop').onclick = async () => {
+  await cc.autoLoopStop();
+  toast('Auto-loop stopped', 'ok');
+  applyAlStatus({ active: false, loopCount: 0, status: 'idle' });
+};
+cc.onAutoLoopStatus((s) => applyAlStatus(s));
 
 /* ---------------- toast ---------------- */
 let toastTimer = null;

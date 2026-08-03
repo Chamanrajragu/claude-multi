@@ -463,7 +463,8 @@ function onChatEvent(convoId, session, accountId, ev) {
       recordAccountUsage(accountId, ev);
       finalizeTurn(convoId, ev);
       if (ev.sessionId) updateConvoById(convoId, { sessionId: ev.sessionId, lastAccount: accountId });
-      if (convoId !== state.currentConvoId) notify('Claude finished', `“${convoTitle(convoId)}” is ready`);
+      if (convoId !== state.currentConvoId) notify('Claude finished', `”${convoTitle(convoId)}” is ready`);
+      notifyAutoLoopWaiters(convoId);
       pushState();
       break;
     case 'compacted': {
@@ -476,18 +477,40 @@ function onChatEvent(convoId, session, accountId, ev) {
       state.genConvos.delete(convoId);
       state.turnBuf.delete(convoId);
       state.perms.delete(convoId);
+      notifyAutoLoopWaiters(convoId);
       handleLimit(convoId, accountId, ev);
       break;
     case 'error':
+      state.genConvos.delete(convoId);
+      state.turnBuf.delete(convoId);
+      state.perms.delete(convoId);
+      // A stale/expired session ID: the CLI can't --resume it. Clear it and
+      // transparently restart the session from scratch so the user doesn't have
+      // to do anything. The existing transcript is preserved.
+      if (ev.code === 'session_not_found') {
+        updateConvoById(convoId, { sessionId: '' });
+        const f2 = findConvo(convoId);
+        const accId = f2 && f2.convo.lastAccount;
+        if (accId) {
+          toRenderer('chat:event', { convoId, type: 'info', text: '↻ Session expired — starting a fresh session. Your transcript is intact.' });
+          startSession(convoId, accId, '');
+          return; // don't pushState twice or forward the error to the renderer
+        }
+      }
+      notifyAutoLoopWaiters(convoId);
+      pushState();
+      break;
     case 'auth_failed':
       state.genConvos.delete(convoId);
       state.turnBuf.delete(convoId);
       state.perms.delete(convoId);
+      notifyAutoLoopWaiters(convoId);
       pushState();
       break;
     case 'exit':
       state.genConvos.delete(convoId);
       state.perms.delete(convoId);
+      notifyAutoLoopWaiters(convoId);
       if (session && !session.alive) state.sessions.delete(convoId);
       pushState();
       break;
@@ -634,7 +657,10 @@ function startHost() {
     host = null;
   });
 }
-function sendToHost(obj) { if (host && host.stdin.writable) host.stdin.write(JSON.stringify(obj) + '\n'); }
+function sendToHost(obj) {
+  if (!host || !host.stdin || !host.stdin.writable) return;
+  try { host.stdin.write(JSON.stringify(obj) + '\n'); } catch (e) { console.error('[sendToHost] write error', e.message); }
+}
 function onHostData(chunk) {
   hostBuf += chunk;
   let i;
@@ -684,6 +710,169 @@ function startLogin(accountId) {
   return { ok: true };
 }
 function stopLogin() { sendToHost({ t: 'kill' }); stopLoginPoll(); loginAccountId = null; return { ok: true }; }
+
+// ---- auto-loop (scheduled prompt that maximizes account utilization) ------
+// One loop runs at a time. It picks the least-recently-used / most-available
+// account, sends the saved prompt, waits for the turn to complete, then repeats.
+// If every account is on cooldown it sleeps until the soonest reset.
+const autoLoop = {
+  active: false,
+  prompt: '',
+  accountIds: [],      // subset of accounts the user chose, or [] = all
+  convoId: '',         // which chat to run in
+  loopCount: 0,
+  nextAt: 0,           // epoch ms when the next send is planned (0 = now)
+  timer: null,
+  status: 'idle',      // 'idle' | 'running' | 'waiting'
+  waitReason: '',
+};
+
+function autoLoopStatus() {
+  return {
+    active: autoLoop.active,
+    loopCount: autoLoop.loopCount,
+    status: autoLoop.status,
+    nextAt: autoLoop.nextAt,
+    waitReason: autoLoop.waitReason,
+    prompt: autoLoop.prompt,
+    accountIds: autoLoop.accountIds,
+    convoId: autoLoop.convoId,
+  };
+}
+
+function autoLoopStop() {
+  autoLoop.active = false;
+  if (autoLoop.timer) { clearTimeout(autoLoop.timer); autoLoop.timer = null; }
+  autoLoop.status = 'idle';
+  autoLoop.waitReason = '';
+  toRenderer('autoloop:status', autoLoopStatus());
+}
+
+function autoLoopStart(prompt, accountIds, convoId) {
+  if (!prompt || !prompt.trim()) return { ok: false, error: 'Prompt cannot be empty' };
+  const allAccounts = store.list().filter((a) => a.loggedIn);
+  const chosen = accountIds && accountIds.length
+    ? allAccounts.filter((a) => accountIds.includes(a.id))
+    : allAccounts;
+  if (!chosen.length) return { ok: false, error: 'No signed-in accounts selected. Log in to at least one account first.' };
+  // Resolve or create the chat to use.
+  let targetConvo = convoId || state.currentConvoId;
+  if (!targetConvo || !findConvo(targetConvo)) return { ok: false, error: 'Open or create a chat first, then start the loop.' };
+
+  autoLoop.active = true;
+  autoLoop.prompt = prompt.trim();
+  autoLoop.accountIds = chosen.map((a) => a.id);
+  autoLoop.convoId = targetConvo;
+  autoLoop.loopCount = 0;
+  autoLoop.status = 'running';
+  autoLoop.waitReason = '';
+  toRenderer('autoloop:status', autoLoopStatus());
+  notify('Auto-loop started', `Will send your prompt on ${chosen.length} account${chosen.length > 1 ? 's' : ''} in rotation.`);
+  autoLoopTick();
+  return { ok: true };
+}
+
+async function autoLoopTick() {
+  if (!autoLoop.active) return;
+
+  const now = Date.now();
+  const allAccounts = store.list();
+  const eligible = allAccounts.filter((a) => a.loggedIn && autoLoop.accountIds.includes(a.id));
+
+  if (!eligible.length) {
+    autoLoopStop();
+    toRenderer('autoloop:status', autoLoopStatus());
+    notify('Auto-loop stopped', 'No signed-in accounts remain. Log in and restart the loop.');
+    return;
+  }
+
+  // Pick an available (non-cooling) account: least-recently-used first so we
+  // spread load evenly instead of hammering the same account twice in a row.
+  const available = eligible
+    .filter((a) => !a.cooldownUntil || a.cooldownUntil <= now)
+    .sort((a, b) => (a.lastUsedAt || 0) - (b.lastUsedAt || 0));
+
+  if (!available.length) {
+    // All cooling — wait for the soonest reset.
+    const soonest = eligible.slice().sort((a, b) => (a.cooldownUntil || 0) - (b.cooldownUntil || 0))[0];
+    const waitMs = Math.max(5000, (soonest.cooldownUntil || now) - now + 5000); // +5s buffer
+    autoLoop.status = 'waiting';
+    autoLoop.nextAt = now + waitMs;
+    const waitMins = Math.round(waitMs / 60000);
+    autoLoop.waitReason = `All accounts cooling. Waiting for ${soonest.name} to reset in ${waitMins > 60 ? Math.round(waitMins / 60) + 'h' : waitMins + 'm'}…`;
+    toRenderer('autoloop:status', autoLoopStatus());
+    autoLoop.timer = setTimeout(autoLoopTick, waitMs);
+    return;
+  }
+
+  const account = available[0];
+  autoLoop.status = 'running';
+  autoLoop.waitReason = '';
+  autoLoop.nextAt = 0;
+  autoLoop.loopCount += 1;
+  toRenderer('autoloop:status', autoLoopStatus());
+  toRenderer('chat:event', { convoId: autoLoop.convoId, type: 'info', text: `🔄 Auto-loop #${autoLoop.loopCount} — sending prompt on ${account.name}` });
+
+  // Ensure this chat uses the chosen account.
+  const f = findConvo(autoLoop.convoId);
+  if (!f) { autoLoopStop(); return; }
+
+  // Start/resume the session on this account.
+  const startRes = startSession(autoLoop.convoId, account.id, f.convo.sessionId || '');
+  if (!startRes.ok) {
+    toRenderer('chat:event', { convoId: autoLoop.convoId, type: 'error', text: `Auto-loop: could not start session — ${startRes.error}` });
+    // Retry in 10 s.
+    autoLoop.timer = setTimeout(autoLoopTick, 10000);
+    return;
+  }
+
+  updateConvoById(autoLoop.convoId, { lastAccount: account.id });
+
+  const session = state.sessions.get(autoLoop.convoId);
+  if (!session) { autoLoop.timer = setTimeout(autoLoopTick, 5000); return; }
+
+  appendUserMessage(autoLoop.convoId, autoLoop.prompt, []);
+  session.send(autoLoop.prompt, []);
+  state.genConvos.add(autoLoop.convoId);
+  pushState();
+
+  // Wait for the turn to finish (turn_end / limit / error / exit), then tick again.
+  await new Promise((resolve) => {
+    const cleanup = () => {
+      // Remove our one-shot listener.
+      const idx = autoLoopWaiters.indexOf(waiter);
+      if (idx >= 0) autoLoopWaiters.splice(idx, 1);
+      resolve();
+    };
+    const waiter = { convoId: autoLoop.convoId, resolve: cleanup };
+    autoLoopWaiters.push(waiter);
+    // Safety timeout: if no event arrives in 30 min, continue anyway.
+    const safety = setTimeout(() => { cleanup(); }, 30 * 60 * 1000);
+    waiter.safety = safety;
+  });
+
+  if (!autoLoop.active) return;
+
+  // Brief pause before the next iteration so we're not hammering instantly.
+  autoLoop.status = 'waiting';
+  autoLoop.waitReason = 'Turn complete — checking next available account…';
+  autoLoop.nextAt = Date.now() + 3000;
+  toRenderer('autoloop:status', autoLoopStatus());
+  autoLoop.timer = setTimeout(autoLoopTick, 3000);
+}
+
+// Waiters that want to know when a conversation's turn ends.
+const autoLoopWaiters = [];
+function notifyAutoLoopWaiters(convoId) {
+  for (let i = autoLoopWaiters.length - 1; i >= 0; i--) {
+    const w = autoLoopWaiters[i];
+    if (w.convoId === convoId) {
+      if (w.safety) clearTimeout(w.safety);
+      w.resolve();
+      autoLoopWaiters.splice(i, 1);
+    }
+  }
+}
 
 // ---- IPC ------------------------------------------------------------------
 function registerIpc() {
@@ -1097,6 +1286,20 @@ function registerIpc() {
     node: process.versions.node,
     claudePath: findClaudePath(),
   }));
+
+  // ---- auto-loop (scheduled prompt) ----------------------------------------
+  // Lets users fully utilize their 5-hour usage windows automatically.
+  // When active, the loop:
+  //   1. Sends the saved prompt on the first available account.
+  //   2. Waits for the turn to finish.
+  //   3. Waits for all accounts to cool down (if any are cooling).
+  //   4. Picks the next available account and repeats from step 1.
+  // If every account is cooling, it waits for the soonest reset then tries again.
+  ipcMain.handle('autoloop:start', (_e, { prompt, accountIds, convoId }) => {
+    return autoLoopStart(prompt, accountIds, convoId);
+  });
+  ipcMain.handle('autoloop:stop', () => { autoLoopStop(); return { ok: true }; });
+  ipcMain.handle('autoloop:status', () => autoLoopStatus());
 }
 
 // ---- system tray + start-on-login ----------------------------------------
