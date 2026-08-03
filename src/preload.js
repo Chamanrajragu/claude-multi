@@ -70,6 +70,7 @@ contextBridge.exposeInMainWorld('cc', {
   zoom: (delta) => { const z = delta === 0 ? 0 : Math.max(-3, Math.min(5, webFrame.getZoomLevel() + delta)); webFrame.setZoomLevel(z); return z; },
   setZoom: (z) => { try { webFrame.setZoomLevel(Math.max(-3, Math.min(5, z || 0))); } catch { /* noop */ } },
   searchAll: (q) => ipcRenderer.invoke('chat:searchAll', q),
+  listFiles: () => ipcRenderer.invoke('chat:listFiles'),
 
   // ---- events (main -> renderer) ----
   onChat: (cb) => ipcRenderer.on('chat:event', (_e, ev) => cb(ev)),

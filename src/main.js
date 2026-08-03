@@ -908,8 +908,9 @@ async function _alRunAccount(account) {
   // This keeps context small (cheap) and gives Claude a clean slate each time.
   const chatFolder = autoLoop.folder;
   if (!chatFolder || !fs.existsSync(chatFolder)) {
-    toRenderer('autoloop:status', { ...autoLoopStatus(), waitReason: `Folder not found: ${chatFolder}. Stop loop and fix the folder.` });
-    autoLoop.timer = setTimeout(_alTick, 60000);
+    autoLoopStop();
+    notify('Auto-loop stopped', `Folder not found: ${chatFolder}. Pick a valid folder and restart.`);
+    toRenderer('chat:event', { convoId: '', type: 'error', text: `🔄 Auto-loop stopped — folder not found: ${chatFolder}` });
     return;
   }
 
@@ -958,9 +959,12 @@ async function _alRunAccount(account) {
 
   // Wait for Claude to finish (turn_end), hit a limit, error, or exit.
   await new Promise((resolve) => {
+    let resolved = false;
     const cleanup = () => {
+      if (resolved) return; resolved = true;
       const idx = autoLoopWaiters.indexOf(waiter);
       if (idx >= 0) autoLoopWaiters.splice(idx, 1);
+      if (waiter.safety) { clearTimeout(waiter.safety); waiter.safety = null; }
       resolve();
     };
     const waiter = { convoId: c.id, resolve: cleanup };

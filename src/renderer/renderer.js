@@ -80,7 +80,8 @@ function renderConvos() {
 }
 let convoDnDReady = false;
 function setupConvoDnD(list) {
-  if (convoDnDReady) return; convoDnDReady = true;
+  if (convoDnDReady) return;
+  convoDnDReady = true;
   // Backstop: never let the drag flag wedge the sidebar if dragend is missed.
   window.addEventListener('dragend', () => { if (draggingConvo) { draggingConvo = false; renderConvos(); } });
   list.addEventListener('dragover', (e) => {
@@ -99,7 +100,7 @@ $('convoSearch').addEventListener('input', async (e) => {
   else if (Object.keys(contentMatches).length) { contentMatches = {}; renderConvos(); }
 });
 async function openConvo(id) {
-  if (id === state.currentConvoId && state.running) return;
+  if (id === state.currentConvoId) return; // already on screen
   const r = await cc.openConvo(id);
   if (r && !r.ok) toast(r.error || 'Could not open chat', 'err');
 }
@@ -624,7 +625,7 @@ cc.onChat((ev) => {
     case 'permission': onPermission(ev.requestId, ev.tool, ev.input); break;
     case 'info': onInfoLine(ev.text); break;
     case 'turn_end': applyTurnUsage(ev.usage, ev.costUsd, ev.contextWindow); endTurn({ usage: ev.usage, costUsd: ev.costUsd }); break;
-    case 'auth_failed': endTurn(); onErrorLine('This account is not signed in. Open the account switcher and Log in.'); break;
+    case 'auth_failed': endTurn(); onErrorLine('⚠ Not signed in — open the account switcher (bottom-left) and click Log in.'); break;
     case 'error': endTurn(); onErrorLine(ev.text || 'Something went wrong.'); break;
     case 'limit': endTurn(); break;
     case 'exit': endTurn(); break;
@@ -663,8 +664,67 @@ function renderAttachments() {
   attachments.forEach((p, i) => { const c = document.createElement('div'); c.className = 'attach-chip'; c.innerHTML = `📎 ${escapeHtml(baseName(p))} <span class="rm">✕</span>`; c.querySelector('.rm').onclick = () => { attachments.splice(i, 1); renderAttachments(); }; row.appendChild(c); });
 }
 
+/* ---------------- @file autocomplete ---------------- */
+let atFiles = [], atDropdown = null;
+async function loadAtFiles() { try { atFiles = await cc.listFiles() || []; } catch { atFiles = []; } }
+function atQuery(inp) {
+  const text = inp.value.slice(0, inp.selectionStart);
+  const m = text.match(/@([\w./\-\\]*)$/);
+  return m ? m[1].toLowerCase() : null;
+}
+function closeAtDropdown() { if (atDropdown) { atDropdown.remove(); atDropdown = null; } }
+function openAtDropdown(inp, query) {
+  closeAtDropdown();
+  const matches = query === '' ? atFiles.slice(0, 20) : atFiles.filter((f) => f.toLowerCase().includes(query)).slice(0, 20);
+  if (!matches.length) return;
+  atDropdown = document.createElement('div'); atDropdown.className = 'at-dropdown';
+  matches.forEach((f, i) => {
+    const b = document.createElement('button'); b.className = 'at-item' + (i === 0 ? ' active' : '');
+    b.textContent = f; b.dataset.idx = i;
+    b.onmousedown = (e) => { e.preventDefault(); insertAtFile(inp, f); };
+    atDropdown.appendChild(b);
+  });
+  const r = inp.getBoundingClientRect();
+  atDropdown.style.left = r.left + 'px';
+  atDropdown.style.bottom = (window.innerHeight - r.top + 2) + 'px';
+  document.body.appendChild(atDropdown);
+}
+function insertAtFile(inp, file) {
+  const start = inp.selectionStart;
+  const text = inp.value;
+  const before = text.slice(0, start);
+  const m = before.match(/@[\w./\-\\]*$/);
+  if (m) {
+    const at = before.length - m[0].length;
+    inp.value = text.slice(0, at) + '@' + file + ' ' + text.slice(start);
+    inp.selectionStart = inp.selectionEnd = at + file.length + 2;
+  }
+  closeAtDropdown(); autoGrow(); updateComposer();
+}
 $('sendBtn').onclick = sendMessage;
-$('input').addEventListener('input', () => { autoGrow(); updateComposer(); histIdx = -1; if (state.currentConvoId) drafts[state.currentConvoId] = $('input').value; });
+$('input').addEventListener('input', async () => {
+  autoGrow(); updateComposer(); histIdx = -1;
+  if (state.currentConvoId) drafts[state.currentConvoId] = $('input').value;
+  const inp = $('input');
+  const q = atQuery(inp);
+  if (q === null) { closeAtDropdown(); return; }
+  if (!atFiles.length) await loadAtFiles();
+  openAtDropdown(inp, q);
+});
+$('input').addEventListener('keydown', (e) => {
+  if (!atDropdown) return;
+  const items = atDropdown.querySelectorAll('.at-item');
+  const cur = atDropdown.querySelector('.at-item.active');
+  let idx = cur ? Number(cur.dataset.idx) : 0;
+  if (e.key === 'ArrowDown') { e.preventDefault(); idx = (idx + 1) % items.length; }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); idx = (idx - 1 + items.length) % items.length; }
+  else if (e.key === 'Tab' || e.key === 'Enter') {
+    if (cur) { e.preventDefault(); insertAtFile($('input'), cur.textContent); return; }
+  } else if (e.key === 'Escape') { closeAtDropdown(); return; }
+  else return;
+  items.forEach((b, i) => b.classList.toggle('active', i === idx));
+}, true);
+document.addEventListener('click', (e) => { if (atDropdown && !atDropdown.contains(e.target) && e.target !== $('input')) closeAtDropdown(); });
 // Composer prompt history: ↑ recalls previous prompts (when caret is at the
 // start / already navigating), ↓ moves back toward your draft. Newest first.
 let histItems = [], histIdx = -1;
@@ -1361,6 +1421,16 @@ function applyAppearance(s) {
 })();
 if (mq) mq.addEventListener('change', () => { if ((state.settings || {}).theme === 'system') applyTheme('system'); });
 
+// ── Live cooldown ticker ────────────────────────────────────────────────────
+// Keeps the limit pill, account switcher dots, and usage bars ticking every
+// second so "resets in 4h 23m" counts down without waiting for pushState.
+setInterval(() => {
+  renderLimitPill();
+  renderUsageAccounts();
+  // Also refresh the account-switcher dot labels for cooling accounts.
+  if (document.querySelector('.menu.ctx')) renderAccountRow();
+}, 1000);
+
 /* ---------------- prompt modal ---------------- */
 function uiPrompt(label, def, okLabel) {
   return new Promise((resolve) => {
@@ -1485,10 +1555,20 @@ window.addEventListener('keydown', (e) => {
   else if ((e.key === 'f' || e.key === 'F') && e.shiftKey) { e.preventDefault(); openFind(); }
   else if ((e.key === 'f' || e.key === 'F') && !e.shiftKey) { e.preventDefault(); if (state.conversations.length) { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } }
 });
-// Esc stops the current generation (when nothing modal is open).
+// Esc: close the topmost open modal, or stop generation if nothing is open.
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (document.querySelector('.overlay:not(.hidden)') || document.querySelector('.menu.ctx')) return;
+  if (document.querySelector('.menu.ctx')) { closeMenus(); e.preventDefault(); return; }
+  const modals = ['cmdkModal','settingsModal','dashModal','ctxModal','loginModal','switchModal','autoloopModal','shortcutsModal','promptModal'];
+  for (const id of modals) {
+    const m = $(id);
+    if (m && !m.classList.contains('hidden')) {
+      m.classList.add('hidden');
+      if (id === 'autoloopModal') closeAutoLoop();
+      e.preventDefault();
+      return;
+    }
+  }
   if (state.generating) { e.preventDefault(); cc.interrupt(); }
 });
 // Alt+↑/↓ switch chats · Ctrl/Cmd +/-/0 zoom the whole UI.
@@ -1677,9 +1757,16 @@ function startAlCountdown() {
   }, 1000);
 }
 
+function closeAutoLoop() {
+  $('autoloopModal').classList.add('hidden');
+  // Stop the per-second countdown interval when the modal isn't visible.
+  if (alCountdownTimer && !(alStatus && alStatus.active)) {
+    clearInterval(alCountdownTimer); alCountdownTimer = null;
+  }
+}
 $('autoloopBtn').onclick = () => openAutoLoop();
-$('autoloopClose').onclick = () => $('autoloopModal').classList.add('hidden');
-$('autoloopModal').addEventListener('click', (e) => { if (e.target === $('autoloopModal')) $('autoloopModal').classList.add('hidden'); });
+$('autoloopClose').onclick = closeAutoLoop;
+$('autoloopModal').addEventListener('click', (e) => { if (e.target === $('autoloopModal')) closeAutoLoop(); });
 $('alFolderBtn').onclick = async () => {
   const f = await cc.autoLoopPickFolder();
   if (f) { alFolder = f; renderAlFolder(); }
@@ -1707,13 +1794,23 @@ let toastTimer = null;
 function toast(msg, kind) { const el = $('toast'); el.textContent = msg; el.className = 'toast' + (kind === 'err' ? ' err' : ''); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.add('hidden'), 2600); }
 
 /* ---------------- boot ---------------- */
-cc.onState((s) => { const prev = state.currentConvoId; state = Object.assign(state, s); if (s.settings) applyAppearance(s.settings); renderAll(); if (state.currentConvoId !== prev) swapDraft(prev, state.currentConvoId); });
+cc.onState((s) => {
+  const prev = state.currentConvoId;
+  const prevDir = state.projectDir;
+  state = Object.assign(state, s);
+  if (s.settings) applyAppearance(s.settings);
+  renderAll();
+  if (state.currentConvoId !== prev) swapDraft(prev, state.currentConvoId);
+  // Reload @-file suggestions when the project folder changes.
+  if (state.projectDir && state.projectDir !== prevDir) { atFiles = []; loadAtFiles(); }
+});
 (async () => {
   state = await cc.getState();
   applyAppearance(state.settings || {});
   renderAll();
   loadHist();
   if (state.currentConvoId) { try { const h = await cc.getHistory(); if (h && h.log && h.log.length) renderHistory(h.log); } catch {} }
-  setInterval(() => { if (state.accounts.some((a) => a.cooldownUntil && a.cooldownUntil > Date.now())) { renderAccountRow(); renderLimitPill(); renderUsageAccounts(); } }, 15000);
+  // Pre-load @-file list for the initial project.
+  if (state.projectDir) loadAtFiles();
 })();
 })();
