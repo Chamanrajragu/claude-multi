@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Primary SEO -->
+  <title>Claude Multi — Run Multiple Claude Accounts in One Desktop App</title>
+  <meta name="description" content="Claude Multi is a free, open-source desktop app that runs Claude Code with multiple accounts in one window. Auto-switches when one hits its usage limit. 24/7 auto-loop, parallel chats, live cooldown timers. Windows, macOS, Linux." />
+  <meta name="keywords" content="Claude Multi, Claude Code multiple accounts, Claude usage limit, Claude rate limit fix, Claude multi account, Claude Code desktop app, Claude Code GUI, multiple Claude accounts, Claude auto switch, Claude 5 hour limit, Claude Code Windows, Claude Code Mac, claude multi download, open source claude client, Claude parallel chats, Claude token saver, anthropic claude multi account" />
+  <meta name="author" content="Chaman Raj" />
+  <link rel="canonical" href="https://chamanrajragu.github.io/claude-multi/" />
+
+  <!-- Open Graph (Discord, Slack, Twitter previews) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://chamanrajragu.github.io/claude-multi/" />
+  <meta property="og:title" content="Claude Multi — Multiple Claude Accounts, One Window" />
+  <meta property="og:description" content="Free desktop app: run Claude Code with multiple accounts and auto-switch when one hits its usage limit. 24/7 auto-loop, parallel chats, zero setup. Windows · macOS · Linux." />
+  <meta property="og:image" content="https://chamanrajragu.github.io/claude-multi/screenshot-main.png" />
+  <meta property="og:image:width" content="1280" />
+  <meta property="og:image:height" content="800" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Claude Multi — Multiple Claude Accounts, One Window" />
+  <meta name="twitter:description" content="Free desktop app: run Claude Code with multiple accounts and auto-switch when one hits its 5-hour usage limit. 24/7 auto-loop. Free &amp; open source." />
+  <meta name="twitter:image" content="https://chamanrajragu.github.io/claude-multi/screenshot-main.png" />
+
+  <!-- Structured Data (Google Rich Results) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Claude Multi",
+    "alternateName": ["claude-multi", "claudemulti"],
+    "description": "Free desktop app that runs Claude Code with multiple accounts in one window. Auto-switches when one hits its usage limit. 24/7 auto-loop, parallel chats, live cooldown timers.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": ["Windows", "macOS", "Linux"],
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "downloadUrl": "https://github.com/Chamanrajragu/claude-multi/releases/latest",
+    "sourceCode": "https://github.com/Chamanrajragu/claude-multi",
+    "author": {
+      "@type": "Person",
+      "name": "Chaman Raj",
+      "url": "https://github.com/Chamanrajragu"
+    },
+    "license": "https://opensource.org/licenses/MIT",
+    "keywords": "Claude Multi, Claude Code, multiple accounts, usage limit, auto-switch, desktop app, electron"
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --orange: #d97757;
+      --green: #4ec98a;
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --radius: 12px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
+    a { color: var(--orange); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* NAV */
+    nav { display: flex; justify-content: space-between; align-items: center; padding: 16px 40px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: rgba(13,17,23,.92); backdrop-filter: blur(12px); z-index: 100; }
+    .nav-logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text); }
+    .nav-logo img { width: 32px; height: 32px; border-radius: 8px; }
+    .nav-links { display: flex; gap: 24px; font-size: 14px; color: var(--muted); }
+    .nav-links a { color: var(--muted); }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; transition: opacity .15s; border: none; }
+    .btn:hover { opacity: .85; text-decoration: none; }
+    .btn-primary { background: var(--orange); color: #fff; }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+
+    /* HERO */
+    .hero { text-align: center; padding: 80px 20px 60px; max-width: 900px; margin: 0 auto; }
+    .hero-badge { display: inline-block; background: rgba(217,119,87,.15); color: var(--orange); border: 1px solid rgba(217,119,87,.3); border-radius: 20px; padding: 4px 14px; font-size: 13px; font-weight: 600; margin-bottom: 24px; }
+    .hero h1 { font-size: clamp(32px, 6vw, 56px); font-weight: 800; line-height: 1.15; margin-bottom: 20px; }
+    .hero h1 span { color: var(--orange); }
+    .hero p { font-size: 18px; color: var(--muted); max-width: 620px; margin: 0 auto 36px; }
+    .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 48px; }
+    .hero-screenshot { border-radius: var(--radius); border: 1px solid var(--border); width: 100%; max-width: 860px; box-shadow: 0 24px 64px rgba(0,0,0,.6); }
+    .hero-caption { margin-top: 12px; font-size: 13px; color: var(--muted); }
+
+    /* STATS */
+    .stats { display: flex; justify-content: center; gap: 48px; padding: 40px 20px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .stat { text-align: center; }
+    .stat-num { font-size: 28px; font-weight: 800; color: var(--orange); }
+    .stat-label { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+    /* SECTIONS */
+    section { max-width: 1000px; margin: 0 auto; padding: 64px 20px; }
+    section h2 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    section .sub { color: var(--muted); margin-bottom: 40px; font-size: 16px; }
+
+    /* FEATURES GRID */
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .feature-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+    .feature-icon { font-size: 28px; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .feature-card p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+    /* HOW IT WORKS */
+    .steps { display: flex; flex-direction: column; gap: 0; position: relative; }
+    .step { display: flex; gap: 20px; padding: 24px 0; border-bottom: 1px solid var(--border); }
+    .step:last-child { border-bottom: none; }
+    .step-num { width: 36px; height: 36px; min-width: 36px; border-radius: 50%; background: rgba(217,119,87,.15); border: 1px solid rgba(217,119,87,.4); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--orange); font-size: 15px; margin-top: 2px; }
+    .step-body h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .step-body p { font-size: 14px; color: var(--muted); }
+
+    /* DOWNLOAD TABLE */
+    .dl-table { width: 100%; border-collapse: collapse; }
+    .dl-table th { text-align: left; padding: 12px 16px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    .dl-table td { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
+    .dl-table tr:last-child td { border-bottom: none; }
+    .dl-table .badge { display: inline-block; background: rgba(78,201,138,.15); color: var(--green); border: 1px solid rgba(78,201,138,.3); border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; margin-left: 8px; }
+
+    /* FAQ */
+    .faq { display: flex; flex-direction: column; gap: 0; }
+    .faq-item { border-bottom: 1px solid var(--border); padding: 20px 0; }
+    .faq-item:last-child { border-bottom: none; }
+    .faq-q { font-weight: 700; font-size: 15px; margin-bottom: 8px; }
+    .faq-a { font-size: 14px; color: var(--muted); line-height: 1.7; }
+
+    /* CTA FOOTER */
+    .cta-block { text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 56px 24px; margin: 0 20px 64px; }
+    .cta-block h2 { font-size: 28px; font-weight: 800; margin-bottom: 12px; }
+    .cta-block p { color: var(--muted); margin-bottom: 28px; font-size: 16px; }
+    .cta-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+    /* FOOTER */
+    footer { border-top: 1px solid var(--border); padding: 32px 40px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); flex-wrap: wrap; gap: 12px; }
+    footer a { color: var(--muted); }
+
+    @media (max-width: 600px) {
+      nav { padding: 12px 16px; }
+      .nav-links { display: none; }
+      .stats { gap: 24px; }
+      footer { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="#">
+    <img src="https://raw.githubusercontent.com/Chamanrajragu/claude-multi/main/src/renderer/icon.png" alt="Claude Multi icon" />
+    Claude Multi
+  </a>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#how-it-works">How it works</a>
+    <a href="#download">Download</a>
+    <a href="#faq">FAQ</a>
+    <a href="https://github.com/Chamanrajragu/claude-multi">GitHub</a>
+  </div>
+  <a class="btn btn-primary" href="https://github.com/Chamanrajragu/claude-multi/releases/latest">⬇ Download Free</a>
+</nav>
+
+<div class="hero">
+  <div class="hero-badge">🆓 Free &amp; Open Source · MIT License</div>
+  <h1>Run <span>multiple Claude accounts</span><br/>in one desktop app</h1>
+  <p>Claude Multi auto-switches when one account hits its usage limit — so your task never stops. 24/7 auto-loop, parallel chats, live cooldown timers. No API key needed.</p>
+  <div class="hero-ctas">
+    <a class="btn btn-primary" href="https://github.com/Chamanrajragu/claude-multi/releases/latest">⬇ Download for Windows</a>
+    <a class="btn btn-secondary" href="https://github.com/Chamanrajragu/claude-multi/releases/latest">macOS · Linux</a>
+    <a class="btn btn-secondary" href="https://github.com/Chamanrajragu/claude-multi">⭐ Star on GitHub</a>
+  </div>
+  <img class="hero-screenshot" src="screenshot-main.png" alt="Claude Multi desktop app showing multiple accounts, live usage meters, and streaming chat" />
+  <p class="hero-caption">Claude Multi on Windows — multiple accounts, live cooldown timers, real-time streamed chat</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-num">20</div><div class="stat-label">Accounts supported</div></div>
+  <div class="stat"><div class="stat-num">24/7</div><div class="stat-label">Auto-loop runs overnight</div></div>
+  <div class="stat"><div class="stat-num">3</div><div class="stat-label">Platforms (Win · Mac · Linux)</div></div>
+  <div class="stat"><div class="stat-num">0</div><div class="stat-label">Telemetry / tracking</div></div>
+  <div class="stat"><div class="stat-num">MIT</div><div class="stat-label">Free forever, open source</div></div>
+</div>
+
+<section id="features">
+  <h2>Everything you need to run Claude at full speed</h2>
+  <p class="sub">Built for developers and power users who hit Claude's usage limit and want to keep going.</p>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🔄</div>
+      <h3>Auto-switch on usage limit</h3>
+      <p>The instant an account hits its 5-hour limit, Claude Multi switches to the next available account and re-issues your interrupted instruction. Zero manual steps.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🤖</div>
+      <h3>24/7 Auto-loop engine</h3>
+      <p>Set a prompt once and walk away. Claude Multi sends it on every account in rotation, waits through resets, and repeats — indefinitely, even overnight.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🧵</div>
+      <h3>Parallel chats</h3>
+      <p>Run multiple projects at the same time, each with its own folder, account, and session. Switch between them instantly with a click.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⏳</div>
+      <h3>Live cooldown timers</h3>
+      <p>Every account shows a live countdown — exactly how long until it resets. No more guessing. Updated every second.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📊</div>
+      <h3>Context inspector</h3>
+      <p>Open the context inspector to see every file, tool, memory item, and conversation turn — with exact token counts. Know exactly what is costing you.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔎</div>
+      <h3>@file autocomplete</h3>
+      <p>Type @ in the composer to fuzzy-search any file in your project and insert its path instantly. Tab to complete, arrow keys to navigate.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">💬</div>
+      <h3>Full-featured composer</h3>
+      <p>Voice input, paste images, drag-and-drop files, prompt templates, prompt history, character counter, and per-chat draft saving.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔒</div>
+      <h3>100% private</h3>
+      <p>No telemetry. No analytics. No servers. No outbound requests from the app. Everything stays on your machine. Fully auditable open source code.</p>
+    </div>
+  </div>
+</section>
+
+<section id="how-it-works" style="background: var(--surface); max-width:100%; padding: 64px 0;">
+  <div style="max-width:800px; margin:0 auto; padding: 0 20px;">
+    <h2>How Claude Multi works</h2>
+    <p class="sub">Simple under the hood — powerful in practice.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Add your Claude accounts</h3>
+          <p>Each account gets its own isolated directory via CLAUDE_CONFIG_DIR — the mechanism officially documented by Anthropic. Logins never collide.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Start a chat and work normally</h3>
+          <p>Open your project folder and chat exactly like you would in Claude Code. Claude Multi runs the official Claude Agent SDK under the hood — no difference in capability.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Hit a limit? Claude Multi handles it</h3>
+          <p>When the usage limit error appears in the stream, Claude Multi stamps that account with its cooldown timer, picks the next free account, copies the transcript, resumes the session, and re-issues your last instruction — all in under a second.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Work continues — you see a toast</h3>
+          <p>A brief "Switched to Account B" notification appears. Your task keeps running. The switched-from account shows its cooldown countdown so you know when it will be ready again.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="download">
+  <h2>Download Claude Multi</h2>
+  <p class="sub">Free for Windows, macOS, and Linux. No account required.</p>
+  <table class="dl-table">
+    <thead>
+      <tr>
+        <th>Platform</th>
+        <th>Download</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Windows — Installer</strong> <span class="badge">RECOMMENDED</span></td>
+        <td><a href="https://github.com/Chamanrajragu/claude-multi/releases/latest">Claude-Multi-Setup.exe</a></td>
+        <td>Installs like any Windows app</td>
+      </tr>
+      <tr>
+        <td><strong>Windows — Portable</strong></td>
+        <td><a href="https://github.com/Chamanrajragu/claude-multi/releases/latest">Claude-Multi.exe</a></td>
+        <td>No install, run from anywhere</td>
+      </tr>
+      <tr>
+        <td><strong>macOS</strong></td>
+        <td><a href="https://github.com/Chamanrajragu/claude-multi/releases/latest">Claude-Multi.dmg</a></td>
+        <td>Apple Silicon + Intel</td>
+      </tr>
+      <tr>
+        <td><strong>Linux</strong></td>
+        <td><a href="https://github.com/Chamanrajragu/claude-multi/releases/latest">Claude-Multi.AppImage</a></td>
+        <td>Works on most distros</td>
+      </tr>
+      <tr>
+        <td><strong>Source</strong></td>
+        <td><a href="https://github.com/Chamanrajragu/claude-multi">github.com/Chamanrajragu/claude-multi</a></td>
+        <td><code>npm install &amp;&amp; npm start</code></td>
+      </tr>
+    </tbody>
+  </table>
+  <p style="margin-top:16px; font-size:13px; color:var(--muted);">
+    Requires <a href="https://nodejs.org">Node.js 18+</a> and <a href="https://claude.com/claude-code">Claude Code CLI</a> installed on your machine.
+    Windows SmartScreen may warn — click <strong>More info → Run anyway</strong>. Source is fully open.
+  </p>
+</section>
+
+<section id="faq">
+  <h2>Frequently asked questions</h2>
+  <p class="sub">Everything you need to know before downloading.</p>
+  <div class="faq">
+    <div class="faq-item">
+      <div class="faq-q">Do I need a Claude API key?</div>
+      <div class="faq-a">No. Claude Multi uses your normal Claude Pro / Max / Team subscription login — the same one you use for Claude Code. No API key, no extra cost.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Is Claude Multi free?</div>
+      <div class="faq-a">100% free and open source under the MIT license. No paid tier, no account required, no ads, no monetization of any kind.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Is it against Anthropic's terms of service?</div>
+      <div class="faq-a">Claude Multi is not account-sharing — each account uses its own subscription. However, Anthropic's February 2026 terms restrict subscription logins in third-party tools. Use at your own risk and read <a href="https://www.anthropic.com/legal/consumer-terms">Anthropic's terms</a> yourself.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">How many accounts can I add?</div>
+      <div class="faq-a">Up to 20 Claude accounts.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Does it work if I only have one Claude account?</div>
+      <div class="faq-a">Yes — single-account mode works perfectly. You still get parallel chats, the context inspector, @file autocomplete, voice input, prompt templates, and everything else.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Can it run while I sleep?</div>
+      <div class="faq-a">Yes — the Auto-loop feature sends your prompt on all accounts in rotation, waits through the 5-hour resets, and repeats indefinitely. Set it up and walk away.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Does Claude Multi send any data to external servers?</div>
+      <div class="faq-a">No. Zero telemetry, zero analytics, zero outbound requests from the app. Your conversations go only between your local Claude process and Anthropic's servers. Everything else stays on your machine.</div>
+    </div>
+  </div>
+</section>
+
+<div class="cta-block">
+  <h2>Stop hitting the usage wall. Start Claude Multi today.</h2>
+  <p>Free, open source, 2-minute setup. Windows · macOS · Linux.</p>
+  <div class="cta-ctas">
+    <a class="btn btn-primary" href="https://github.com/Chamanrajragu/claude-multi/releases/latest">⬇ Download Free</a>
+    <a class="btn btn-secondary" href="https://github.com/Chamanrajragu/claude-multi">⭐ Star on GitHub</a>
+  </div>
+</div>
+
+<footer>
+  <span>© 2026 <a href="https://github.com/Chamanrajragu">Chaman Raj</a> · MIT License</span>
+  <span>Not affiliated with Anthropic · "Claude" is a trademark of Anthropic, PBC</span>
+  <span>
+    <a href="https://github.com/Chamanrajragu/claude-multi">GitHub</a> ·
+    <a href="https://github.com/Chamanrajragu/claude-multi/releases">Releases</a> ·
+    <a href="https://github.com/Chamanrajragu/claude-multi/issues">Issues</a>
+  </span>
+</footer>
+
+</body>
+</html>
