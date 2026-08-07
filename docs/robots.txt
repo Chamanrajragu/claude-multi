@@ -13,4 +13,4 @@ Allow: /
 User-agent: Google-Extended
 Allow: /
 
-Sitemap: https://chamanrajragu.github.io/claude-multi/sitemap.xml
+Sitemap: https://purffle.com/claude-multi/sitemap.xml

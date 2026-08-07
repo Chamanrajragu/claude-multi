@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#download)
 
-**[🌐 claude-multi website](https://chamanrajragu.github.io/claude-multi/)** · **[⬇ Download Free for Windows](https://github.com/Chamanrajragu/claude-multi/releases/latest)** · **[macOS / Linux](https://github.com/Chamanrajragu/claude-multi/releases/latest)** · **[Quick Start](#quick-start)**
+**[🌐 claude-multi website](https://purffle.com/claude-multi/)** · **[⬇ Download Free for Windows](https://github.com/Chamanrajragu/claude-multi/releases/latest)** · **[macOS / Linux](https://github.com/Chamanrajragu/claude-multi/releases/latest)** · **[Quick Start](#quick-start)**
 
 > ⭐ **If this saves you from a usage wall — please star the repo!** It helps others find Claude Multi when they search for it.
 

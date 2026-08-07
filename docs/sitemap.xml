@@ -2,44 +2,44 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
-    <loc>https://chamanrajragu.github.io/claude-multi/</loc>
+    <loc>https://purffle.com/claude-multi/</loc>
     <lastmod>2026-08-08</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://chamanrajragu.github.io/claude-multi/screenshot-main.png</image:loc>
+      <image:loc>https://purffle.com/claude-multi/screenshot-main.png</image:loc>
       <image:title>Claude Multi — run multiple Claude accounts in one desktop app</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://chamanrajragu.github.io/claude-multi/screenshot-autoloop.png</image:loc>
+      <image:loc>https://purffle.com/claude-multi/screenshot-autoloop.png</image:loc>
       <image:title>Claude Multi auto-loop running 24/7 across multiple Claude accounts</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://chamanrajragu.github.io/claude-multi/screenshot-limit.png</image:loc>
+      <image:loc>https://purffle.com/claude-multi/screenshot-limit.png</image:loc>
       <image:title>Claude usage limit reached — switch account and continue where Claude left off</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://chamanrajragu.github.io/claude-multi/screenshot-dashboard.png</image:loc>
+      <image:loc>https://purffle.com/claude-multi/screenshot-dashboard.png</image:loc>
       <image:title>Claude Multi account dashboard with live cooldown timers</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://chamanrajragu.github.io/claude-multi/screenshot-context.png</image:loc>
+      <image:loc>https://purffle.com/claude-multi/screenshot-context.png</image:loc>
       <image:title>Claude context window inspector — see what is using your tokens</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://chamanrajragu.github.io/claude-multi/screenshot-accounts.png</image:loc>
+      <image:loc>https://purffle.com/claude-multi/screenshot-accounts.png</image:loc>
       <image:title>Claude Multi account switcher — multiple Claude accounts signed in at once</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://chamanrajragu.github.io/claude-multi/screenshot-tokens.png</image:loc>
+      <image:loc>https://purffle.com/claude-multi/screenshot-tokens.png</image:loc>
       <image:title>Claude Multi token-saving settings — auto-compact, turn caps and spend caps</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://chamanrajragu.github.io/claude-multi/screenshot-palette.png</image:loc>
+      <image:loc>https://purffle.com/claude-multi/screenshot-palette.png</image:loc>
       <image:title>Claude Multi command palette — every action one Ctrl+K away</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://chamanrajragu.github.io/claude-multi/screenshot-light.png</image:loc>
+      <image:loc>https://purffle.com/claude-multi/screenshot-light.png</image:loc>
       <image:title>Claude Multi light theme with inline red and green diffs</image:title>
     </image:image>
   </url>
