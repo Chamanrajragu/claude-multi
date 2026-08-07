@@ -202,13 +202,25 @@ Claude Multi remembers which account to use per project folder.
 
 <div align="center">
 
-| Main chat | Usage dashboard |
+| Main chat | Auto-loop running 24/7 |
 |:---:|:---:|
-| <img src="docs/screenshot-main.png" width="420" alt="Claude Multi main chat with tool cards and streaming response" /> | <img src="docs/screenshot-dashboard.png" width="420" alt="Account usage dashboard with cooldown timers" /> |
+| <img src="docs/screenshot-main.png" width="420" alt="Claude Multi main chat with red/green diff tool cards and streaming response" /> | <img src="docs/screenshot-autoloop.png" width="420" alt="Auto-loop rotating a prompt across every Claude account, round by round" /> |
 
-| Account switcher | Model and effort picker |
+| Usage dashboard | What's using my context |
 |:---:|:---:|
-| <img src="docs/screenshot-accounts.png" width="420" alt="Multi-account switcher with login status" /> | <img src="docs/screenshot-models.png" width="420" alt="Model and effort selector" /> |
+| <img src="docs/screenshot-dashboard.png" width="420" alt="Account usage dashboard with cooldown timers and per-account token totals" /> | <img src="docs/screenshot-context.png" width="420" alt="Context inspector showing exactly which tools, memory files and messages fill the context window" /> |
+
+| Account switcher | Usage limit — carry the chat over |
+|:---:|:---:|
+| <img src="docs/screenshot-accounts.png" width="420" alt="Multi-account switcher with login status and cooldown countdowns" /> | <img src="docs/screenshot-limit.png" width="420" alt="Usage limit reached dialog offering to switch account and continue where Claude left off" /> |
+
+| Command palette | Token settings |
+|:---:|:---:|
+| <img src="docs/screenshot-palette.png" width="420" alt="Command palette with fuzzy search over every action, chat and account" /> | <img src="docs/screenshot-tokens.png" width="420" alt="Token-saving settings: auto-compact, context warnings, turn and spend caps" /> |
+
+| Model picker | Light theme |
+|:---:|:---:|
+| <img src="docs/screenshot-models.png" width="420" alt="Per-chat model selector" /> | <img src="docs/screenshot-light.png" width="420" alt="Claude Multi in light theme" /> |
 
 </div>
 

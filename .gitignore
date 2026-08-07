@@ -22,3 +22,10 @@ Thumbs.db
 # local app data (never commit account/login data)
 .claude-accounts/
 accounts.json
+
+# marketing secrets — never commit API keys
+marketing/.env
+marketing/output/
+marketing/.tmp-shorts/
+marketing/.tour-raw/
+marketing/.vo/

@@ -105,6 +105,10 @@
     /* FEATURES GRID */
     .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
     .feature-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+    .shots-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+    .shot figure { margin: 0; }
+    .shot img { width: 100%; height: auto; display: block; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(0,0,0,.45); }
+    .shot figcaption { margin-top: 10px; font-size: 14px; color: var(--muted); text-align: center; }
     .feature-icon { font-size: 28px; margin-bottom: 12px; }
     .feature-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
     .feature-card p { font-size: 14px; color: var(--muted); line-height: 1.6; }
@@ -158,6 +162,7 @@
   </a>
   <div class="nav-links">
     <a href="#features">Features</a>
+    <a href="#screenshots">Screenshots</a>
     <a href="#how-it-works">How it works</a>
     <a href="#download">Download</a>
     <a href="#faq">FAQ</a>
@@ -231,6 +236,45 @@
       <h3>100% private</h3>
       <p>No telemetry. No analytics. No servers. No outbound requests from the app. Everything stays on your machine. Fully auditable open source code.</p>
     </div>
+  </div>
+</section>
+
+<section id="screenshots">
+  <h2>See Claude Multi in action</h2>
+  <p class="sub">Every shot below is the real app, current release — nothing mocked up.</p>
+  <div class="shots-grid">
+    <div class="shot"><figure>
+      <img src="screenshot-autoloop.png" loading="lazy" alt="Claude Multi auto-loop running 24/7 — rotating one prompt across Personal, Work and Studio Claude accounts with live round counters and reset timers" />
+      <figcaption>24/7 auto-loop — one prompt, every account, round after round</figcaption>
+    </figure></div>
+    <div class="shot"><figure>
+      <img src="screenshot-limit.png" loading="lazy" alt="Claude usage limit reached — Claude Multi offers to switch to another account and continue exactly where Claude left off" />
+      <figcaption>Hit a usage limit? Carry the chat over and keep going</figcaption>
+    </figure></div>
+    <div class="shot"><figure>
+      <img src="screenshot-dashboard.png" loading="lazy" alt="Claude Multi activity and usage dashboard showing per-account status, cooldown countdowns and tokens used since reset" />
+      <figcaption>Activity dashboard — who's active, who's cooling, who's fresh</figcaption>
+    </figure></div>
+    <div class="shot"><figure>
+      <img src="screenshot-context.png" loading="lazy" alt="Claude Multi context inspector breaking down exactly which tools, CLAUDE.md memory files and messages are filling the 200K context window" />
+      <figcaption>See exactly what's eating your context — and cut it</figcaption>
+    </figure></div>
+    <div class="shot"><figure>
+      <img src="screenshot-accounts.png" loading="lazy" alt="Claude Multi account switcher listing multiple signed-in Claude accounts with status dots and keyboard shortcuts" />
+      <figcaption>Switch accounts in one click, or Ctrl+1…9</figcaption>
+    </figure></div>
+    <div class="shot"><figure>
+      <img src="screenshot-tokens.png" loading="lazy" alt="Claude Multi token-saving settings — auto-compact long chats, context warnings, per-turn step and spend caps" />
+      <figcaption>Token savers — stop runaway turns before they cost you</figcaption>
+    </figure></div>
+    <div class="shot"><figure>
+      <img src="screenshot-palette.png" loading="lazy" alt="Claude Multi command palette with fuzzy search across every action, chat, model and account" />
+      <figcaption>Command palette — everything is one Ctrl+K away</figcaption>
+    </figure></div>
+    <div class="shot"><figure>
+      <img src="screenshot-light.png" loading="lazy" alt="Claude Multi running in light theme with red and green inline diffs for file edits" />
+      <figcaption>Light theme, accent colours, and inline red/green diffs</figcaption>
+    </figure></div>
   </div>
 </section>
 

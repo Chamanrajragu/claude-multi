@@ -176,9 +176,12 @@ button { font-family: inherit; color: inherit; }
 .dash-l { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .dash-sec-label { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--faint); margin: 18px 2px 8px; }
 .dash-accs { display: flex; flex-direction: column; gap: 6px; }
-.dash-acc { display: flex; align-items: center; gap: 10px; padding: 9px 11px; background: var(--panel); border: 1px solid var(--border-soft); border-radius: 10px; }
+/* Everything except the name column was flex:none, so a long status pill plus
+   three action buttons crushed the name to an ellipsis — or off the row
+   entirely. Wrap instead of squeezing, and guarantee the name a minimum width. */
+.dash-acc { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 9px 11px; background: var(--panel); border: 1px solid var(--border-soft); border-radius: 10px; }
 .dash-acc-av { flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; font-weight: 800; color: var(--sidebar); background: linear-gradient(135deg, var(--accent), var(--accent-2, #c96442)); }
-.dash-acc-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.dash-acc-meta { display: flex; flex-direction: column; min-width: 132px; flex: 1 1 132px; }
 .dash-acc-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dash-acc-sub { font-size: 11.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dash-acc-stat { font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--hover); color: var(--muted); flex: none; }
@@ -187,7 +190,7 @@ button { font-family: inherit; color: inherit; }
 .dash-acc-use { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
 .dash-acc-clear { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; flex: none; }
 .dash-acc-clear:hover { background: var(--hover); color: var(--fg); }
-.dash-acc-num { font-size: 11.5px; color: var(--muted); flex: none; }
+.dash-acc-num { font-size: 11.5px; color: var(--muted); flex: none; margin-left: auto; text-align: right; }
 .dash-chat { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 10px; padding: 4px 12px; }
 .dash-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
 .dash-row:last-child { border-bottom: none; }
