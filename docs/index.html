@@ -10,6 +10,11 @@
   <meta name="keywords" content="Claude Multi, Claude Code multiple accounts, Claude usage limit, Claude rate limit fix, Claude multi account, Claude Code desktop app, Claude Code GUI, multiple Claude accounts, Claude auto switch, Claude 5 hour limit, Claude Code Windows, Claude Code Mac, claude multi download, open source claude client, Claude parallel chats, Claude token saver, anthropic claude multi account" />
   <meta name="author" content="Chaman Raj" />
   <link rel="canonical" href="https://chamanrajragu.github.io/claude-multi/" />
+  <!-- Without max-image-preview:large, Google shows a thumbnail instead of a
+       full-width screenshot in results — a big difference in click-through. -->
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <meta name="theme-color" content="#0d1117" />
+  <link rel="sitemap" type="application/xml" href="/claude-multi/sitemap.xml" />
 
   <!-- Open Graph (Discord, Slack, Twitter previews) -->
   <meta property="og:type" content="website" />
@@ -17,8 +22,11 @@
   <meta property="og:title" content="Claude Multi — Multiple Claude Accounts, One Window" />
   <meta property="og:description" content="Free desktop app: run Claude Code with multiple accounts and auto-switch when one hits its usage limit. 24/7 auto-loop, parallel chats, zero setup. Windows · macOS · Linux." />
   <meta property="og:image" content="https://chamanrajragu.github.io/claude-multi/screenshot-main.png" />
-  <meta property="og:image:width" content="1280" />
-  <meta property="og:image:height" content="800" />
+  <meta property="og:image:width" content="1320" />
+  <meta property="og:image:height" content="850" />
+  <meta property="og:image:alt" content="Claude Multi desktop app running four parallel Claude chats across multiple accounts with live cooldown timers" />
+  <meta property="og:site_name" content="Claude Multi" />
+  <meta property="og:locale" content="en_US" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
@@ -49,7 +57,152 @@
       "url": "https://github.com/Chamanrajragu"
     },
     "license": "https://opensource.org/licenses/MIT",
+    "softwareVersion": "1.26.0",
+    "featureList": [
+      "Run multiple Claude accounts in one desktop app",
+      "Automatic account switching when a usage limit is hit",
+      "Resume an interrupted task on another account",
+      "24/7 auto-loop across every account",
+      "Parallel chats, each with its own folder and account",
+      "Live 5-hour cooldown timers",
+      "Context window inspector",
+      "Works with Claude Pro, Max and Team subscriptions — no API key"
+    ],
     "keywords": "Claude Multi, Claude Code, multiple accounts, usage limit, auto-switch, desktop app, electron"
+  }
+  </script>
+
+  <!-- HowTo: targets the "how to use Claude with multiple accounts" query directly.
+       Steps mirror the #how-it-works section verbatim, as Google requires. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "How to use Claude with multiple accounts in one app",
+    "description": "Run several Claude subscriptions side by side in one desktop app and keep working when one hits its 5-hour usage limit.",
+    "totalTime": "PT2M",
+    "supply": [{ "@type": "HowToSupply", "name": "Two or more Claude Pro, Max or Team subscriptions" }],
+    "tool": [
+      { "@type": "HowToTool", "name": "Claude Multi" },
+      { "@type": "HowToTool", "name": "Claude Code CLI" },
+      { "@type": "HowToTool", "name": "Node.js 18 or newer" }
+    ],
+    "step": [
+      {
+        "@type": "HowToStep",
+        "name": "Add your Claude accounts",
+        "text": "Each account gets its own isolated directory via CLAUDE_CONFIG_DIR — the mechanism officially documented by Anthropic. Logins never collide.",
+        "url": "https://chamanrajragu.github.io/claude-multi/#how-it-works"
+      },
+      {
+        "@type": "HowToStep",
+        "name": "Start a chat and work normally",
+        "text": "Open your project folder and chat exactly like you would in Claude Code. Claude Multi runs the official Claude Agent SDK under the hood — no difference in capability.",
+        "url": "https://chamanrajragu.github.io/claude-multi/#how-it-works"
+      },
+      {
+        "@type": "HowToStep",
+        "name": "Hit a limit? Claude Multi handles it",
+        "text": "When the usage limit error appears in the stream, Claude Multi stamps that account with its cooldown timer, picks the next free account, copies the transcript, resumes the session, and re-issues your last instruction.",
+        "url": "https://chamanrajragu.github.io/claude-multi/#how-it-works"
+      },
+      {
+        "@type": "HowToStep",
+        "name": "Work continues",
+        "text": "A brief notification appears and your task keeps running. The switched-from account shows a live cooldown countdown so you know when it will be ready again.",
+        "url": "https://chamanrajragu.github.io/claude-multi/#how-it-works"
+      }
+    ]
+  }
+  </script>
+
+  <!-- FAQ rich results: makes the Q&A expandable directly in Google -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How do I use Claude with multiple accounts in one app?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Install Claude Multi, click Add account for each Claude subscription you own, and sign in to each one once. Every account gets its own isolated config directory, so the logins never collide. Pick an account and start chatting. When one account hits its 5-hour usage limit, Claude Multi carries the conversation to another account and re-sends the interrupted instruction automatically."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do I need a Claude API key?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Claude Multi uses your normal Claude Pro, Max or Team subscription login — the same one you use for Claude Code. No API key, no extra cost."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Claude Multi free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Claude Multi is 100% free and open source under the MIT license. No paid tier, no account required, no ads, and no monetization of any kind."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What happens when Claude hits its 5-hour usage limit?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Claude Multi detects the limit, parks that account with a live countdown to its reset, and offers to switch to an account that is free right now. It copies the conversation transcript across and re-issues the instruction that was cut off, so Claude continues the same task on the new account instead of starting over."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Claude Multi against Anthropic's terms of service?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Claude Multi is not account sharing — each account uses its own separate subscription, and logins stay on your own machine. However, Anthropic's February 2026 terms restrict the use of subscription logins in third-party tools. Use at your own risk and read Anthropic's consumer terms yourself before deciding."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How many Claude accounts can I add?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Up to 20 Claude accounts. Each one keeps its own login, its own usage window and its own cooldown timer."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Claude Multi work with only one Claude account?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Single-account mode works fully. You still get parallel chats, the context window inspector, @file autocomplete, voice input, prompt templates, red/green diffs and every other feature."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can Claude keep working while I sleep?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The 24/7 auto-loop sends your prompt on every selected account in rotation, waits through each 5-hour reset, then starts a new round — indefinitely, until you stop it."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Claude Multi send any data to external servers?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. There is zero telemetry, zero analytics and no outbound requests from the app itself. Your conversations travel only between your local Claude process and Anthropic's servers. Everything else stays on your machine."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Which operating systems does Claude Multi support?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Windows (installer and portable), macOS (Apple Silicon DMG) and Linux (AppImage). It requires Node.js 18 or newer and the Claude Code CLI installed on your machine."
+        }
+      }
+    ]
   }
   </script>
 
@@ -180,7 +333,7 @@
     <a class="btn btn-secondary" href="https://github.com/Chamanrajragu/claude-multi/releases/latest">macOS · Linux</a>
     <a class="btn btn-secondary" href="https://github.com/Chamanrajragu/claude-multi">⭐ Star on GitHub</a>
   </div>
-  <img class="hero-screenshot" src="screenshot-main.png" alt="Claude Multi desktop app showing multiple accounts, live usage meters, and streaming chat" />
+  <img class="hero-screenshot" src="screenshot-main.png" width="1320" height="850" alt="Claude Multi desktop app showing multiple accounts, live usage meters, and streaming chat" />
   <p class="hero-caption">Claude Multi on Windows — multiple accounts, live cooldown timers, real-time streamed chat</p>
 </div>
 
@@ -244,35 +397,35 @@
   <p class="sub">Every shot below is the real app, current release — nothing mocked up.</p>
   <div class="shots-grid">
     <div class="shot"><figure>
-      <img src="screenshot-autoloop.png" loading="lazy" alt="Claude Multi auto-loop running 24/7 — rotating one prompt across Personal, Work and Studio Claude accounts with live round counters and reset timers" />
+      <img src="screenshot-autoloop.png" width="1320" height="850" loading="lazy" alt="Claude Multi auto-loop running 24/7 — rotating one prompt across Personal, Work and Studio Claude accounts with live round counters and reset timers" />
       <figcaption>24/7 auto-loop — one prompt, every account, round after round</figcaption>
     </figure></div>
     <div class="shot"><figure>
-      <img src="screenshot-limit.png" loading="lazy" alt="Claude usage limit reached — Claude Multi offers to switch to another account and continue exactly where Claude left off" />
+      <img src="screenshot-limit.png" width="1320" height="850" loading="lazy" alt="Claude usage limit reached — Claude Multi offers to switch to another account and continue exactly where Claude left off" />
       <figcaption>Hit a usage limit? Carry the chat over and keep going</figcaption>
     </figure></div>
     <div class="shot"><figure>
-      <img src="screenshot-dashboard.png" loading="lazy" alt="Claude Multi activity and usage dashboard showing per-account status, cooldown countdowns and tokens used since reset" />
+      <img src="screenshot-dashboard.png" width="1320" height="850" loading="lazy" alt="Claude Multi activity and usage dashboard showing per-account status, cooldown countdowns and tokens used since reset" />
       <figcaption>Activity dashboard — who's active, who's cooling, who's fresh</figcaption>
     </figure></div>
     <div class="shot"><figure>
-      <img src="screenshot-context.png" loading="lazy" alt="Claude Multi context inspector breaking down exactly which tools, CLAUDE.md memory files and messages are filling the 200K context window" />
+      <img src="screenshot-context.png" width="1320" height="850" loading="lazy" alt="Claude Multi context inspector breaking down exactly which tools, CLAUDE.md memory files and messages are filling the 200K context window" />
       <figcaption>See exactly what's eating your context — and cut it</figcaption>
     </figure></div>
     <div class="shot"><figure>
-      <img src="screenshot-accounts.png" loading="lazy" alt="Claude Multi account switcher listing multiple signed-in Claude accounts with status dots and keyboard shortcuts" />
+      <img src="screenshot-accounts.png" width="1320" height="850" loading="lazy" alt="Claude Multi account switcher listing multiple signed-in Claude accounts with status dots and keyboard shortcuts" />
       <figcaption>Switch accounts in one click, or Ctrl+1…9</figcaption>
     </figure></div>
     <div class="shot"><figure>
-      <img src="screenshot-tokens.png" loading="lazy" alt="Claude Multi token-saving settings — auto-compact long chats, context warnings, per-turn step and spend caps" />
+      <img src="screenshot-tokens.png" width="1320" height="850" loading="lazy" alt="Claude Multi token-saving settings — auto-compact long chats, context warnings, per-turn step and spend caps" />
       <figcaption>Token savers — stop runaway turns before they cost you</figcaption>
     </figure></div>
     <div class="shot"><figure>
-      <img src="screenshot-palette.png" loading="lazy" alt="Claude Multi command palette with fuzzy search across every action, chat, model and account" />
+      <img src="screenshot-palette.png" width="1320" height="850" loading="lazy" alt="Claude Multi command palette with fuzzy search across every action, chat, model and account" />
       <figcaption>Command palette — everything is one Ctrl+K away</figcaption>
     </figure></div>
     <div class="shot"><figure>
-      <img src="screenshot-light.png" loading="lazy" alt="Claude Multi running in light theme with red and green inline diffs for file edits" />
+      <img src="screenshot-light.png" width="1320" height="850" loading="lazy" alt="Claude Multi running in light theme with red and green inline diffs for file edits" />
       <figcaption>Light theme, accent colours, and inline red/green diffs</figcaption>
     </figure></div>
   </div>
@@ -280,8 +433,8 @@
 
 <section id="how-it-works" style="background: var(--surface); max-width:100%; padding: 64px 0;">
   <div style="max-width:800px; margin:0 auto; padding: 0 20px;">
-    <h2>How Claude Multi works</h2>
-    <p class="sub">Simple under the hood — powerful in practice.</p>
+    <h2>How to use Claude with multiple accounts in one app</h2>
+    <p class="sub">Four steps, about two minutes. Here is exactly what Claude Multi does under the hood.</p>
     <div class="steps">
       <div class="step">
         <div class="step-num">1</div>
@@ -365,6 +518,14 @@
   <p class="sub">Everything you need to know before downloading.</p>
   <div class="faq">
     <div class="faq-item">
+      <div class="faq-q">How do I use Claude with multiple accounts in one app?</div>
+      <div class="faq-a">Install Claude Multi, click <strong>Add account</strong> for each Claude subscription you own, and sign in to each one once. Every account gets its own isolated config directory, so the logins never collide. Pick an account and start chatting — and when one hits its 5-hour usage limit, Claude Multi carries the conversation to another account and re-sends the interrupted instruction automatically.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">What happens when Claude hits its 5-hour usage limit?</div>
+      <div class="faq-a">Claude Multi detects the limit, parks that account with a live countdown to its reset, and offers to switch to an account that is free right now. It copies the conversation across and re-issues the instruction that was cut off — so Claude continues the same task on the new account instead of starting over.</div>
+    </div>
+    <div class="faq-item">
       <div class="faq-q">Do I need a Claude API key?</div>
       <div class="faq-a">No. Claude Multi uses your normal Claude Pro / Max / Team subscription login — the same one you use for Claude Code. No API key, no extra cost.</div>
     </div>
@@ -373,24 +534,28 @@
       <div class="faq-a">100% free and open source under the MIT license. No paid tier, no account required, no ads, no monetization of any kind.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q">Is it against Anthropic's terms of service?</div>
+      <div class="faq-q">Is Claude Multi against Anthropic's terms of service?</div>
       <div class="faq-a">Claude Multi is not account-sharing — each account uses its own subscription. However, Anthropic's February 2026 terms restrict subscription logins in third-party tools. Use at your own risk and read <a href="https://www.anthropic.com/legal/consumer-terms">Anthropic's terms</a> yourself.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q">How many accounts can I add?</div>
+      <div class="faq-q">How many Claude accounts can I add?</div>
       <div class="faq-a">Up to 20 Claude accounts.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q">Does it work if I only have one Claude account?</div>
+      <div class="faq-q">Does Claude Multi work with only one Claude account?</div>
       <div class="faq-a">Yes — single-account mode works perfectly. You still get parallel chats, the context inspector, @file autocomplete, voice input, prompt templates, and everything else.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q">Can it run while I sleep?</div>
+      <div class="faq-q">Can Claude keep working while I sleep?</div>
       <div class="faq-a">Yes — the Auto-loop feature sends your prompt on all accounts in rotation, waits through the 5-hour resets, and repeats indefinitely. Set it up and walk away.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q">Does Claude Multi send any data to external servers?</div>
       <div class="faq-a">No. Zero telemetry, zero analytics, zero outbound requests from the app. Your conversations go only between your local Claude process and Anthropic's servers. Everything else stays on your machine.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Which operating systems does Claude Multi support?</div>
+      <div class="faq-a">Windows (installer and portable), macOS (Apple Silicon DMG) and Linux (AppImage). It requires <a href="https://nodejs.org">Node.js 18+</a> and the <a href="https://claude.com/claude-code">Claude Code CLI</a> installed on your machine.</div>
     </div>
   </div>
 </section>

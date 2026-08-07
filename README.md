@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#download)
 
-**[⬇ Download Free for Windows](https://github.com/Chamanrajragu/claude-multi/releases/latest)** · **[macOS / Linux](https://github.com/Chamanrajragu/claude-multi/releases/latest)** · **[Quick Start](#quick-start)**
+**[🌐 claude-multi website](https://chamanrajragu.github.io/claude-multi/)** · **[⬇ Download Free for Windows](https://github.com/Chamanrajragu/claude-multi/releases/latest)** · **[macOS / Linux](https://github.com/Chamanrajragu/claude-multi/releases/latest)** · **[Quick Start](#quick-start)**
 
 > ⭐ **If this saves you from a usage wall — please star the repo!** It helps others find Claude Multi when they search for it.
 
@@ -355,6 +355,15 @@ Covers: usage-limit detection, reset-time parsing, account selection logic, cool
 ---
 
 ## FAQ
+
+**How do I use Claude with multiple accounts in one application?**  
+Install Claude Multi, click **Add account** once per Claude subscription you own, and sign in to each. Every account gets its own isolated `CLAUDE_CONFIG_DIR`, so the logins never collide. Then just chat — when one account hits its limit, Claude Multi moves the conversation to a free account and re-sends the interrupted instruction. Full walkthrough: [Quick Start](#quick-start).
+
+**What happens when Claude hits the 5-hour usage limit?**  
+Claude Multi reads the limit message, parks that account with a live countdown to its real reset time, then switches to an account that is free right now — copying the transcript across and re-issuing the instruction that got cut off. Your task continues instead of starting over.
+
+**Can I run two Claude accounts at the same time?**  
+Yes. Each chat carries its own folder, its own account and its own session, so you can run several accounts in parallel on different projects simultaneously. Background chats keep working while you look at another one.
 
 **Do I need a Claude API key?**  
 No. Claude Multi uses your normal Claude Pro / Max / Team subscription login — the same one you use with Claude Code. No API key, no extra cost.

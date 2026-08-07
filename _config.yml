@@ -1,5 +1,0 @@
-theme: null
-title: "Claude Multi — Multiple Claude Accounts Desktop App"
-description: "Free desktop app to run Claude Code with multiple accounts. Auto-switches when one hits its usage limit. 24/7 auto-loop, parallel chats, live cooldown timers."
-baseurl: "/claude-multi"
-url: "https://chamanrajragu.github.io"
