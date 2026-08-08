@@ -140,6 +140,15 @@ button { font-family: inherit; color: inherit; }
 .icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; cursor: pointer; font-size: 14px; }
 .icon-btn:hover { background: var(--hover); }
 
+/* ================= UPDATE BANNER ================= */
+.update-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 9px 18px; font-size: 12.5px; background: var(--accent-soft); border-bottom: 1px solid var(--border-soft); color: var(--text); }
+.update-bar .ub-ico { font-size: 14px; }
+.update-bar .ub-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ub-btn { flex: none; padding: 5px 13px; border-radius: 999px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; background: var(--accent); color: var(--accent-ink); }
+.ub-btn:hover { filter: brightness(1.06); }
+.ub-x { flex: none; width: 24px; height: 24px; border-radius: 7px; border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; }
+.ub-x:hover { background: var(--hover); color: var(--text); }
+
 /* ================= TRANSCRIPT ================= */
 .transcript { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 26px 0; }
 .msg-wrap { max-width: var(--col); margin: 0 auto; padding: 0 26px; }
@@ -329,6 +338,12 @@ button { font-family: inherit; color: inherit; }
 .menu button:hover { background: var(--hover); }
 .menu .m-sep { height: 1px; background: var(--border-soft); margin: 6px 4px; }
 .menu .m-search { width: 100%; margin: 2px 0 6px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); outline: none; font-size: 12.5px; }
+/* saved workspaces inside the project menu */
+.ws-row { display: flex; align-items: stretch; }
+.ws-row .ws-open { flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; gap: 1px; border-radius: 8px 0 0 8px; }
+.ws-del { flex: none; padding: 0 9px; border: none; background: transparent; color: var(--faint); cursor: pointer; font-size: 11px; border-radius: 0 8px 8px 0; opacity: 0; transition: opacity .15s; }
+.ws-row:hover .ws-del { opacity: 1; }
+.ws-del:hover { background: var(--hover) !important; color: var(--err) !important; }
 .menu-acc-row { display: flex; align-items: center; }
 .menu-acc-row .menu-acc { flex: 1; min-width: 0; border-radius: 8px 0 0 8px; }
 .menu-acc-more { flex-shrink: 0; padding: 6px 8px; border-radius: 0 8px 8px 0; font-size: 14px; color: var(--muted); background: transparent; border: none; cursor: pointer; opacity: 0; transition: opacity 0.15s; width: auto; }
@@ -387,6 +402,11 @@ button { font-family: inherit; color: inherit; }
 .slider::before { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .15s; }
 .switch input:checked + .slider { background: var(--accent); }
 .switch input:checked + .slider::before { transform: translateX(18px); }
+
+.hotkey-input { min-width: 150px; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 12.5px; font-family: inherit; cursor: pointer; }
+.hotkey-input:hover:not(:disabled) { border-color: var(--accent); }
+.hotkey-input.capturing { border-color: var(--accent); color: var(--accent); }
+.hotkey-input:disabled { opacity: .45; cursor: default; }
 
 .prompt-modal { width: 420px; }
 .prompt-label { margin: 0 0 12px; font-size: 14px; }
@@ -448,9 +468,20 @@ button { font-family: inherit; color: inherit; }
 .at-dropdown { position: fixed; z-index: 300; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); max-height: 240px; overflow-y: auto; min-width: 240px; max-width: 480px; }
 .at-item { display: block; width: 100%; text-align: left; padding: 7px 12px; border: none; background: transparent; color: var(--text); font-size: 12.5px; font-family: 'Cascadia Mono', Consolas, monospace; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .at-item:hover, .at-item.active { background: var(--hover); }
+/* slash-command dropdown — reuses the @file shell, but each row pairs a
+   monospace command with a prose description, so it overrides .at-item's
+   display and must come after it. */
+.slash-dropdown { min-width: 360px; }
+.slash-item { display: flex; align-items: baseline; gap: 12px; }
+.slash-name { flex: none; color: var(--accent); font-weight: 600; }
+.slash-desc { flex: 1; min-width: 0; font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.at-item.active .slash-desc, .at-item:hover .slash-desc { color: var(--text); }
 
-.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 200; box-shadow: var(--shadow); }
+.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; max-width: min(560px, 90vw); background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 200; box-shadow: var(--shadow); }
 .toast.err { background: var(--err); color: #fff; }
+.toast-msg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast-action { flex: none; padding: 4px 12px; border-radius: 999px; border: none; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 700; background: var(--bg); color: var(--text); }
+.toast-action:hover { filter: brightness(1.12); }
 
 /* ── Character counter ──────────────────────────────────── */
 .input-counter { position: absolute; bottom: 6px; right: 10px; font-size: 10px; color: var(--faint); pointer-events: none; }
@@ -461,7 +492,10 @@ button { font-family: inherit; color: inherit; }
 pre { position: relative; }
 
 /* ── Recent-projects picker ─────────────────────────────── */
-.rp-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; text-align: left; }
+/* `.menu .rp-item` (0,2,0) has to outrank `.menu button` (0,1,1), which sets
+   align-items:center — in a column flex box that centres the name and path
+   instead of left-aligning them. */
+.menu .rp-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; text-align: left; }
 .rp-name { font-weight: 600; font-size: 13px; color: var(--text); }
 .rp-path { font-size: 10px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
 
@@ -513,6 +547,8 @@ pre { position: relative; }
 .code-copy { position: absolute; top: 7px; right: 7px; border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer; font-size: 11px; padding: 2px 8px; border-radius: 6px; opacity: 0; transition: opacity .12s; }
 .md pre:hover .code-copy { opacity: 1; }
 .code-copy:hover { color: var(--accent); border-color: var(--accent); }
+/* Save sits to the left of Copy, in the same hover-revealed cluster. */
+.code-save { right: 56px; }
 .turn-meta { font-size: 11px; color: var(--faint); margin-top: 8px; display: flex; gap: 12px; }
 
 /* command palette */

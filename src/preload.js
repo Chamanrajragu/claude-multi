@@ -38,8 +38,11 @@ contextBridge.exposeInMainWorld('cc', {
   openConvo: (id) => ipcRenderer.invoke('chat:openConvo', id),
   renameConvo: (id, title) => ipcRenderer.invoke('chat:renameConvo', id, title),
   deleteConvo: (id) => ipcRenderer.invoke('chat:deleteConvo', id),
+  undoDeleteConvo: () => ipcRenderer.invoke('chat:undoDelete'),
   pinConvo: (id) => ipcRenderer.invoke('chat:pinConvo', id),
   exportMd: (id) => ipcRenderer.invoke('chat:exportMd', id),
+  copyMd: (id) => ipcRenderer.invoke('chat:copyMd', id),
+  saveText: (text, name, ext) => ipcRenderer.invoke('app:saveText', text, name, ext),
 
   // ---- login (interactive terminal, one-time per account) ----
   loginStart: (accountId) => ipcRenderer.invoke('login:start', accountId),
@@ -64,6 +67,8 @@ contextBridge.exposeInMainWorld('cc', {
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
   openConfigDir: (id) => ipcRenderer.invoke('app:openConfigDir', id),
   appInfo: () => ipcRenderer.invoke('app:info'),
+  checkUpdate: (force) => ipcRenderer.invoke('app:checkUpdate', force),
+  updateInfo: () => ipcRenderer.invoke('app:updateInfo'),
   clipboardRead: () => clipboard.readText(),
   clipboardWrite: (text) => clipboard.writeText(text),
   // UI zoom (whole window). delta 0 resets. Returns the new zoom level.
@@ -72,6 +77,12 @@ contextBridge.exposeInMainWorld('cc', {
   searchAll: (q) => ipcRenderer.invoke('chat:searchAll', q),
   listFiles: () => ipcRenderer.invoke('chat:listFiles'),
   recentProjects: () => ipcRenderer.invoke('app:recentProjects'),
+
+  // ---- saved workspaces (project folder + account) ----
+  listWorkspaces: () => ipcRenderer.invoke('workspaces:list'),
+  addWorkspace: (name) => ipcRenderer.invoke('workspaces:add', name),
+  removeWorkspace: (id) => ipcRenderer.invoke('workspaces:remove', id),
+  openWorkspace: (id) => ipcRenderer.invoke('workspaces:open', id),
 
   // ---- events (main -> renderer) ----
   onChat: (cb) => ipcRenderer.on('chat:event', (_e, ev) => cb(ev)),
@@ -89,4 +100,5 @@ contextBridge.exposeInMainWorld('cc', {
   autoLoopPickFolder: () => ipcRenderer.invoke('autoloop:pickFolder'),
   onAutoLoopStatus: (cb) => ipcRenderer.on('autoloop:status', (_e, s) => cb(s)),
   onToast: (cb) => ipcRenderer.on('app:toast', (_e, t) => cb(t)),
+  onUpdate: (cb) => ipcRenderer.on('app:update', (_e, u) => cb(u)),
 });

@@ -159,6 +159,7 @@ Claude Multi remembers which account to use per project folder.
 - `/compact` command to summarize the chat instantly
 
 ### Composer
+- **Slash commands** — type `/` for `/new`, `/compact`, `/model`, `/switch`, `/copy` and more, without leaving the keyboard
 - **@file autocomplete** — type `@` to fuzzy-search any file in your project
 - **Voice to text** — mic button for hands-free input
 - **Prompt templates** — save and reuse your best prompts
@@ -180,6 +181,8 @@ Claude Multi remembers which account to use per project folder.
 
 ### Navigation and UI
 - **Command palette** (`Ctrl/Cmd + K`) — every action and chat, instantly
+- **Workspaces** — save a project folder paired with an account, then reopen the combo in one click
+- **Global summon shortcut** — raise the window from any app, and press again to hide it
 - **Full-text search** across all chats (`Ctrl/Cmd + F`)
 - **Find in chat** (`Ctrl/Cmd + Shift + F`)
 - **Drag-to-reorder** chats in the sidebar
@@ -191,9 +194,12 @@ Claude Multi remembers which account to use per project folder.
 
 ### Reliability
 - **Session auto-restart** — expired sessions detected and restarted with a toast notification
+- **Undo delete** — a deleted chat can be restored from the toast before it is discarded
 - **Background chat saving** — off-screen chats save correctly
 - **Desktop notifications** when a chat finishes or needs your approval
-- **Export to Markdown** — single chat or all chats at once
+- **Export to Markdown** — single chat or all chats at once, or copy one straight to the clipboard
+- **Save any code block** to a file, with the extension picked from the fence language
+- **Update check** — tells you when a newer release is published, and can be switched off
 - **Backup and restore** — export/import your settings and account list
 
 ---

@@ -28,6 +28,8 @@ const DEFAULT_SETTINGS = {
   minimizeToTray: false,   // closing the window hides to the tray instead of quitting
   startOnLogin: false,     // launch the app when the user logs in
   checkUpdates: true,      // check GitHub for a newer release on startup
+  hotkeyEnabled: false,    // register a system-wide shortcut to summon the window
+  hotkey: 'CommandOrControl+Shift+C', // the accelerator used when hotkeyEnabled
   // ---- token savers ----
   autoCompact: true,       // let the CLI summarize a chat before context overflows
   maxBudgetUsd: 0,         // stop a turn once it costs this much (0 = no cap)

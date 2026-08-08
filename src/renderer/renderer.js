@@ -106,6 +106,20 @@ async function openConvo(id) {
   const r = await cc.openConvo(id);
   if (r && !r.ok) toast(r.error || 'Could not open chat', 'err');
 }
+// Delete is recoverable for as long as the toast is up, so the confirm can stay
+// light instead of warning that the transcript is gone forever.
+async function deleteConvo(id, title) {
+  const r = await cc.deleteConvo(id);
+  if (!r || !r.ok) { toast('Could not delete chat', 'err'); return; }
+  toast(`Deleted “${title || 'chat'}”`, 'ok', {
+    label: 'Undo',
+    run: async () => {
+      const u = await cc.undoDeleteConvo();
+      if (u && u.ok) { openConvo(u.id); toast('Chat restored', 'ok'); }
+      else toast((u && u.error) || 'Could not restore', 'err');
+    },
+  });
+}
 function convoMenu(c, anchor) {
   // Clicking the same ⋯ twice should toggle, not rebuild an identical menu.
   const open = document.querySelector('.menu.ctx');
@@ -118,7 +132,7 @@ function convoMenu(c, anchor) {
     ['Rename', async () => { const t = await uiPrompt('Rename chat:', c.title, 'Rename'); if (t && t.trim()) { await cc.renameConvo(c.id, t.trim()); } }],
     ['Duplicate', async () => { const r = await cc.duplicateConvo(c.id); if (r && r.ok) toast('Chat duplicated', 'ok'); else toast('Could not duplicate', 'err'); }],
     ['Export as Markdown…', async () => { const r = await cc.exportMd(c.id); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); }],
-    ['Delete', async () => { if (await uiConfirm(`Delete “${c.title}”?\n\nThis removes the chat and its transcript. It cannot be undone.`, 'Delete')) await cc.deleteConvo(c.id); }],
+    ['Delete', async () => { if (await uiConfirm(`Delete “${c.title}”?`, 'Delete')) deleteConvo(c.id, c.title); }],
   ];
   for (const [label, fn] of items) {
     const b = document.createElement('button'); b.textContent = label;
@@ -522,11 +536,30 @@ function addCodeCopy(scope) {
       const lbl = document.createElement('span'); lbl.className = 'code-lang'; lbl.textContent = lang;
       pre.appendChild(lbl);
     }
+    const save = document.createElement('button'); save.className = 'code-copy code-save'; save.textContent = 'Save';
+    save.title = 'Save this block to a file';
+    save.onclick = async (e) => {
+      e.stopPropagation();
+      const text = (code || pre).innerText;
+      const r = await cc.saveText(text, 'snippet', LANG_EXT[lang] || lang || 'txt');
+      if (r && r.ok) toast('Saved to ' + r.path, 'ok');
+      else if (r && r.error) toast(r.error, 'err');
+    };
+    pre.appendChild(save);
     const b = document.createElement('button'); b.className = 'code-copy'; b.textContent = 'Copy';
     b.onclick = (e) => { e.stopPropagation(); copyText((code || pre).innerText, b); };
     pre.appendChild(b);
   });
 }
+// Fence language -> file extension, for the code block "Save" button. Anything
+// missing falls through to the language name itself, which is right often enough.
+const LANG_EXT = {
+  javascript: 'js', typescript: 'ts', jsx: 'jsx', tsx: 'tsx', python: 'py', ruby: 'rb',
+  bash: 'sh', shell: 'sh', sh: 'sh', powershell: 'ps1', markdown: 'md', yaml: 'yml',
+  html: 'html', css: 'css', json: 'json', sql: 'sql', rust: 'rs', golang: 'go', go: 'go',
+  java: 'java', kotlin: 'kt', swift: 'swift', csharp: 'cs', cpp: 'cpp', c: 'c', php: 'php',
+  dockerfile: 'Dockerfile', toml: 'toml', xml: 'xml', text: 'txt', plaintext: 'txt',
+};
 // Reconstruct the plain-text of an assistant message from its rendered blocks.
 function assistantPlainText(bodyEl) {
   return Array.from(bodyEl.querySelectorAll('.md')).map((m) => m.innerText).join('\n\n').trim();
@@ -758,6 +791,9 @@ $('input').addEventListener('input', async () => {
   autoGrow(); updateComposer(); histIdx = -1;
   if (state.currentConvoId) drafts[state.currentConvoId] = $('input').value;
   const inp = $('input');
+  const slash = slashQuery(inp);
+  if (slash !== null) { closeAtDropdown(); openSlashDropdown(inp, slash); return; }
+  closeSlashDropdown();
   const q = atQuery(inp);
   if (q === null) { closeAtDropdown(); return; }
   if (!atFiles.length) await loadAtFiles();
@@ -777,6 +813,88 @@ $('input').addEventListener('keydown', (e) => {
   items.forEach((b, i) => b.classList.toggle('active', i === idx));
 }, true);
 document.addEventListener('click', (e) => { if (atDropdown && !atDropdown.contains(e.target) && e.target !== $('input')) closeAtDropdown(); });
+
+/* ---------------- / slash commands ---------------- */
+// Typed inline in the composer, the way Claude Code itself works. Only fires
+// when "/" is the very first character, so a bare path like /usr/bin never
+// hijacks the input.
+function slashCommands() {
+  return [
+    { name: 'new', desc: 'New chat in this folder', run: () => newChat(false) },
+    { name: 'folder', desc: 'New chat in another folder…', run: () => newChat(true) },
+    { name: 'workspace', desc: 'Workspaces & recent folders', run: () => openProjectMenu($('projectBtn')) },
+    { name: 'model', desc: 'Change the model for this chat', run: () => $('modelChip').click() },
+    { name: 'effort', desc: 'Change thinking effort', run: () => $('effortChip').click() },
+    { name: 'permissions', desc: 'Change how tools are approved', run: () => $('permChip').click() },
+    { name: 'switch', desc: 'Switch account', run: () => openAccountMenu($('switchPill')) },
+    { name: 'compact', desc: 'Compact this chat to free context', run: async () => { const r = await cc.compact(); toast(r.ok ? 'Compacting…' : (r.error || 'Could not compact'), r.ok ? 'ok' : 'err'); } },
+    { name: 'context', desc: "See what's using the context window", run: () => openContextInspector() },
+    { name: 'usage', desc: 'Token usage for this chat', run: () => $('usageRingBtn').click() },
+    { name: 'copy', desc: 'Copy this chat as Markdown', run: () => copyChatMarkdown() },
+    { name: 'export', desc: 'Export this chat to a .md file', run: async () => { const r = await cc.exportMd(); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); } },
+    { name: 'find', desc: 'Find in this chat', run: () => openFind() },
+    { name: 'search', desc: 'Search across all chats', run: () => { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } },
+    { name: 'stop', desc: 'Interrupt the current turn', run: () => cc.interrupt() },
+    { name: 'retry', desc: 'Regenerate the last response', run: () => regenerate() },
+    { name: 'autoloop', desc: 'Run a prompt across every account', run: () => openAutoLoop() },
+    { name: 'dashboard', desc: 'Activity & usage', run: () => openDashboard() },
+    { name: 'settings', desc: 'Open settings', run: () => openSettings() },
+    { name: 'shortcuts', desc: 'Keyboard shortcuts', run: () => $('shortcutsModal').classList.remove('hidden') },
+    { name: 'update', desc: 'Check for a newer version', run: () => $('updateCheckBtn').click() },
+  ];
+}
+let slashDropdown = null, slashMatches = [];
+// The query is only a command while the caret is still inside the leading word.
+function slashQuery(inp) {
+  const before = inp.value.slice(0, inp.selectionStart);
+  const m = before.match(/^\/([a-z]*)$/i);
+  return m ? m[1].toLowerCase() : null;
+}
+function closeSlashDropdown() { if (slashDropdown) { slashDropdown.remove(); slashDropdown = null; slashMatches = []; } }
+function openSlashDropdown(inp, query) {
+  closeSlashDropdown();
+  slashMatches = slashCommands().filter((c) => c.name.startsWith(query));
+  if (!slashMatches.length) return;
+  slashDropdown = document.createElement('div'); slashDropdown.className = 'at-dropdown slash-dropdown';
+  slashMatches.forEach((c, i) => {
+    const b = document.createElement('button'); b.className = 'at-item slash-item' + (i === 0 ? ' active' : '');
+    b.dataset.idx = i;
+    b.innerHTML = `<span class="slash-name">/${escapeHtml(c.name)}</span><span class="slash-desc">${escapeHtml(c.desc)}</span>`;
+    b.onmousedown = (e) => { e.preventDefault(); runSlash(i); };
+    slashDropdown.appendChild(b);
+  });
+  const r = inp.getBoundingClientRect();
+  slashDropdown.style.left = r.left + 'px';
+  slashDropdown.style.bottom = (window.innerHeight - r.top + 2) + 'px';
+  document.body.appendChild(slashDropdown);
+}
+function runSlash(idx) {
+  const cmd = slashMatches[idx];
+  closeSlashDropdown();
+  if (!cmd) return;
+  const inp = $('input');
+  inp.value = ''; autoGrow(); updateComposer();
+  if (state.currentConvoId) drafts[state.currentConvoId] = '';
+  try { cmd.run(); } catch { toast('Could not run /' + cmd.name, 'err'); }
+}
+$('input').addEventListener('keydown', (e) => {
+  if (!slashDropdown) return;
+  const items = slashDropdown.querySelectorAll('.slash-item');
+  const cur = slashDropdown.querySelector('.slash-item.active');
+  let idx = cur ? Number(cur.dataset.idx) : 0;
+  if (e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); idx = (idx + 1) % items.length; }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); idx = (idx - 1 + items.length) % items.length; }
+  else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); runSlash(idx); return; }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSlashDropdown(); return; }
+  else return;
+  items.forEach((b, i) => b.classList.toggle('active', i === idx));
+}, true);
+document.addEventListener('click', (e) => { if (slashDropdown && !slashDropdown.contains(e.target) && e.target !== $('input')) closeSlashDropdown(); });
+async function copyChatMarkdown() {
+  const r = await cc.copyMd();
+  if (r && r.ok) toast('Chat copied as Markdown', 'ok');
+  else toast((r && r.error) || 'Nothing to copy', 'err');
+}
 // Composer prompt history: ↑ recalls previous prompts (when caret is at the
 // start / already navigating), ↓ moves back toward your draft. Newest first.
 let histItems = [], histIdx = -1;
@@ -962,8 +1080,92 @@ async function openRecentProjects(anchor) {
   browse.onclick = () => { closeMenus(); newChat(true); };
   m.appendChild(browse);
   document.body.appendChild(m);
-  const r = anchor.getBoundingClientRect();
-  m.style.left = r.left + 'px'; m.style.top = (r.bottom + 4) + 'px';
+  placeMenu(m, anchor, 260);
+}
+
+/* ---------------- saved workspaces ---------------- */
+// A workspace is a folder + account pairing. Opening one starts a chat in that
+// folder already signed in to the right account, which is the two-step dance
+// this app otherwise makes you repeat every single time.
+let workspaces = [];
+async function refreshWorkspaces() {
+  try { workspaces = await cc.listWorkspaces() || []; } catch { workspaces = []; }
+  return workspaces;
+}
+async function saveWorkspace() {
+  const cur = state.conversations.find((c) => c.id === state.currentConvoId);
+  const suggested = cur && cur.folderName ? cur.folderName : '';
+  const name = await uiPrompt('Name this workspace (folder + account):', suggested, 'Save');
+  if (name === null) return;
+  const r = await cc.addWorkspace(name.trim());
+  if (r && r.ok) { workspaces = r.workspaces; toast('Workspace saved', 'ok'); }
+  else toast((r && r.error) || 'Could not save workspace', 'err');
+}
+async function openWorkspace(id) {
+  const r = await cc.openWorkspace(id);
+  if (r && r.ok) return;
+  if (r && r.error === 'not_logged_in') { toast('That account needs to sign in first', 'err'); return; }
+  toast((r && r.error) || 'Could not open workspace', 'err');
+}
+async function openProjectMenu(anchor) {
+  closeMenus();
+  await refreshWorkspaces();
+  const recent = await cc.recentProjects().catch(() => []);
+  const m = document.createElement('div'); m.className = 'menu ctx'; m.style.minWidth = '270px';
+  const label = (t) => { const d = document.createElement('div'); d.className = 'm-label'; d.textContent = t; m.appendChild(d); };
+  const sep = () => { const d = document.createElement('div'); d.className = 'm-sep'; m.appendChild(d); };
+
+  if (workspaces.length) {
+    label('Workspaces');
+    workspaces.forEach((w) => {
+      const acc = state.accounts.find((a) => a.id === w.accountId);
+      const row = document.createElement('div'); row.className = 'ws-row';
+      const b = document.createElement('button'); b.className = 'ws-open';
+      b.innerHTML = `<span class="rp-name">⭐ ${escapeHtml(w.name)}</span>`
+        + `<span class="rp-path">${escapeHtml(baseName(w.projectDir))} · ${escapeHtml(acc ? acc.name : 'account removed')}</span>`;
+      b.title = w.projectDir;
+      b.onclick = () => { closeMenus(); openWorkspace(w.id); };
+      const del = document.createElement('button'); del.className = 'ws-del'; del.textContent = '✕';
+      del.title = 'Remove this workspace'; del.setAttribute('aria-label', 'Remove workspace ' + w.name);
+      del.onclick = async (e) => {
+        e.stopPropagation();
+        const r = await cc.removeWorkspace(w.id);
+        if (r && r.ok) { workspaces = r.workspaces; toast('Workspace removed', 'ok'); }
+        closeMenus();
+      };
+      row.appendChild(b); row.appendChild(del);
+      m.appendChild(row);
+    });
+    sep();
+  }
+  const save = document.createElement('button'); save.textContent = '⭐  Save this folder + account…';
+  save.onclick = () => { closeMenus(); saveWorkspace(); };
+  m.appendChild(save);
+  sep();
+
+  if (recent.length) {
+    label('Recent folders');
+    recent.slice(0, 6).forEach((dir) => {
+      const b = document.createElement('button'); b.className = 'rp-item';
+      b.innerHTML = `<span class="rp-name">${escapeHtml(baseName(dir))}</span><span class="rp-path">${escapeHtml(dir)}</span>`;
+      b.onclick = () => { closeMenus(); cc.newChat(dir).then((r) => { if (r && !r.ok && !r.canceled) toast(r.error || 'Could not start', 'err'); }); };
+      m.appendChild(b);
+    });
+    sep();
+  }
+  const change = document.createElement('button');
+  change.textContent = state.currentConvoId ? '📁  Move this chat to another folder…' : '📁  Start a chat in a folder…';
+  change.onclick = () => { closeMenus(); changeProjectFolder(); };
+  m.appendChild(change);
+  document.body.appendChild(m);
+  placeMenu(m, anchor, 270);
+}
+async function changeProjectFolder() {
+  if (!state.currentConvoId) { const r = await cc.newChat(); if (r && !r.ok && !r.canceled) toast(r.error || 'Could not start', 'err'); return; }
+  const dir = await cc.pickProject();
+  if (!dir) return;
+  const r = await cc.chooseProject(dir);
+  if (r && r.ok === false) toast(r.error || 'Could not change folder', 'err');
 }
 $('newChatBtn').onclick = (e) => {
   if (e && (e.altKey || e.shiftKey)) openRecentProjects(e.currentTarget);
@@ -972,13 +1174,8 @@ $('newChatBtn').onclick = (e) => {
 $('newChatBtn').addEventListener('contextmenu', (e) => { e.preventDefault(); openRecentProjects(e.currentTarget); });
 async function toggleSidebar() { const v = !(state.settings || {}).sidebarCollapsed; state.settings = await cc.setSettings({ sidebarCollapsed: v }); applyAppearance(state.settings); }
 $('sidebarToggle').onclick = toggleSidebar;
-$('projectBtn').onclick = async () => {
-  if (!state.currentConvoId) { const r = await cc.newChat(); if (r && !r.ok && !r.canceled) toast(r.error || 'Could not start', 'err'); return; }
-  const dir = await cc.pickProject();
-  if (!dir) return;
-  const r = await cc.chooseProject(dir);
-  if (r && r.ok === false) toast(r.error || 'Could not change folder', 'err');
-};
+// The row has always shown a ▾ caret; now it actually opens a menu.
+$('projectBtn').onclick = (e) => { e.stopPropagation(); openProjectMenu(e.currentTarget); };
 $('accountBtn').onclick = (e) => { e.stopPropagation(); openAccountMenu(e.currentTarget); };
 $('switchPill').onclick = (e) => { e.stopPropagation(); openAccountMenu(e.currentTarget); };
 $('topTitle').onclick = async () => { const c = state.conversations.find((x) => x.id === state.currentConvoId); if (!c) return; const t = await uiPrompt('Rename chat:', c.title, 'Rename'); if (t && t.trim()) cc.renameConvo(c.id, t.trim()); };
@@ -1027,7 +1224,7 @@ async function addAccount() {
 
 /* ---------------- menus ---------------- */
 function closeMenus() { document.querySelectorAll('.menu.ctx').forEach((n) => n.remove()); $('modelMenu').classList.add('hidden'); $('effortMenu').classList.add('hidden'); $('permMenu').classList.add('hidden'); $('usageMenu').classList.add('hidden'); }
-document.addEventListener('click', (e) => { if (!e.target.closest('.menu') && !e.target.closest('#accountBtn') && !e.target.closest('#switchPill') && !e.target.closest('#modelChip') && !e.target.closest('#effortChip') && !e.target.closest('#permChip') && !e.target.closest('#usageRingBtn') && !e.target.closest('.convo-more')) closeMenus(); });
+document.addEventListener('click', (e) => { if (!e.target.closest('.menu') && !e.target.closest('#accountBtn') && !e.target.closest('#switchPill') && !e.target.closest('#modelChip') && !e.target.closest('#effortChip') && !e.target.closest('#permChip') && !e.target.closest('#usageRingBtn') && !e.target.closest('#projectBtn') && !e.target.closest('.convo-more')) closeMenus(); });
 // Position a composer popover just above its anchor chip.
 function anchorAbove(menu, anchor) {
   menu.classList.remove('hidden');
@@ -1254,7 +1451,12 @@ function openSettings() {
   renderToolToggles(s.disabledTools || []);
   $('setTray').checked = !!s.minimizeToTray;
   $('setStartup').checked = !!s.startOnLogin;
+  $('setCheckUpdates').checked = s.checkUpdates !== false;
+  $('setHotkeyEnabled').checked = !!s.hotkeyEnabled;
+  capturingHotkey = false;
+  renderHotkeyBtn();
   cc.appInfo().then((i) => { $('aboutLine').textContent = `Claude Multi v${i.version} · Electron ${i.electron} · Node ${i.node}`; }).catch(() => {});
+  renderUpdateStatus();
   $('settingsModal').classList.remove('hidden');
 }
 $('settingsTop').onclick = openSettings;
@@ -1449,10 +1651,96 @@ function renderToolToggles(disabled) {
 $('setNotify').onchange = async (e) => { state.settings = await cc.setSettings({ notify: e.target.checked }); };
 $('setTray').onchange = async (e) => { state.settings = await cc.setSettings({ minimizeToTray: e.target.checked }); };
 $('setStartup').onchange = async (e) => { state.settings = await cc.setSettings({ startOnLogin: e.target.checked }); };
+
+/* ---------------- global summon hotkey ---------------- */
+const DEFAULT_HOTKEY = 'CommandOrControl+Shift+C';
+// Turn a keydown into an Electron accelerator. Returns '' until a non-modifier
+// key is pressed, so holding Ctrl alone doesn't commit a useless shortcut.
+function accelFromEvent(e) {
+  const mods = [];
+  if (e.ctrlKey || e.metaKey) mods.push('CommandOrControl');
+  if (e.altKey) mods.push('Alt');
+  if (e.shiftKey) mods.push('Shift');
+  const k = e.key;
+  if (!k || ['Control', 'Meta', 'Alt', 'Shift'].includes(k)) return '';
+  let key;
+  if (k === ' ') key = 'Space';
+  else if (/^[a-z]$/i.test(k)) key = k.toUpperCase();
+  else if (/^F\d{1,2}$/.test(k)) key = k;
+  else if (/^[0-9]$/.test(k)) key = k;
+  else if (k === 'Escape' || k === 'Tab' || k === 'Backspace' || k === 'Delete') key = k;
+  else if (k.startsWith('Arrow')) key = k.slice(5);
+  else key = k.length === 1 ? k.toUpperCase() : '';
+  if (!key) return '';
+  if (!mods.length) return '';   // a bare letter would swallow that key system-wide
+  return mods.concat(key).join('+');
+}
+function prettyAccel(a) { return String(a || '').replace('CommandOrControl', navigator.platform.startsWith('Mac') ? 'Cmd' : 'Ctrl'); }
+let capturingHotkey = false;
+function renderHotkeyBtn() {
+  const b = $('setHotkey'); if (!b) return;
+  const s = state.settings || {};
+  b.textContent = capturingHotkey ? 'Press keys…' : prettyAccel(s.hotkey || DEFAULT_HOTKEY);
+  b.classList.toggle('capturing', capturingHotkey);
+  b.disabled = !s.hotkeyEnabled;
+}
+$('setHotkeyEnabled').onchange = async (e) => {
+  state.settings = await cc.setSettings({ hotkeyEnabled: e.target.checked });
+  renderHotkeyBtn();
+};
+$('setHotkey').onclick = () => { capturingHotkey = true; renderHotkeyBtn(); $('setHotkey').focus(); };
+$('setHotkey').addEventListener('blur', () => { if (capturingHotkey) { capturingHotkey = false; renderHotkeyBtn(); } });
+$('setHotkey').addEventListener('keydown', async (e) => {
+  if (!capturingHotkey) return;
+  e.preventDefault(); e.stopPropagation();
+  if (e.key === 'Escape') { capturingHotkey = false; renderHotkeyBtn(); return; }
+  const accel = accelFromEvent(e);
+  if (!accel) return;   // still waiting for a real key alongside the modifiers
+  capturingHotkey = false;
+  state.settings = await cc.setSettings({ hotkey: accel });
+  renderHotkeyBtn();
+  toast('Shortcut set to ' + prettyAccel(accel), 'ok');
+});
 $('exportBtn').onclick = async () => { const r = await cc.exportConfig(); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); };
 $('exportAllBtn').onclick = async () => { const r = await cc.exportAllChats(); if (r && r.ok) toast(`Exported ${r.count} chat${r.count === 1 ? '' : 's'} to ${r.path}`, 'ok'); else if (r && r.error) toast(r.error, 'err'); };
 $('importBtn').onclick = async () => { const r = await cc.importConfig(); if (r && r.ok) toast('Imported — accounts restored', 'ok'); else if (r && r.error) toast(r.error, 'err'); };
 $('ghBtn').onclick = () => cc.openExternal('https://github.com/Chamanrajragu/claude-multi');
+
+/* ---------------- update check ---------------- */
+const RELEASES_URL = 'https://github.com/Chamanrajragu/claude-multi/releases/latest';
+let updateSeen = null;      // the release we're currently advertising, if any
+let updateDismissed = '';   // version the user waved away this session
+function renderUpdateBar() {
+  const bar = $('updateBar');
+  const show = !!updateSeen && updateSeen.version !== updateDismissed;
+  bar.classList.toggle('hidden', !show);
+  if (show) $('updateBarText').textContent = `Claude Multi ${updateSeen.version} is available — you're on ${appVersion || 'an older build'}.`;
+}
+function renderUpdateStatus(msg) {
+  const el = $('updateStatus'); if (!el) return;
+  if (msg) { el.textContent = msg; return; }
+  el.textContent = updateSeen ? `Version ${updateSeen.version} is available.` : "You're on the latest version.";
+}
+let appVersion = '';
+cc.appInfo().then((i) => { appVersion = i.version; }).catch(() => {});
+cc.updateInfo().then((u) => { if (u) { updateSeen = u; renderUpdateBar(); } }).catch(() => {});
+cc.onUpdate((info) => {
+  updateSeen = (info && info.update) || null;
+  if (info && info.current) appVersion = info.current;
+  renderUpdateBar(); renderUpdateStatus();
+});
+$('updateBarGet').onclick = () => cc.openExternal(updateSeen && updateSeen.url ? updateSeen.url : RELEASES_URL);
+$('updateBarDismiss').onclick = () => { if (updateSeen) updateDismissed = updateSeen.version; renderUpdateBar(); };
+$('setCheckUpdates').onchange = async (e) => { state.settings = await cc.setSettings({ checkUpdates: e.target.checked }); };
+$('updateCheckBtn').onclick = async () => {
+  renderUpdateStatus('Checking…');
+  const r = await cc.checkUpdate(true);
+  if (!r || !r.ok) { renderUpdateStatus(r && r.error ? 'Could not check: ' + r.error : 'Could not check for updates.'); return; }
+  updateSeen = r.update || null;
+  if (r.current) appVersion = r.current;
+  updateDismissed = '';   // an explicit check means they want to see the answer
+  renderUpdateBar(); renderUpdateStatus();
+};
 $('setWidth').onchange = async (e) => { applyAppearance({ width: e.target.value }); state.settings = await cc.setSettings({ width: e.target.value }); };
 $('setFontScale').onchange = async (e) => { applyAppearance({ fontScale: e.target.value }); state.settings = await cc.setSettings({ fontScale: e.target.value }); };
 $('setEnterSends').onchange = async (e) => { state.settings = await cc.setSettings({ enterSends: e.target.checked }); };
@@ -1560,6 +1848,7 @@ function buildCommands() {
   cmds.push({ icon: '🔍', label: 'Search chats', hint: 'Ctrl+F', run: () => { $('convoSearch').classList.remove('hidden'); $('convoSearch').focus(); } });
   cmds.push({ icon: '🔎', label: 'Find in this chat', hint: 'Ctrl+Shift+F', run: () => openFind() });
   cmds.push({ icon: '📤', label: 'Export this chat as Markdown', run: async () => { const r = await cc.exportMd(); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); } });
+  cmds.push({ icon: '📋', label: 'Copy this chat as Markdown', run: () => copyChatMarkdown() });
   cmds.push({ icon: '🗂', label: 'Export ALL chats to Markdown…', run: async () => { const r = await cc.exportAllChats(); if (r && r.ok) toast(`Exported ${r.count} chats to ${r.path}`, 'ok'); else if (r && r.error) toast(r.error, 'err'); } });
   cmds.push({ icon: '🎨', label: 'Toggle light / dark theme', run: async () => { const cur = (state.settings || {}).theme; const next = cur === 'light' ? 'dark' : 'light'; applyTheme(next); state.settings = await cc.setSettings({ theme: next }); } });
   cmds.push({ icon: '⬅', label: (state.settings || {}).sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar', hint: 'Ctrl+B', run: () => toggleSidebar() });
@@ -1578,6 +1867,12 @@ function buildCommands() {
   cmds.push({ icon: '🔎', label: "What's using my context", hint: 'Ctrl+Shift+K', run: () => openContextInspector() });
   cmds.push({ icon: '🗜', label: 'Compact this chat (free up context)', run: async () => { const r = await cc.compact(); toast(r.ok ? 'Compacting…' : (r.error || 'Could not compact'), r.ok ? 'ok' : 'err'); } });
   cmds.push({ icon: '🐙', label: 'Open project on GitHub', run: () => cc.openExternal('https://github.com/Chamanrajragu/claude-multi') });
+  cmds.push({ icon: '✨', label: 'Check for updates', hint: updateSeen ? updateSeen.version + ' available' : '', run: () => $('updateCheckBtn').click() });
+  cmds.push({ icon: '⭐', label: 'Save this folder + account as a workspace…', run: () => saveWorkspace() });
+  for (const w of workspaces) {
+    const acc = state.accounts.find((a) => a.id === w.accountId);
+    cmds.push({ icon: '⭐', label: 'Workspace: ' + w.name, hint: acc ? acc.name : 'account removed', run: () => openWorkspace(w.id) });
+  }
   for (const a of state.accounts) {
     const v = accView(a);
     cmds.push({ icon: '👤', label: 'Account: ' + a.name, hint: v.needLogin ? 'log in' : v.label, run: () => { if (v.needLogin) openLogin(a); else useAccount(a.id); } });
@@ -1899,7 +2194,24 @@ cc.onToast((t) => { if (t && t.text) toast(t.text, t.kind || 'ok'); });
 
 /* ---------------- toast ---------------- */
 let toastTimer = null;
-function toast(msg, kind) { const el = $('toast'); el.textContent = msg; el.className = 'toast' + (kind === 'err' ? ' err' : ''); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.add('hidden'), 2600); }
+// `action` is optional: { label, run, ms } renders a button beside the message
+// and keeps the toast up longer, which is what makes Undo reachable.
+function toast(msg, kind, action) {
+  const el = $('toast');
+  el.className = 'toast' + (kind === 'err' ? ' err' : '');
+  el.innerHTML = '';
+  const span = document.createElement('span'); span.className = 'toast-msg'; span.textContent = msg;
+  el.appendChild(span);
+  let life = 2600;
+  if (action && action.label && typeof action.run === 'function') {
+    const b = document.createElement('button'); b.className = 'toast-action'; b.textContent = action.label;
+    b.onclick = () => { clearTimeout(toastTimer); el.classList.add('hidden'); action.run(); };
+    el.appendChild(b);
+    life = action.ms || 8000;
+  }
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), life);
+}
 
 /* ---------------- boot ---------------- */
 cc.onState((s) => {
@@ -1917,6 +2229,7 @@ cc.onState((s) => {
   applyAppearance(state.settings || {});
   renderAll();
   loadHist();
+  refreshWorkspaces();   // so the command palette lists them before the menu is opened
   if (state.currentConvoId) { try { const h = await cc.getHistory(); if (h && h.log && h.log.length) renderHistory(h.log); } catch {} }
   // Pre-load @-file list for the initial project.
   if (state.projectDir) loadAtFiles();

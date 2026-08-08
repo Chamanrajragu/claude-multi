@@ -6,7 +6,7 @@
 //     and account switching that carries the conversation across accounts.
 //   - LOGIN: a small interactive terminal (pty-host) used only to run /login
 //     once per account (OAuth can't run in headless chat mode).
-const { app, BrowserWindow, ipcMain, dialog, Notification, shell, Menu, Tray, nativeImage, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, shell, Menu, Tray, nativeImage, clipboard, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -14,6 +14,7 @@ const { spawn, execSync } = require('child_process');
 const { Store, readAccountInfo } = require('./accounts');
 const cooldown = require('./cooldown');
 const { ChatSession, extractResetAt } = require('./chat');
+const { parseRelease, shouldCheck, updateAvailable } = require('./update');
 
 const APP_ROOT = path.join(__dirname, '..');
 const DEFAULT_COOLDOWN_MS = 5 * 3600e3;
@@ -37,6 +38,8 @@ const state = {
   pending: new Map(),        // convoId -> { text, attachments } the last turn's prompt, kept until it completes
   perms: new Map(),          // convoId -> Map(requestId -> { tool, input }) unresolved permission prompts
   switchCount: 0,
+  update: null,              // { version, tag, name, url } once a newer release is seen
+  lastDeleted: null,         // { folder, index, convo, wasCurrent } — one level of undo
 };
 
 function baseName(p) { return String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || String(p || ''); }
@@ -256,6 +259,41 @@ function notify(title, body) {
 
 function toRenderer(channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+}
+
+// ---- update check ---------------------------------------------------------
+// Asks GitHub for the latest published release and tells the renderer when it
+// is newer than what's running. Entirely best-effort: no network, a rate limit
+// or a malformed body all just mean "no update to show", never an error popup.
+const UPDATE_REPO = 'Chamanrajragu/claude-multi';
+const UPDATE_INTERVAL_MS = 6 * 3600e3;
+async function checkForUpdate(force) {
+  const current = require('../package.json').version;
+  const settings = store.getSettings();
+  if (!force && settings.checkUpdates === false) return { ok: false, skipped: 'disabled' };
+  const last = Number(store.get('lastUpdateCheck')) || 0;
+  if (!force && !shouldCheck(last, Date.now(), UPDATE_INTERVAL_MS)) {
+    return { ok: true, current, update: state.update, cached: true };
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
+      signal: ctrl.signal,
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'claude-multi/' + current },
+    });
+    store.set('lastUpdateCheck', Date.now());
+    if (!res.ok) return { ok: false, error: 'GitHub returned ' + res.status, current };
+    const release = parseRelease(await res.json());
+    state.update = updateAvailable(release, current) ? release : null;
+    toRenderer('app:update', { current, update: state.update });
+    return { ok: true, current, update: state.update };
+  } catch (e) {
+    // Offline, DNS failure or timeout — stay quiet, try again next launch.
+    return { ok: false, error: String((e && e.message) || e), current };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function convoTitle(convoId) { const f = findConvo(convoId); return (f && f.convo.title && f.convo.title !== 'New chat') ? f.convo.title : 'a chat'; }
@@ -1058,10 +1096,46 @@ function registerIpc() {
     return { ok: true, folder: dir };
   });
 
+  // ---- saved workspaces (a project folder paired with an account) ----------
+  ipcMain.handle('workspaces:list', () => store.listWorkspaces());
+  ipcMain.handle('workspaces:add', (_e, name) => {
+    const cur = state.currentConvoId ? findConvo(state.currentConvoId) : null;
+    const projectDir = (cur && cur.folder) || state.lastFolder || store.get('lastProjectDir') || '';
+    const accountId = (cur && cur.convo.lastAccount) || state.lastAccountId || '';
+    if (!projectDir) return { ok: false, error: 'Open a chat in a folder first' };
+    if (!accountId || !store.byId(accountId)) return { ok: false, error: 'Pick an account for this chat first' };
+    try {
+      const list = store.addWorkspace({ name: String(name || '').trim() || path.basename(projectDir), projectDir, accountId });
+      return { ok: true, workspaces: list };
+    } catch (e) { return { ok: false, error: String(e.message || e) }; }
+  });
+  ipcMain.handle('workspaces:remove', (_e, id) => ({ ok: true, workspaces: store.removeWorkspace(id) }));
+  // Opening a workspace starts a fresh chat in its folder on its account, so a
+  // saved combo is one click rather than "pick folder, then pick account".
+  ipcMain.handle('workspaces:open', (_e, id) => {
+    const ws = store.getWorkspace(id);
+    if (!ws) return { ok: false, error: 'Workspace not found' };
+    if (!fs.existsSync(ws.projectDir)) return { ok: false, error: 'Folder no longer exists: ' + ws.projectDir };
+    const acc = store.byId(ws.accountId);
+    if (!acc) return { ok: false, error: 'That account was removed' };
+    store.addRecentProject(ws.projectDir);
+    state.lastFolder = ws.projectDir;
+    const c = createConvo(ws.projectDir);
+    state.currentConvoId = c.id;
+    toRenderer('chat:history', { log: [] });
+    const r = useAccountForChat(ws.accountId);
+    pushState();
+    return r && r.ok === false ? r : { ok: true, id: c.id, folder: ws.projectDir, accountId: ws.accountId };
+  });
+
   ipcMain.handle('settings:get', () => store.getSettings());
   ipcMain.handle('settings:set', (_e, patch) => {
     const s = store.setSettings(patch);
     if (patch && Object.prototype.hasOwnProperty.call(patch, 'startOnLogin')) applyLoginItem(s.startOnLogin);
+    if (patch && (Object.prototype.hasOwnProperty.call(patch, 'hotkeyEnabled') || Object.prototype.hasOwnProperty.call(patch, 'hotkey'))) {
+      const r = applyHotkey(s);
+      if (!r.ok) toRenderer('app:toast', { text: r.error, kind: 'err' });
+    }
     // Permission mode and model apply to live sessions in place. Only effort
     // needs a restart, and a restart costs a full transcript re-ingest on the
     // next turn, so never do one we can avoid.
@@ -1203,15 +1277,40 @@ function registerIpc() {
     try { fs.writeFileSync(res.filePath, md); return { ok: true, path: res.filePath }; }
     catch (e) { return { ok: false, error: String(e.message || e) }; }
   });
+  // Same serializer as the export, but straight to the clipboard — pasting a
+  // conversation somewhere shouldn't require a round-trip through a file.
+  ipcMain.handle('chat:copyMd', (_e, id) => {
+    const f = (id && findConvo(id)) || (state.currentConvoId && findConvo(state.currentConvoId));
+    const c = f && f.convo;
+    if (!c || !(c.log && c.log.length)) return { ok: false, error: 'Nothing to copy yet' };
+    const md = conversationToMarkdown(c);
+    clipboard.writeText(md);
+    return { ok: true, chars: md.length };
+  });
+  // Write one code block to a file the user picks.
+  ipcMain.handle('app:saveText', async (_e, text, suggestedName, ext) => {
+    const name = safeFileName(suggestedName || 'snippet') + (ext ? '.' + String(ext).replace(/^\./, '') : '.txt');
+    const res = await dialog.showSaveDialog(win, {
+      title: 'Save code block',
+      defaultPath: path.join(state.lastFolder || os.homedir(), name),
+    });
+    if (res.canceled || !res.filePath) return { ok: false, canceled: true };
+    try { fs.writeFileSync(res.filePath, String(text == null ? '' : text)); return { ok: true, path: res.filePath }; }
+    catch (e) { return { ok: false, error: String(e.message || e) }; }
+  });
   ipcMain.handle('chat:deleteConvo', (_e, id) => {
     const f = findConvo(id);
     if (!f) return { ok: false };
     stopSession(id); // kill its session if running
     state.pending.delete(id); // stopSession leaves pending alone (resume needs it); a delete does not
     const d = getProjectData(f.folder);
+    const idx = d.conversations.findIndex((x) => x.id === id);
     d.conversations = d.conversations.filter((x) => x.id !== id);
     if (d.currentId === id) d.currentId = d.conversations[0] ? d.conversations[0].id : '';
     saveProjectData(f.folder, d);
+    // Hold the removed chat in memory so Undo can put it back where it was.
+    // Only the most recent delete is recoverable, which is what the toast offers.
+    state.lastDeleted = { folder: f.folder, index: Math.max(0, idx), convo: f.convo, wasCurrent: state.currentConvoId === id };
     if (state.currentConvoId === id) {
       // Show the next most-recent chat (across any folder), or an empty state.
       const next = conversationList().conversations[0];
@@ -1220,7 +1319,26 @@ function registerIpc() {
       toRenderer('chat:history', { log: (nf && nf.convo.log) || [] });
     }
     pushState();
-    return { ok: true };
+    return { ok: true, undoable: true, title: f.convo.title || 'Chat' };
+  });
+  // Put the last deleted chat back. Its session is gone, but the transcript and
+  // sessionId survive, so it resumes exactly like any other reopened chat.
+  ipcMain.handle('chat:undoDelete', () => {
+    const del = state.lastDeleted;
+    if (!del) return { ok: false, error: 'Nothing to restore' };
+    state.lastDeleted = null;
+    const d = getProjectData(del.folder);
+    if (d.conversations.some((x) => x.id === del.convo.id)) return { ok: false, error: 'That chat is already back' };
+    d.conversations.splice(Math.min(del.index, d.conversations.length), 0, del.convo);
+    saveProjectData(del.folder, d);
+    if (del.wasCurrent) {
+      state.currentConvoId = del.convo.id;
+      d.currentId = del.convo.id;
+      saveProjectData(del.folder, d);
+      toRenderer('chat:history', { log: del.convo.log || [] });
+    }
+    pushState();
+    return { ok: true, id: del.convo.id, title: del.convo.title || 'Chat' };
   });
   ipcMain.handle('chat:send', (_e, text, attachments) => {
     const id = state.currentConvoId;
@@ -1416,6 +1534,8 @@ function registerIpc() {
     node: process.versions.node,
     claudePath: findClaudePath(),
   }));
+  ipcMain.handle('app:checkUpdate', (_e, force) => checkForUpdate(!!force));
+  ipcMain.handle('app:updateInfo', () => state.update);
 
   // ---- auto-loop (scheduled prompt) ----------------------------------------
   // Lets users fully utilize their 5-hour usage windows automatically.
@@ -1439,6 +1559,38 @@ function registerIpc() {
   });
   ipcMain.handle('autoloop:stop', () => { autoLoopStop(); return { ok: true }; });
   ipcMain.handle('autoloop:status', () => autoLoopStatus());
+}
+
+// ---- global summon hotkey -------------------------------------------------
+// Optional and off by default: a system-wide accelerator that raises the window
+// (or hides it when it already has focus). Pairs with minimize-to-tray.
+let hotkeyRegistered = '';
+function toggleWindowVisibility() {
+  if (!win || win.isDestroyed()) { createWindow(); return; }
+  if (win.isVisible() && win.isFocused()) { win.hide(); return; }
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+// Returns { ok } / { ok:false, error } so Settings can report a clash with
+// another app instead of silently doing nothing.
+function applyHotkey(settings) {
+  const s = settings || store.getSettings();
+  if (hotkeyRegistered) {
+    try { globalShortcut.unregister(hotkeyRegistered); } catch { /* noop */ }
+    hotkeyRegistered = '';
+  }
+  const accel = String(s.hotkey || '').trim();
+  if (!s.hotkeyEnabled || !accel) return { ok: true, registered: false };
+  try {
+    if (!globalShortcut.register(accel, toggleWindowVisibility)) {
+      return { ok: false, error: 'Another app already owns ' + accel };
+    }
+    hotkeyRegistered = accel;
+    return { ok: true, registered: true, accelerator: accel };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
 }
 
 // ---- system tray + start-on-login ----------------------------------------
@@ -1551,11 +1703,18 @@ app.whenReady().then(() => {
   registerIpc();
   createWindow();
   createTray();
+  applyHotkey(store.getSettings());
+  // Best-effort, and late enough that it never competes with first paint.
+  setTimeout(() => { checkForUpdate(false).catch(() => {}); }, 4000);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
     else if (win) { win.show(); win.focus(); }
   });
-  app.on('before-quit', () => { isQuitting = true; try { if (store) store.flush(); } catch { /* noop */ } });
+  app.on('before-quit', () => {
+    isQuitting = true;
+    try { globalShortcut.unregisterAll(); } catch { /* noop */ }
+    try { if (store) store.flush(); } catch { /* noop */ }
+  });
 });
 
 app.on('window-all-closed', () => {

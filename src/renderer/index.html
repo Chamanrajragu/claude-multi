@@ -60,6 +60,13 @@
         </div>
       </header>
 
+      <div id="updateBar" class="update-bar hidden">
+        <span class="ub-ico">✨</span>
+        <span id="updateBarText" class="ub-text"></span>
+        <button id="updateBarGet" class="ub-btn">Download</button>
+        <button id="updateBarDismiss" class="ub-x" title="Dismiss" aria-label="Dismiss update notice">✕</button>
+      </div>
+
       <div id="transcript" class="transcript">
         <div id="welcome" class="welcome">
           <div class="welcome-logo">✳</div>
@@ -84,7 +91,7 @@
         <div id="ctxWarn" class="ctx-warn hidden"></div>
         <div id="ctxRow" class="ctx-row hidden"></div>
         <div class="composer-box">
-          <textarea id="input" rows="1" placeholder="Describe a task or ask a question"></textarea>
+          <textarea id="input" rows="1" placeholder="Describe a task, @ a file, or / for commands"></textarea>
           <div class="composer-row">
             <div class="cr-left">
               <button id="permChip" class="perm-chip" title="Permission mode"><span id="permChipLabel">Ask each time</span></button>
@@ -195,6 +202,10 @@
             <label class="switch"><input type="checkbox" id="setTray" /><span class="slider"></span></label></div>
           <div class="setting-row"><div><div class="s-title">Start on login</div></div>
             <label class="switch"><input type="checkbox" id="setStartup" /><span class="slider"></span></label></div>
+          <div class="setting-row"><div><div class="s-title">Global shortcut</div><div class="s-sub">Summon the window from anywhere; press again to hide it</div></div>
+            <label class="switch"><input type="checkbox" id="setHotkeyEnabled" /><span class="slider"></span></label></div>
+          <div class="setting-row"><div><div class="s-title">Shortcut keys</div><div class="s-sub">Click and press the combination you want</div></div>
+            <button id="setHotkey" class="hotkey-input" type="button">CommandOrControl+Shift+C</button></div>
         </div>
         <div class="spane hidden" data-pane="data">
           <h3>Backup &amp; restore</h3>
@@ -206,7 +217,10 @@
         <div class="spane hidden" data-pane="about">
           <h3>About</h3>
           <div id="aboutLine" class="s-sub"></div>
-          <div class="btn-row" style="margin-top:12px"><button id="ghBtn" class="btn-ghost">GitHub</button></div>
+          <div class="setting-row"><div><div class="s-title">Check for updates</div><div class="s-sub">Looks for a newer release on GitHub when the app starts</div></div>
+            <label class="switch"><input type="checkbox" id="setCheckUpdates" /><span class="slider"></span></label></div>
+          <div id="updateStatus" class="s-sub" style="margin-top:12px"></div>
+          <div class="btn-row" style="margin-top:12px"><button id="updateCheckBtn" class="btn-ghost">Check now</button><button id="ghBtn" class="btn-ghost">GitHub</button></div>
         </div>
       </div>
     </div>
@@ -253,6 +267,8 @@
         <div class="sc-key">Ctrl / ⌘ + = / − / 0</div><div class="sc-desc">Zoom in / out / reset</div>
         <div class="sc-key">Ctrl / ⌘ + 1…9</div><div class="sc-desc">Switch to the Nth account</div>
         <div class="sc-key">↑ / ↓ (empty box)</div><div class="sc-desc">Recall previous prompts</div>
+        <div class="sc-key">/ (start of box)</div><div class="sc-desc">Slash commands</div>
+        <div class="sc-key">@</div><div class="sc-desc">Attach a file from this folder</div>
         <div class="sc-key">Enter</div><div class="sc-desc">Send message</div>
         <div class="sc-key">Shift + Enter</div><div class="sc-desc">New line</div>
         <div class="sc-key">Esc</div><div class="sc-desc">Stop generating / close dialog</div>
