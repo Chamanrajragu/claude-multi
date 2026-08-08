@@ -68,6 +68,7 @@ function renderConvos() {
     status.className = 'convo-status' + (c.awaiting ? ' needs' : (c.generating ? ' spin' : (c.running ? ' live' : '')));
     if (c.awaiting) status.title = 'Waiting for your approval — open this chat'; else if (c.generating) status.title = 'Working…'; else if (c.running) status.title = 'Running';
     const more = document.createElement('button'); more.className = 'convo-more'; more.textContent = '⋯';
+    more.title = 'Chat actions'; more.setAttribute('aria-label', 'Actions for ' + (c.title || 'this chat'));
     more.onclick = (e) => { e.stopPropagation(); convoMenu(c, e.currentTarget); };
     row.appendChild(pin); row.appendChild(meta); row.appendChild(status); row.appendChild(more);
     row.onclick = () => openConvo(c.id);
@@ -106,19 +107,39 @@ async function openConvo(id) {
   if (r && !r.ok) toast(r.error || 'Could not open chat', 'err');
 }
 function convoMenu(c, anchor) {
+  // Clicking the same ⋯ twice should toggle, not rebuild an identical menu.
+  const open = document.querySelector('.menu.ctx');
+  const wasMine = open && open.dataset.convoId === c.id;
   closeMenus();
-  const m = document.createElement('div'); m.className = 'menu ctx';
+  if (wasMine) return;
+  const m = document.createElement('div'); m.className = 'menu ctx'; m.dataset.convoId = c.id;
   const items = [
     [c.pinned ? 'Unpin' : 'Pin', async () => { await cc.pinConvo(c.id); }],
     ['Rename', async () => { const t = await uiPrompt('Rename chat:', c.title, 'Rename'); if (t && t.trim()) { await cc.renameConvo(c.id, t.trim()); } }],
     ['Duplicate', async () => { const r = await cc.duplicateConvo(c.id); if (r && r.ok) toast('Chat duplicated', 'ok'); else toast('Could not duplicate', 'err'); }],
     ['Export as Markdown…', async () => { const r = await cc.exportMd(c.id); if (r && r.ok) toast('Exported to ' + r.path, 'ok'); else if (r && r.error) toast(r.error, 'err'); }],
-    ['Delete', async () => { if (confirm(`Delete "${c.title}"?`)) await cc.deleteConvo(c.id); }],
+    ['Delete', async () => { if (await uiConfirm(`Delete “${c.title}”?\n\nThis removes the chat and its transcript. It cannot be undone.`, 'Delete')) await cc.deleteConvo(c.id); }],
   ];
-  for (const [label, fn] of items) { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { closeMenus(); fn(); }; m.appendChild(b); }
+  for (const [label, fn] of items) {
+    const b = document.createElement('button'); b.textContent = label;
+    if (label === 'Delete') b.className = 'menu-danger';
+    b.onclick = () => { closeMenus(); fn(); };
+    m.appendChild(b);
+  }
   document.body.appendChild(m);
+  placeMenu(m, anchor);
+}
+// Anchor a floating menu to a trigger, flipping above / clamping inside the
+// viewport so long menus on bottom rows are never cut off.
+function placeMenu(m, anchor, width = 210) {
   const r = anchor.getBoundingClientRect();
-  m.style.left = Math.min(r.left, window.innerWidth - 210) + 'px'; m.style.top = (r.bottom + 4) + 'px';
+  const h = m.offsetHeight || 0;
+  m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8)) + 'px';
+  if (r.bottom + 6 + h > window.innerHeight - 8 && r.top - 6 - h > 8) {
+    m.style.bottom = (window.innerHeight - r.top + 6) + 'px'; m.style.top = 'auto';
+  } else {
+    m.style.top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - h - 8)) + 'px'; m.style.bottom = 'auto';
+  }
 }
 
 function renderAccountRow() {
@@ -174,11 +195,7 @@ function openAccountMenu(anchor) {
   }
   rebuild();
   document.body.appendChild(m);
-  const r = anchor.getBoundingClientRect();
-  const w = 262;
-  m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
-  if (r.top > window.innerHeight / 2) m.style.bottom = (window.innerHeight - r.top + 6) + 'px';
-  else m.style.top = (r.bottom + 6) + 'px';
+  placeMenu(m, anchor, 262);
 }
 
 /* ---------------- top / render all ---------------- */
@@ -372,7 +389,7 @@ function renderUsageAccounts() {
   for (const a of (state.accounts || [])) {
     if (!a.loggedIn) continue;
     shown++;
-    let pct = 0, sub = 'Ready', cls = 'info';
+    let pct = 0, sub = 'Ready', cls = '';
     if (a.cooldownUntil && a.cooldownUntil > now) { pct = Math.max(6, Math.min(100, Math.round(((a.cooldownUntil - now) / FULL) * 100))); sub = 'Resets in ' + fmtCountdown(a.cooldownUntil - now); cls = 'warn'; }
     else if (a.id === state.activeAccountId && state.running) { pct = pctCtx; sub = pctCtx + '% context used'; }
     const row = document.createElement('div'); row.className = 'ua-row';
@@ -675,7 +692,8 @@ async function regenerate() {
 function autoGrow() {
   const i = $('input');
   i.style.height = 'auto';
-  i.style.height = Math.min(200, i.scrollHeight) + 'px';
+  // Mirrors #input's CSS cap so a long draft can't swallow a short window.
+  i.style.height = Math.min(200, Math.round(window.innerHeight * 0.34), i.scrollHeight) + 'px';
   // Character counter — show once user has typed something
   let counter = $('inputCounter');
   if (!counter) {
@@ -997,10 +1015,7 @@ function openAccountActions(a, anchor) {
     toast(`Removed ${a.name}`, 'ok');
   });
   document.body.appendChild(m);
-  const r = anchor.getBoundingClientRect();
-  m.style.left = Math.max(8, Math.min(r.left - 120, window.innerWidth - 210)) + 'px';
-  if (r.top > window.innerHeight / 2) m.style.bottom = (window.innerHeight - r.top + 6) + 'px';
-  else m.style.top = (r.bottom + 6) + 'px';
+  placeMenu(m, anchor);
 }
 
 async function addAccount() {
@@ -1189,6 +1204,7 @@ cc.onLimit((info) => {
   $('switchModal').classList.remove('hidden');
 });
 $('switchCancel').onclick = () => $('switchModal').classList.add('hidden');
+$('switchModal').addEventListener('click', (e) => { if (e.target === $('switchModal')) $('switchModal').classList.add('hidden'); });
 $('switchGo').onclick = () => { $('switchModal').classList.add('hidden'); if (pendingSwitch) doSwitch(pendingSwitch); };
 async function doSwitch(id) {
   // Only write the inline note if the limited chat is the one on screen.
@@ -1212,7 +1228,8 @@ function renderAccentRow() {
   const row = $('accentRow'); if (!row) return; row.innerHTML = '';
   const cur = (state.settings || {}).accent || '';
   ACCENTS.forEach((a) => {
-    const b = document.createElement('button'); b.className = 'accent-sw' + (a.v === cur ? ' on' : ''); b.style.background = a.c; b.title = a.name;
+    const b = document.createElement('button'); b.className = 'accent-sw' + (a.v === cur ? ' on' : ''); b.style.background = a.c;
+    b.title = a.name; b.setAttribute('aria-label', 'Accent colour: ' + a.name);
     b.onclick = async () => { state.settings = await cc.setSettings({ accent: a.v }); applyAppearance(state.settings); renderAccentRow(); };
     row.appendChild(b);
   });
@@ -1389,11 +1406,12 @@ $('dashBtn').onclick = openDashboard;
 $('dashClose').onclick = () => $('dashModal').classList.add('hidden');
 $('dashModal').addEventListener('click', (e) => { if (e.target === $('dashModal')) $('dashModal').classList.add('hidden'); });
 $('settingsClose').onclick = () => $('settingsModal').classList.add('hidden');
+$('settingsModal').addEventListener('click', (e) => { if (e.target === $('settingsModal')) $('settingsModal').classList.add('hidden'); });
 document.querySelectorAll('.snav').forEach((b) => { b.onclick = () => {
   document.querySelectorAll('.snav').forEach((x) => x.classList.remove('active')); b.classList.add('active');
   const p = b.dataset.pane; document.querySelectorAll('.spane').forEach((x) => x.classList.toggle('hidden', x.dataset.pane !== p));
 }; });
-$('setTheme').onchange = async (e) => { applyTheme(e.target.value); state.settings = await cc.setSettings({ theme: e.target.value }); };
+$('setTheme').onchange = async (e) => { state.settings = await cc.setSettings({ theme: e.target.value }); applyAppearance(state.settings); };
 $('setPermission').onchange = async (e) => { state.settings = await cc.setSettings({ permissionMode: e.target.value }); renderModelLabel(); toast(PERM_TOAST[e.target.value] || 'Will ask before each tool', 'ok'); };
 $('setModel').onchange = async (e) => { state.settings = await cc.setSettings({ model: e.target.value }); renderModelLabel(); };
 $('setEffort').onchange = async (e) => { state.settings = await cc.setSettings({ effort: e.target.value }); renderModelLabel(); };
@@ -1445,14 +1463,28 @@ function applyTheme(t) {
   document.documentElement.setAttribute('data-theme', eff);
 }
 function shade(hex, f) { const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return hex; const n = parseInt(m[1], 16); const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((x) => Math.max(0, Math.min(255, Math.round(x * f))).toString(16).padStart(2, '0')); return '#' + c.join(''); }
+function rgbOf(hex) { const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return null; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function hex6(c) { return '#' + c.map((x) => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join(''); }
+function mixWithBg(hex, amt, light) { const c = rgbOf(hex); if (!c) return hex; const bg = light ? [255, 255, 255] : [31, 30, 28]; return hex6(c.map((x, i) => bg[i] + (x - bg[i]) * amt)); }
+function readableInk(hex) { const c = rgbOf(hex); if (!c) return '#ffffff'; return (c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114) > 150 ? '#1f1e1c' : '#ffffff'; }
 function applyAppearance(s) {
   s = s || (state.settings || {});
   if (s.theme !== undefined) applyTheme(s.theme);
   document.documentElement.setAttribute('data-width', s.width === 'wide' ? 'wide' : 'comfortable');
   document.documentElement.setAttribute('data-fontscale', ['small', 'large'].includes(s.fontScale) ? s.fontScale : 'normal');
   const rs = document.documentElement.style;
-  if (s.accent) { rs.setProperty('--accent', s.accent); rs.setProperty('--accent-2', shade(s.accent, 0.82)); }
-  else { rs.removeProperty('--accent'); rs.removeProperty('--accent-2'); }
+  if (s.accent) {
+    rs.setProperty('--accent', s.accent);
+    rs.setProperty('--accent-2', shade(s.accent, 0.82));
+    // --accent-soft backs permission cards, avatars and badges; leaving it at
+    // the built-in coral tint clashes with every other accent choice.
+    const light = document.documentElement.getAttribute('data-theme') === 'light';
+    rs.setProperty('--accent-soft', mixWithBg(s.accent, light ? 0.16 : 0.22, light));
+    rs.setProperty('--accent-ink', readableInk(s.accent));
+  } else {
+    rs.removeProperty('--accent'); rs.removeProperty('--accent-2');
+    rs.removeProperty('--accent-soft'); rs.removeProperty('--accent-ink');
+  }
   document.documentElement.setAttribute('data-sidebar', s.sidebarCollapsed ? 'collapsed' : 'open');
   if (typeof s.zoom === 'number' && cc.setZoom) cc.setZoom(s.zoom);
   if (s.sidebarWidth) { const sb = $('sidebar'); if (sb) { const w = Math.max(220, Math.min(480, s.sidebarWidth)); sb.style.width = w + 'px'; sb.style.minWidth = w + 'px'; } }
@@ -1476,7 +1508,7 @@ function applyAppearance(s) {
     document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
   });
 })();
-if (mq) mq.addEventListener('change', () => { if ((state.settings || {}).theme === 'system') applyTheme('system'); });
+if (mq) mq.addEventListener('change', () => { if ((state.settings || {}).theme === 'system') applyAppearance(); });
 
 // ── Live cooldown ticker ────────────────────────────────────────────────────
 // Keeps the limit pill, account switcher dots, and usage bars ticking every
@@ -1489,15 +1521,31 @@ setInterval(() => {
 }, 1000);
 
 /* ---------------- prompt modal ---------------- */
-function uiPrompt(label, def, okLabel) {
+function uiPrompt(label, def, okLabel) { return promptModal(label, def, okLabel, false); }
+// Same modal, no text field — replaces window.confirm(), which blocks the
+// renderer and renders an OS dialog that ignores the app theme.
+function uiConfirm(label, okLabel) { return promptModal(label, null, okLabel || 'OK', true).then((v) => v !== null); }
+// Set while a prompt/confirm is on screen so the global Esc handler can cancel
+// it properly — just hiding the overlay would leave its promise pending forever.
+let promptPendingCancel = null;
+function promptModal(label, def, okLabel, isConfirm) {
   return new Promise((resolve) => {
-    $('promptLabel').textContent = label; const inp = $('promptInput'); inp.value = def || ''; $('promptOk').textContent = okLabel || 'OK'; $('promptModal').classList.remove('hidden');
-    setTimeout(() => { inp.focus(); inp.select(); }, 30);
-    const done = (v) => { $('promptModal').classList.add('hidden'); cleanup(); resolve(v); };
-    const onOk = () => done(inp.value); const onCancel = () => done(null);
-    const onKey = (e) => { if (e.key === 'Enter') { e.preventDefault(); onOk(); } else if (e.key === 'Escape') { e.preventDefault(); onCancel(); } };
-    function cleanup() { $('promptOk').onclick = null; $('promptCancel').onclick = null; inp.removeEventListener('keydown', onKey); }
-    $('promptOk').onclick = onOk; $('promptCancel').onclick = onCancel; inp.addEventListener('keydown', onKey);
+    const modal = $('promptModal'); const inp = $('promptInput'); const ok = $('promptOk');
+    $('promptLabel').textContent = label;
+    inp.value = def || ''; inp.classList.toggle('hidden', !!isConfirm);
+    ok.textContent = okLabel || 'OK'; ok.classList.toggle('btn-danger', !!isConfirm);
+    modal.classList.remove('hidden');
+    setTimeout(() => { if (isConfirm) ok.focus(); else { inp.focus(); inp.select(); } }, 30);
+    const done = (v) => { modal.classList.add('hidden'); cleanup(); resolve(v); };
+    const onOk = () => done(isConfirm ? '' : inp.value); const onCancel = () => done(null);
+    const onKey = (e) => { if (e.key === 'Enter') { e.preventDefault(); onOk(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancel(); } };
+    const onBackdrop = (e) => { if (e.target === modal) onCancel(); };
+    function cleanup() { promptPendingCancel = null; ok.onclick = null; $('promptCancel').onclick = null; inp.removeEventListener('keydown', onKey); modal.removeEventListener('keydown', onKey, true); modal.removeEventListener('click', onBackdrop); }
+    promptPendingCancel = onCancel;
+    ok.onclick = onOk; $('promptCancel').onclick = onCancel;
+    inp.addEventListener('keydown', onKey);
+    modal.addEventListener('keydown', onKey, true);
+    modal.addEventListener('click', onBackdrop);
   });
 }
 
@@ -1616,12 +1664,15 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (document.querySelector('.menu.ctx')) { closeMenus(); e.preventDefault(); return; }
-  const modals = ['cmdkModal','settingsModal','dashModal','ctxModal','loginModal','switchModal','autoloopModal','shortcutsModal','promptModal'];
+  // Prompt/confirm sits on top of everything else, so it wins Esc first.
+  if (promptPendingCancel && !$('promptModal').classList.contains('hidden')) { e.preventDefault(); promptPendingCancel(); return; }
+  const modals = ['cmdkModal','settingsModal','dashModal','ctxModal','loginModal','switchModal','autoloopModal','shortcutsModal'];
   for (const id of modals) {
     const m = $(id);
     if (m && !m.classList.contains('hidden')) {
       m.classList.add('hidden');
       if (id === 'autoloopModal') closeAutoLoop();
+      if (id === 'loginModal') closeLogin();
       e.preventDefault();
       return;
     }
@@ -1816,10 +1867,9 @@ function startAlCountdown() {
 
 function closeAutoLoop() {
   $('autoloopModal').classList.add('hidden');
-  // Stop the per-second countdown interval when the modal isn't visible.
-  if (alCountdownTimer && !(alStatus && alStatus.active)) {
-    clearInterval(alCountdownTimer); alCountdownTimer = null;
-  }
+  // The countdown only paints DOM inside this modal, so it is pure waste while
+  // hidden — openAutoLoop restarts it.
+  if (alCountdownTimer) { clearInterval(alCountdownTimer); alCountdownTimer = null; }
 }
 $('autoloopBtn').onclick = () => openAutoLoop();
 $('autoloopClose').onclick = closeAutoLoop;
