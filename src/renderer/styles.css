@@ -322,7 +322,9 @@ button { font-family: inherit; color: inherit; }
 .round-btn:disabled { opacity: .4; cursor: default; }
 .mic-btn { font-size: 14px; }
 .mic-btn.listening { color: var(--err); border-color: var(--err); background: var(--warn-soft, transparent); animation: micpulse 1.3s ease-in-out infinite; }
+.mic-btn.loading { animation: micspin 0.8s linear infinite; opacity: .7; }
 @keyframes micpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(217,121,90,.45); } 50% { box-shadow: 0 0 0 5px rgba(217,121,90,0); } }
+@keyframes micspin { to { transform: rotate(360deg); } }
 .chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 999px; cursor: pointer; font-size: 12.5px; background: transparent; border: 1px solid var(--border); color: var(--muted); max-width: 190px; overflow: hidden; white-space: nowrap; }
 .chip > span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .chip:hover { background: var(--hover); color: var(--text); }
@@ -344,16 +346,25 @@ button { font-family: inherit; color: inherit; }
 .ws-del { flex: none; padding: 0 9px; border: none; background: transparent; color: var(--faint); cursor: pointer; font-size: 11px; border-radius: 0 8px 8px 0; opacity: 0; transition: opacity .15s; }
 .ws-row:hover .ws-del { opacity: 1; }
 .ws-del:hover { background: var(--hover) !important; color: var(--err) !important; }
-.menu-acc-row { display: flex; align-items: center; }
-.menu-acc-row .menu-acc { flex: 1; min-width: 0; border-radius: 8px 0 0 8px; }
-.menu-acc-more { flex-shrink: 0; padding: 6px 8px; border-radius: 0 8px 8px 0; font-size: 14px; color: var(--muted); background: transparent; border: none; cursor: pointer; opacity: 0; transition: opacity 0.15s; width: auto; }
-.menu-acc-row:hover .menu-acc-more { opacity: 1; }
-.menu-acc-more:hover { background: var(--hover) !important; color: var(--text) !important; }
-.menu-acc { display: flex; align-items: center; gap: 9px; }
-.menu-acc .ac-avatar { width: 26px; height: 26px; font-size: 12px; }
-.menu-acc .ma-meta { flex: 1; min-width: 0; }
-.menu-acc .ma-name { font-size: 13px; font-weight: 600; }
-.menu-acc .ma-sub { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ---- account switcher (redesigned: ergonomic, stacked, big targets) ---- */
+.menu-acc-row { display: flex; align-items: stretch; gap: 2px; border-radius: 10px; margin: 1px 0; }
+.menu-acc-row.active { background: var(--accent-soft); }
+.menu-acc-row .menu-acc { flex: 1; min-width: 0; border-radius: 10px; }
+.menu-acc-row.active .menu-acc { background: transparent; }
+.menu-acc { display: flex; align-items: center; gap: 11px; padding: 9px 10px; text-align: left; }
+.menu-acc:hover { background: var(--hover); }
+.menu-acc .ac-avatar { width: 34px; height: 34px; font-size: 14px; flex: none; }
+.menu-acc-row.active .ac-avatar { box-shadow: 0 0 0 2px var(--accent); }
+/* The meta column MUST be a flex COLUMN so name and email stack instead of
+   colliding on one line (the old bug where "vij" overlapped the email). */
+.menu-acc .ma-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.menu-acc .ma-name { display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-acc .ma-sub { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.ma-badge { flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ok); background: color-mix(in srgb, var(--ok) 16%, transparent); border-radius: 4px; padding: 1px 6px; }
+.menu-acc .ma-right { display: flex; align-items: center; gap: 8px; flex: none; }
+.menu-acc .ma-kbd { font-size: 10.5px; color: var(--faint); font-family: 'Cascadia Mono', Consolas, monospace; background: var(--hover); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; }
+.menu-acc-more { flex: none; width: 34px; display: grid; place-items: center; border-radius: 10px; font-size: 16px; line-height: 1; color: var(--muted); background: transparent; border: none; cursor: pointer; }
+.menu-acc-more:hover { background: var(--hover); color: var(--text); }
 
 /* ================= MODALS ================= */
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(3px); display: grid; place-items: center; z-index: 100; }

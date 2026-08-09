@@ -1063,6 +1063,21 @@ function notifyAutoLoopWaiters(convoId) {
 function registerIpc() {
   ipcMain.handle('app:getState', () => statePayload());
   ipcMain.handle('app:recentProjects', () => store.get('recentProjects') || []);
+  // Offline speech-to-text model (Vosk). We ship a ~40MB tar.gz in the app and
+  // hand its raw bytes to the renderer once, which turns it into a blob: URL for
+  // vosk-browser's createModel(). Reading in main avoids file:// fetch/CSP issues
+  // and works identically in dev and packaged (asar is disabled).
+  ipcMain.handle('voice:model', () => {
+    try {
+      const p = path.join(__dirname, 'models', 'model-en.tar.gz');
+      if (!fs.existsSync(p)) return { ok: false, error: 'Voice model not found in this build' };
+      const buf = fs.readFileSync(p);
+      // Return an ArrayBuffer-friendly Uint8Array; Electron structured-clones it.
+      return { ok: true, bytes: buf, name: 'model-en.tar.gz' };
+    } catch (e) {
+      return { ok: false, error: String((e && e.message) || e) };
+    }
+  });
   ipcMain.handle('accounts:add', (_e, name) => { store.add(name); pushState(); return statePayload(); });
   ipcMain.handle('accounts:remove', (_e, id) => {
     // Stop any running chats that were using the account being removed.

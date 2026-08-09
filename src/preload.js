@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld('cc', {
   searchAll: (q) => ipcRenderer.invoke('chat:searchAll', q),
   listFiles: () => ipcRenderer.invoke('chat:listFiles'),
   recentProjects: () => ipcRenderer.invoke('app:recentProjects'),
+  voiceModel: () => ipcRenderer.invoke('voice:model'),
 
   // ---- saved workspaces (project folder + account) ----
   listWorkspaces: () => ipcRenderer.invoke('workspaces:list'),

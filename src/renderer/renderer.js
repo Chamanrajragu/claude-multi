@@ -6,6 +6,7 @@ marked.setOptions({ gfm: true, breaks: true });
 function renderMarkdown(t) { try { return DOMPurify.sanitize(marked.parse(t || '')); } catch { return escapeHtml(t || ''); } }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function baseName(p) { return String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p; }
+const isMac = navigator.platform.startsWith('Mac');
 
 let state = { accounts: [], activeAccountId: null, projectDir: '', running: false, generating: false, settings: {}, conversations: [], currentConvoId: '' };
 let attachments = [];
@@ -196,15 +197,28 @@ function openAccountMenu(anchor) {
     if (!shown.length) { const d = document.createElement('div'); d.className = 'convo-empty-hint'; d.textContent = 'No accounts.'; body.appendChild(d); }
     shown.forEach((a, i) => {
       const v = accView(a);
-      const row = document.createElement('div'); row.className = 'menu-acc-row';
-      const b = document.createElement('button'); b.className = 'menu-acc';
       const idx = state.accounts.indexOf(a);
-      b.innerHTML = `<span class="ac-avatar">${escapeHtml((a.name || '?').charAt(0).toUpperCase())}</span>` +
-        `<span class="ma-meta"><span class="ma-name">${escapeHtml(a.name)}${a.id === state.activeAccountId && state.running ? ' ·  active' : ''}</span>` +
-        `<span class="ma-sub">${escapeHtml(v.needLogin ? 'Not signed in — click to log in' : v.label)}</span></span>` +
-        `<span class="dot ${v.dot}"></span>${idx < 9 ? `<span class="ma-sub">⌘${idx + 1}</span>` : ''}`;
+      const isActive = a.id === state.activeAccountId;
+      const row = document.createElement('div'); row.className = 'menu-acc-row' + (isActive ? ' active' : '');
+      const b = document.createElement('button'); b.className = 'menu-acc'; b.type = 'button';
+      // Avatar
+      const av = document.createElement('span'); av.className = 'ac-avatar';
+      av.textContent = (a.name || a.email || '?').trim().charAt(0).toUpperCase();
+      // Stacked name + email/status (each on its own line, ellipsised)
+      const meta = document.createElement('span'); meta.className = 'ma-meta';
+      const nameLine = document.createElement('span'); nameLine.className = 'ma-name';
+      nameLine.textContent = a.name || a.email || 'Account';
+      if (isActive) { const badge = document.createElement('span'); badge.className = 'ma-badge'; badge.textContent = 'Active'; nameLine.appendChild(badge); }
+      const subLine = document.createElement('span'); subLine.className = 'ma-sub';
+      subLine.textContent = v.needLogin ? 'Not signed in — click to log in' : (a.email || v.label);
+      meta.appendChild(nameLine); meta.appendChild(subLine);
+      // Right side: status dot + keyboard hint
+      const right = document.createElement('span'); right.className = 'ma-right';
+      const dot = document.createElement('span'); dot.className = 'dot ' + v.dot; right.appendChild(dot);
+      if (idx < 9) { const kb = document.createElement('span'); kb.className = 'ma-kbd'; kb.textContent = (isMac ? '⌘' : 'Ctrl+') + (idx + 1); right.appendChild(kb); }
+      b.appendChild(av); b.appendChild(meta); b.appendChild(right);
       b.onclick = () => { closeMenus(); if (v.needLogin) openLogin(a); else useAccount(a.id); };
-      const more = document.createElement('button'); more.className = 'menu-acc-more'; more.textContent = '⋯'; more.title = 'Rename or remove this account';
+      const more = document.createElement('button'); more.className = 'menu-acc-more'; more.type = 'button'; more.textContent = '⋯'; more.title = 'Rename or remove this account';
       more.onclick = (e) => { e.stopPropagation(); closeMenus(); openAccountActions(a, more); };
       row.appendChild(b); row.appendChild(more);
       body.appendChild(row);
@@ -224,8 +238,11 @@ function renderTop() {
   $('topTitle').textContent = c ? (c.title || 'New chat') : (state.running ? 'Chat' : 'New chat');
   renderModelLabel();
 }
+// Current Claude model line-up (mirrors the Claude desktop / Claude Code picker).
+// Newest and most capable first. Ids match the Claude API / CLI --model values.
 const MODELS = [
   ['claude-fable-5', 'Fable 5'],
+  ['claude-opus-5', 'Opus 5'],
   ['claude-opus-4-8', 'Opus 4.8'],
   ['claude-opus-4-7', 'Opus 4.7'],
   ['claude-opus-4-6', 'Opus 4.6'],
@@ -236,7 +253,10 @@ const MODELS = [
 ];
 // Legacy aliases → friendly labels, so an older stored setting still reads right.
 const MODEL_ALIASES = { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' };
-const EFFORTS = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Max']];
+// Five effort levels, matching Anthropic's `effort` parameter exactly:
+// low · medium · high · xhigh (Ultra think) · max (unconstrained). Higher =
+// more reasoning, slower, more tokens. `xhigh` is the "ultra think" tier.
+const EFFORTS = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Ultra'], ['max', 'Max']];
 const PERM_TOAST = { plan: 'Plan only — Claude will propose, not build', ask: 'Will ask before each tool', acceptEdits: 'Auto-accepting file edits', bypass: 'Allowing all tools — no more prompts' };
 const PERMS = [['plan', 'Plan only'], ['ask', 'Ask each time'], ['acceptEdits', 'Accept edits'], ['bypass', 'Bypass permissions']];
 function labelFor(list, id, fb) { const f = list.find((x) => x[0] === id); if (f) return f[1]; if (list === MODELS && MODEL_ALIASES[id]) return MODEL_ALIASES[id]; return fb; }
@@ -1043,61 +1063,126 @@ function openTemplateMenu(anchor) {
 }
 $('tplBtn').onclick = (e) => { e.stopPropagation(); openTemplateMenu(e.currentTarget); };
 
-/* ---------------- voice to text (dictation) ---------------- */
+/* ---------------- voice to text (offline Vosk dictation) ----------------
+   The old implementation used the browser SpeechRecognition API, which in
+   Electron routes through Google's cloud service and simply fails with a
+   "network" error — that is why voice never worked. This version runs a small
+   (~40MB) Vosk model fully offline via WebAssembly. No network, no API key. */
 (() => {
   const btn = $('micBtn');
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!btn) return;
-  if (!SR) { btn.disabled = true; btn.title = 'Voice input is not available in this build'; return; }
-  let rec = null, listening = false, baseText = '', stopping = false;
   const inp = $('input');
+  if (!btn) return;
+  if (!window.Vosk) { btn.disabled = true; btn.title = 'Voice input is not available in this build'; return; }
+
+  let model = null;          // cached Vosk model (loaded once)
+  let modelLoading = null;   // in-flight load promise
+  let recognizer = null;     // active KaldiRecognizer
+  let audioCtx = null, source = null, processor = null, stream = null;
+  let listening = false, baseText = '';
+  const SAMPLE_RATE = 16000;
+
   function setListening(on) {
     listening = on;
     btn.classList.toggle('listening', on);
-    btn.title = on ? 'Stop dictation' : 'Dictate (voice to text)';
+    btn.title = on ? 'Stop dictation (click to finish)' : 'Dictate — offline voice to text';
   }
-  function start() {
+
+  // Load and unpack the bundled model once. Bytes come from the main process
+  // (avoids file:// fetch/CSP problems) and are handed to Vosk as a blob URL.
+  async function ensureModel() {
+    if (model) return model;
+    if (modelLoading) return modelLoading;
+    modelLoading = (async () => {
+      const res = await cc.voiceModel();
+      if (!res || !res.ok) throw new Error((res && res.error) || 'model unavailable');
+      const bytes = res.bytes instanceof Uint8Array ? res.bytes : new Uint8Array(res.bytes);
+      const blob = new Blob([bytes], { type: 'application/gzip' });
+      const url = URL.createObjectURL(blob);
+      try {
+        model = await window.Vosk.createModel(url);
+        return model;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    })();
+    try { return await modelLoading; } finally { modelLoading = null; }
+  }
+
+  function commitFinal(text) {
+    const t = (text || '').trim();
+    if (!t) return;
+    baseText = (baseText ? baseText.replace(/\s*$/, '') + ' ' : '') + t;
+    inp.value = baseText;
+    autoGrow(); updateComposer();
+  }
+  function showInterim(partial) {
+    const p = (partial || '').trim();
+    const joiner = baseText && p ? ' ' : '';
+    inp.value = baseText + joiner + p;
+    autoGrow(); updateComposer();
+  }
+
+  async function start() {
+    setListening(true);
+    btn.classList.add('loading');
+    let m;
     try {
-      rec = new SR();
-      rec.lang = navigator.language || 'en-US';
-      rec.continuous = true;
-      rec.interimResults = true;
-      baseText = inp.value;
-      stopping = false;
-      rec.onresult = (e) => {
-        let finalTxt = '', interim = '';
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const t = e.results[i][0].transcript;
-          if (e.results[i].isFinal) finalTxt += t; else interim += t;
-        }
-        if (finalTxt) baseText = (baseText ? baseText.replace(/\s*$/, '') + ' ' : '') + finalTxt.trim();
-        const joiner = baseText && interim ? ' ' : '';
-        inp.value = baseText + joiner + interim;
-        autoGrow(); updateComposer();
-      };
-      rec.onerror = (e) => {
-        stopping = true;
-        const msg = e && e.error;
-        if (msg === 'not-allowed' || msg === 'service-not-allowed') toast('Microphone access was blocked', 'err');
-        else if (msg === 'no-speech') toast('Didn’t catch that — try again', 'err');
-        else if (msg === 'network') toast('Voice service unavailable (no network / not supported in this build)', 'err');
-        else if (msg !== 'aborted') toast('Voice input error', 'err');
-        setListening(false);
-      };
-      rec.onend = () => {
-        // Chromium ends the session periodically; keep going until the user stops.
-        if (listening && !stopping) { try { rec.start(); return; } catch { /* fall through */ } }
-        setListening(false);
-        inp.focus();
-      };
-      rec.start();
-      setListening(true);
-    } catch (err) {
-      toast('Could not start voice input', 'err');
+      m = await ensureModel();
+    } catch (e) {
+      btn.classList.remove('loading');
       setListening(false);
+      toast('Could not load the voice model', 'err');
+      return;
     }
+    btn.classList.remove('loading');
+    if (!listening) return; // user cancelled while loading
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1, sampleRate: SAMPLE_RATE },
+        video: false,
+      });
+    } catch (e) {
+      setListening(false);
+      toast('Microphone access was blocked', 'err');
+      return;
+    }
+
+    baseText = inp.value ? inp.value.replace(/\s*$/, '') : '';
+    recognizer = new m.KaldiRecognizer(SAMPLE_RATE);
+    recognizer.setWords(false);
+    recognizer.on('result', (msg) => { if (msg && msg.result) commitFinal(msg.result.text); });
+    recognizer.on('partialresult', (msg) => { if (msg && msg.result) showInterim(msg.result.partial); });
+
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    source = audioCtx.createMediaStreamSource(stream);
+    // ScriptProcessorNode is deprecated but universally available and the
+    // simplest way to hand raw PCM frames to Vosk. Buffer size 4096 keeps
+    // latency low without starving the recognizer.
+    processor = audioCtx.createScriptProcessor(4096, 1, 1);
+    processor.onaudioprocess = (ev) => {
+      if (!recognizer) return;
+      try { recognizer.acceptWaveform(ev.inputBuffer); } catch { /* transient */ }
+    };
+    source.connect(processor);
+    processor.connect(audioCtx.destination);
+    toast('🎤 Listening — speak now', 'ok');
   }
-  function stop() { stopping = true; setListening(false); if (rec) { try { rec.stop(); } catch { /* noop */ } } }
+
+  function stop() {
+    setListening(false);
+    btn.classList.remove('loading');
+    try { if (processor) { processor.disconnect(); processor.onaudioprocess = null; } } catch { /* noop */ }
+    try { if (source) source.disconnect(); } catch { /* noop */ }
+    try { if (audioCtx) audioCtx.close(); } catch { /* noop */ }
+    try { if (stream) stream.getTracks().forEach((t) => t.stop()); } catch { /* noop */ }
+    // Any trailing interim text is already in the box (showInterim writes it
+    // live); the recognizer's final 'result' events have committed the rest.
+    if (recognizer) { try { recognizer.remove(); } catch { /* noop */ } }
+    processor = source = audioCtx = stream = recognizer = null;
+    inp.focus();
+  }
+
   btn.onclick = () => { if (listening) stop(); else start(); };
 })();
 async function newChat(chooseFolder) {

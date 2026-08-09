@@ -152,7 +152,10 @@ class ChatSession {
     // deprecated maxThinkingTokens and left 'low' unset, so picking "Low" fell
     // through to the SDK default ('high') — the slider could only ever raise
     // token use, never lower it.
-    const EFFORT = { low: 'low', medium: 'medium', high: 'high', ultra: 'max' };
+    // Five levels straight through to the SDK. 'ultra' is the old label for the
+    // xhigh ("Ultra think") tier — keep it mapped for backward compatibility
+    // with any per-chat override saved before the rename.
+    const EFFORT = { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', ultra: 'xhigh', max: 'max' };
     const level = EFFORT[this.effort] || 'medium';
     options.effort = level;
     options.thinking = level === 'low' ? { type: 'disabled' } : { type: 'adaptive', display: 'summarized' };
