@@ -226,6 +226,24 @@ function finalizeTurn(id, ev) {
   if (!f.convo.title || f.convo.title === 'New chat') { const t = titleFromLog(log); if (t) patch.title = t; }
   updateConvoById(id, patch);
 }
+// Snapshot of the in-flight (not-yet-finalized) assistant turn as a log-shaped
+// message, so switching TO a still-generating chat replays everything streamed
+// so far instead of showing a blank turn. Returns null if nothing is buffered.
+function bufferedTurnMessage(id) {
+  const b = state.turnBuf.get(id);
+  if (!b || !b.blocks.length) return null;
+  // Deep-ish copy so the caller can't mutate the live buffer.
+  return { role: 'assistant', blocks: b.blocks.map((blk) => ({ ...blk })), usage: null, costUsd: 0, ts: Date.now(), provisional: true };
+}
+// The full transcript to show for a chat: finalized log + any live in-flight
+// turn. Used by openConvo / getHistory so background chats never look empty.
+function logWithLiveTurn(id) {
+  const f = findConvo(id);
+  const log = (f && Array.isArray(f.convo.log)) ? f.convo.log.slice() : [];
+  const live = bufferedTurnMessage(id);
+  if (live) log.push(live);
+  return log;
+}
 // Bill a finished turn to the account that ran it. Cache reads are counted at
 // full weight because that is how they land against a plan's quota.
 function recordAccountUsage(accountId, ev) {
@@ -1156,7 +1174,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('chat:start', (_e, accountId) => useAccountForChat(accountId));
-  ipcMain.handle('chat:getHistory', () => { const f = state.currentConvoId ? findConvo(state.currentConvoId) : null; return { log: (f && f.convo.log) || [] }; });
+  ipcMain.handle('chat:getHistory', () => { const id = state.currentConvoId; if (!id || !findConvo(id)) return { log: [] }; return { log: logWithLiveTurn(id), generating: state.genConvos.has(id) }; });
   // The log is now assembled in main from session events; the renderer no longer
   // persists it. Kept as a no-op so an older renderer build can't clobber it.
   ipcMain.handle('chat:saveLog', () => ({ ok: true }));
@@ -1230,7 +1248,7 @@ function registerIpc() {
     state.currentConvoId = id;
     // Keep the folder bucket's own pointer in sync (used by migration/legacy).
     const d = getProjectData(f.folder); d.currentId = id; saveProjectData(f.folder, d);
-    toRenderer('chat:history', { log: f.convo.log || [] });
+    toRenderer('chat:history', { log: logWithLiveTurn(id), generating: state.genConvos.has(id) });
     // Replay any permission prompt this chat is waiting on (it was raised while
     // the chat was off-screen and had nowhere to show).
     const pend = state.perms.get(id);

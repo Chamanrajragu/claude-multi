@@ -103,6 +103,12 @@ $('convoSearch').addEventListener('input', async (e) => {
 });
 async function openConvo(id) {
   if (id === state.currentConvoId) return; // already on screen
+  // Update the on-screen pointer optimistically. The main process sends
+  // chat:history and app:state as separate messages; without this, a live
+  // streaming delta arriving in that gap would be dropped by the onChat guard
+  // (which compares ev.convoId against state.currentConvoId) and the freshly
+  // reopened, still-generating chat would look frozen.
+  state.currentConvoId = id;
   const r = await cc.openConvo(id);
   if (r && !r.ok) toast(r.error || 'Could not open chat', 'err');
 }
@@ -599,15 +605,48 @@ function appendAssistantDOM(blocks, meta) {
   msg.appendChild(av); msg.appendChild(body); wrap(msg);
   decorateAssistant(msg, meta);
 }
-function renderHistory(log) {
+// Rebuild the in-flight (provisional) assistant turn as a LIVE turn object so
+// that streaming deltas arriving after you switch back keep appending to it
+// instead of spawning a duplicate message. Mirrors ensureTurn()'s shape.
+function adoptLiveTurn(blocks) {
+  hideWelcome();
+  const msg = document.createElement('div'); msg.className = 'msg assistant';
+  const av = document.createElement('div'); av.className = 'assistant-avatar'; av.textContent = '✳';
+  const body = document.createElement('div'); body.className = 'assistant-body';
+  msg.appendChild(av); msg.appendChild(body); wrap(msg);
+  turn = { msg, body, curText: null, curRaw: '', curBlock: null, tools: new Map(), thinkEl: null, thinkRaw: '', blocks: [] };
+  for (const blk of blocks || []) {
+    if (blk.type === 'text') {
+      const el = document.createElement('div'); el.className = 'md'; el._raw = blk.text || '';
+      el.innerHTML = renderMarkdown(blk.text || ''); body.appendChild(el);
+      const b = { type: 'text', text: blk.text || '' }; turn.blocks.push(b);
+      // Leave the last text block "open" so a trailing delta continues it.
+      turn.curText = el; turn.curRaw = el._raw; turn.curBlock = b;
+    } else if (blk.type === 'tool') {
+      const b = { ...blk }; turn.blocks.push(b);
+      const { card } = makeToolCard(b); body.appendChild(card);
+      // A tool still running keeps a reference so a late tool_result can finish
+      // it; matched by id if we get one, else by "last running" fallback.
+      turn.tools.set('idx:' + (turn.blocks.length - 1), { block: b, head: card.querySelector('.tool-head'), body: card.querySelector('.tool-body') });
+    }
+  }
+  scrollDown(true);
+}
+function renderHistory(log, opts) {
   clearTranscript();
+  const generating = !!(opts && opts.generating);
   convo = Array.isArray(log) ? log.map((m) => ({ ...m })) : [];
   resetUsage();
   if (!convo.length) { const w = $('welcome'); if (w) w.classList.remove('hidden'); return; }
-  for (const m of convo) {
+  // A provisional trailing assistant turn is the live, still-streaming one.
+  const lastIsLive = generating && convo.length && convo[convo.length - 1].role === 'assistant' && convo[convo.length - 1].provisional;
+  const staticCount = lastIsLive ? convo.length - 1 : convo.length;
+  for (let i = 0; i < staticCount; i++) {
+    const m = convo[i];
     if (m.role === 'user') appendUserDOM(m.text, m.ts);
     else { appendAssistantDOM(m.blocks, { usage: m.usage, costUsd: m.costUsd, ts: m.ts }); if (m.usage || m.costUsd) applyTurnUsage(m.usage, m.costUsd); }
   }
+  if (lastIsLive) { adoptLiveTurn(convo[convo.length - 1].blocks); convo.pop(); }
   scrollDown(true);
 }
 function addUserMessage(text) { convo.push({ role: 'user', text }); appendUserDOM(text, Date.now()); persist(); scrollDown(true); }
@@ -636,7 +675,12 @@ function onToolUse(id, name, input) {
   t.blocks.push(block); const { card, head, body } = makeToolCard(block); t.body.appendChild(card); t.tools.set(id, { block, head, body }); scrollDown();
 }
 function onToolResult(id, isError, text) {
-  const t = turn; if (!t) return; const e = t.tools.get(id); if (!e) return;
+  const t = turn; if (!t) return;
+  let e = t.tools.get(id);
+  // After switching back to a chat mid-turn, the rebuilt tool cards are keyed by
+  // index (original ids are gone). Fall back to the last still-running card.
+  if (!e) { for (const v of t.tools.values()) { if (v.block && v.block.state === 'running') e = v; } }
+  if (!e) return;
   e.block.state = isError ? 'err' : 'ok';
   const s = e.head.querySelector('.tool-state'); s.textContent = isError ? 'error' : 'done'; s.className = 'tool-state ' + (isError ? 'err' : 'ok');
   if (text) {
@@ -689,7 +733,7 @@ cc.onChat((ev) => {
     default: break;
   }
 });
-cc.onHistory((info) => renderHistory(info && info.log));
+cc.onHistory((info) => renderHistory(info && info.log, { generating: !!(info && info.generating) }));
 
 /* ---------------- actions ---------------- */
 async function useAccount(id) {
@@ -2230,7 +2274,7 @@ cc.onState((s) => {
   renderAll();
   loadHist();
   refreshWorkspaces();   // so the command palette lists them before the menu is opened
-  if (state.currentConvoId) { try { const h = await cc.getHistory(); if (h && h.log && h.log.length) renderHistory(h.log); } catch {} }
+  if (state.currentConvoId) { try { const h = await cc.getHistory(); if (h && h.log && h.log.length) renderHistory(h.log, { generating: !!h.generating }); } catch {} }
   // Pre-load @-file list for the initial project.
   if (state.projectDir) loadAtFiles();
 })();
