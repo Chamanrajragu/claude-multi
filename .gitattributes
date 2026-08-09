@@ -5,3 +5,10 @@
 *.png binary
 *.ico binary
 *.icns binary
+*.tar.gz binary
+*.gz binary
+*.zip binary
+*.wasm binary
+
+# Vendored, pre-built bundle (Vosk WASM speech model loader) — never touch it
+src/renderer/vendor/vosk.js binary
