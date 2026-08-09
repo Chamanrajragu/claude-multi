@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://purffle.com/</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://purffle.com/screenshot-main.png</image:loc>
+      <image:title>Claude Multi — run multiple Claude accounts in one desktop app</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://purffle.com/screenshot-autoloop.png</image:loc>
+      <image:title>Claude Multi auto-loop running 24/7 across multiple Claude accounts</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://purffle.com/screenshot-limit.png</image:loc>
+      <image:title>Claude usage limit reached — switch account and continue where Claude left off</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://purffle.com/screenshot-dashboard.png</image:loc>
+      <image:title>Claude Multi account dashboard with live cooldown timers</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://purffle.com/screenshot-context.png</image:loc>
+      <image:title>Claude context window inspector — see what is using your tokens</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://purffle.com/screenshot-accounts.png</image:loc>
+      <image:title>Claude Multi account switcher — multiple Claude accounts signed in at once</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://purffle.com/screenshot-models.png</image:loc>
+      <image:title>Claude Multi model picker with Opus 5 and every current Claude model</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://purffle.com/screenshot-palette.png</image:loc>
+      <image:title>Claude Multi command palette — every action one Ctrl+K away</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://purffle.com/screenshot-light.png</image:loc>
+      <image:title>Claude Multi light theme with inline red and green diffs</image:title>
+    </image:image>
+  </url>
+</urlset>
