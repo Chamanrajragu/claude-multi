@@ -43,6 +43,18 @@ The core problem it solves: **Claude's 5-hour usage limit stops your work cold.*
 
 ---
 
+## 🆕 What's New in v1.30.0
+
+- **🧠 Claude Opus 5 + the full model line-up** — Fable 5, Opus 5, Opus 4.8/4.7/4.6, Sonnet 5/4.6, and Haiku 4.5, all in the model picker.
+- **⚡ Five effort levels** — Low, Medium, High, **Ultra think (xhigh)**, and **Max**, matching Anthropic's `effort` parameter exactly. Dial reasoning depth per chat.
+- **🎤 Offline voice-to-text** — dictate straight into the composer with a bundled ~40MB speech model. **Fully offline, no API key, no cloud, 100% private.**
+- **🎯 Redesigned account switcher** — bigger targets, clean stacked layout, a clear "Active" badge, and one-key switching (`Ctrl/Cmd + 1…9`).
+- **🧵 Background chats stay live** — switch away from a generating chat and back; its streaming response is preserved.
+
+> See the [full release notes](https://github.com/Chamanrajragu/claude-multi/releases/latest).
+
+---
+
 ## Key Features
 
 <table>
@@ -70,6 +82,12 @@ See a full breakdown of your context window — every file, tool, memory item, a
 **🔎 @file autocomplete**  
 Type `@` anywhere in the composer to fuzzy-search and insert any file from your project. Tab to complete, arrows to navigate.
 
+**🧠 Every Claude model + 5 effort levels**  
+Pick any model — Fable 5, Opus 5, Sonnet 5, Haiku 4.5 and more — and set reasoning from Low all the way up to **Ultra think** and **Max**, per chat.
+
+**🎤 Offline voice-to-text**  
+Dictate straight into the composer with a bundled speech model. No internet, no API key, no cloud — your voice never leaves your machine.
+
 **🎨 Polished, familiar UI**  
 Feels like the official Claude desktop app. Dark and light themes, accent colors, streamed markdown, syntax-highlighted code with language labels and copy buttons.
 
@@ -88,12 +106,14 @@ No telemetry, no analytics, no update pings, no servers. Everything stays on you
 
 <div align="center">
 
-| Platform | Installer | Notes |
-|----------|-----------|-------|
-| **Windows** | [Claude-Multi-Setup-1.26.0.exe](https://github.com/Chamanrajragu/claude-multi/releases/latest) | Recommended — installs like any app |
-| **Windows Portable** | [Claude-Multi-1.26.0.exe](https://github.com/Chamanrajragu/claude-multi/releases/latest) | No install needed, run from anywhere |
-| **macOS** | [Claude-Multi-1.26.0-arm64.dmg](https://github.com/Chamanrajragu/claude-multi/releases/latest) | Apple Silicon + Intel |
-| **Linux** | [Claude-Multi-1.26.0.AppImage](https://github.com/Chamanrajragu/claude-multi/releases/latest) | Works on most distros |
+| Platform | Direct download | Notes |
+|----------|-----------------|-------|
+| **Windows** | [⬇ Claude-Multi-Setup-1.30.0.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.0/Claude-Multi-Setup-1.30.0.exe) | Recommended — installs like any app |
+| **Windows Portable** | [⬇ Claude-Multi-1.30.0.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.0/Claude-Multi-1.30.0.exe) | No install needed, run from anywhere |
+| **macOS** | [⬇ Claude-Multi-1.30.0-arm64.dmg](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.0/Claude-Multi-1.30.0-arm64.dmg) | Apple Silicon + Intel |
+| **Linux** | [⬇ Claude-Multi-1.30.0.AppImage](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.0/Claude-Multi-1.30.0.AppImage) | Works on most distros |
+
+**Always-latest links:** [Windows installer](https://github.com/Chamanrajragu/claude-multi/releases/latest) · [all files & release notes](https://github.com/Chamanrajragu/claude-multi/releases/latest)
 
 </div>
 
@@ -161,7 +181,7 @@ Claude Multi remembers which account to use per project folder.
 ### Composer
 - **Slash commands** — type `/` for `/new`, `/compact`, `/model`, `/switch`, `/copy` and more, without leaving the keyboard
 - **@file autocomplete** — type `@` to fuzzy-search any file in your project
-- **Voice to text** — mic button for hands-free input
+- **Voice to text (offline)** — mic button dictates straight into the composer using a bundled ~40MB speech model; no internet or API key required
 - **Prompt templates** — save and reuse your best prompts
 - **Paste images** directly — screenshots, browser images, any format
 - **Drag and drop** files onto the window
@@ -176,6 +196,8 @@ Claude Multi remembers which account to use per project folder.
 - **Long-chat warning** — nudges you to compact or start fresh
 - **Budget caps** — stop a turn after N steps or $X spend
 - **Disable unused tools** — subagents, web search, fetch, todos, notebooks
+- **Every current model** — Fable 5, Opus 5, Opus 4.8/4.7/4.6, Sonnet 5/4.6, Haiku 4.5
+- **Five effort levels** — Low, Medium, High, Ultra think (xhigh), Max — set per chat
 - **Per-chat model and effort** — Opus for hard tasks, Haiku for quick edits
 - **Least-used account routing** — starts new tasks on the account with most quota
 
