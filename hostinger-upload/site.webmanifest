@@ -2,12 +2,12 @@
   "name": "Claude Multi — Multiple Claude Accounts in One App",
   "short_name": "Claude Multi",
   "description": "Free desktop app to use multiple Claude accounts in one window and auto-switch when one hits its usage limit.",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "/claude-multi/",
+  "scope": "/claude-multi/",
   "display": "standalone",
   "background_color": "#0b0d12",
   "theme_color": "#0b0d12",
   "icons": [
-    { "src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/claude-multi/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }

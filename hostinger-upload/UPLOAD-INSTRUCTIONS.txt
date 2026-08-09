@@ -1,70 +1,76 @@
 ════════════════════════════════════════════════════════════
-  CLAUDE MULTI — HOSTINGER UPLOAD INSTRUCTIONS
-  Target URL: https://purffle.com/   (root domain — best for SEO)
+  CLAUDE MULTI — HOSTINGER UPLOAD (SUBFOLDER)
+  Live URL:  https://purffle.com/claude-multi/
 ════════════════════════════════════════════════════════════
+
+WHY A SUBFOLDER (not the root)?
+-------------------------------
+Your ROOT  purffle.com  is already your main Purffle brand site
+("One Brand, Many Worlds"). We must NOT overwrite that. So Claude
+Multi lives at  purffle.com/claude-multi/  — every link, canonical,
+sitemap and image in these files is set for that path.
+
 
 WHAT TO UPLOAD
 --------------
-Upload the ENTIRE CONTENTS of this "hostinger-upload" folder
-(NOT the folder itself) into Hostinger's  public_html  directory.
+Upload the ENTIRE CONTENTS of this folder into:
 
-Files that must end up in public_html/:
+    public_html/claude-multi/
+
+(You already created that folder — good. Just replace its contents
+with these corrected files.)
+
+Files that must end up in public_html/claude-multi/:
   index.html
   404.html
-  robots.txt
+  robots.txt          (see note below)
   sitemap.xml
   site.webmanifest
-  .htaccess          <-- IMPORTANT: it's a hidden file, don't miss it
+  .htaccess           <-- hidden file, don't miss it
   icon.png
-  screenshot-*.png / .webp   (all of them)
+  screenshot-*.png / .webp   (9 pairs)
 
 
-HOW TO UPLOAD (Hostinger hPanel — easiest)
-------------------------------------------
-1.  Log in to Hostinger  ->  hPanel.
-2.  Open  "File Manager"  (under Files).
-3.  Go into the  public_html  folder.
-4.  DELETE the old placeholder (e.g. default.php / index.html) if present.
-5.  Click  "Upload"  (top-right)  ->  select ALL files inside this folder.
-        - To include the hidden .htaccess:
-          In File Manager, click the gear/⚙ (Settings) -> tick
-          "Show hidden files (dotfiles)"  BEFORE uploading, OR just
-          upload .htaccess separately.
-6.  Make sure everything sits directly in public_html/ (not in a
-    sub-folder). index.html must be at  public_html/index.html.
-
-  (Alternative: use FTP with FileZilla — host = your domain, the
-   credentials are in hPanel -> Files -> FTP Accounts. Drop all files
-   into /public_html/.)
+STEPS (Hostinger File Manager)
+------------------------------
+1.  hPanel -> File Manager -> open  public_html/claude-multi/
+2.  Select the OLD files already in there and DELETE them
+    (so nothing stale is left behind).
+3.  Click Upload -> choose ALL files from this folder.
+       - To include the hidden .htaccess: click the ⚙ (Settings)
+         top-right in File Manager and enable "Show hidden files",
+         then upload it too.
+4.  Confirm  index.html  is at  public_html/claude-multi/index.html
 
 
-AFTER UPLOADING — DO THESE 3 THINGS FOR #1 RANKING
---------------------------------------------------
-1.  SSL: hPanel -> Security -> SSL. Make sure an SSL certificate is
-    ACTIVE for purffle.com (Hostinger gives a free one). The .htaccess
-    already forces https, so SSL must be on or the site won't load.
+IMPORTANT — robots.txt
+----------------------
+robots.txt ONLY works at the domain root. This file's robots.txt is
+just a reference. The REAL one must live at:
 
-2.  Google Search Console  (https://search.google.com/search-console):
-      - Add property:  purffle.com  (Domain property).
-      - Verify (Hostinger -> DNS, add the TXT record Google gives you).
-      - Submit sitemap:  https://purffle.com/sitemap.xml
-      - Use "URL Inspection" on  https://purffle.com/  ->  "Request
-        Indexing".  This gets you crawled in DAYS instead of weeks.
+    public_html/robots.txt        ->  https://purffle.com/robots.txt
 
-3.  Bing Webmaster Tools (https://www.bing.com/webmasters):
-      - Add site, import from Google Search Console (1 click),
-        submit the same sitemap. (Bing also powers ChatGPT search.)
+If you already have a robots.txt at your root, just make sure it
+contains this line (add it if missing):
+
+    Sitemap: https://purffle.com/claude-multi/sitemap.xml
+
+(You do NOT need to put robots.txt inside the claude-multi folder.)
 
 
-OPTIONAL BUT RECOMMENDED
-------------------------
-- Test rich results:  https://search.google.com/test/rich-results
-  Paste  https://purffle.com/  -> should detect FAQ, HowTo,
-  SoftwareApplication, Breadcrumb.
-- Test speed:  https://pagespeed.web.dev/  -> paste your URL.
-- Prefer www?  Open .htaccess and swap the www redirect block
-  (comment says which lines).
+AFTER UPLOADING — GET RANKED
+----------------------------
+1.  Hard-refresh the page:  Ctrl+F5  (or open in Incognito). Browser
+    cache is usually why "nothing looks different."
+2.  Google Search Console (search.google.com/search-console):
+       - Property for purffle.com should already exist.
+       - URL Inspection ->  https://purffle.com/claude-multi/
+         ->  "Request Indexing".
+       - Submit sitemap:  https://purffle.com/claude-multi/sitemap.xml
+3.  Test rich results:  https://search.google.com/test/rich-results
+       Paste  https://purffle.com/claude-multi/  -> should detect
+       SoftwareApplication, FAQ, HowTo, Breadcrumb, WebSite.
+4.  Speed check:  https://pagespeed.web.dev/
 
 
-That's it. The page is fully self-contained, static, and needs no
-database, PHP, or Node — it just works.
+That's it — static site, no PHP/database needed.

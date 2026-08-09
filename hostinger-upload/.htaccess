@@ -1,28 +1,16 @@
 # ============================================================
-#  Claude Multi — purffle.com  |  Apache config for SEO + speed
+#  Claude Multi — purffle.com/claude-multi/
+#  SUBFOLDER config. Safe: no host-level HTTPS/www redirects
+#  here (those belong to your ROOT purffle.com .htaccess, so
+#  we don't touch or conflict with your main site).
 # ============================================================
 
-# ---- Force HTTPS + canonical (non-www) host ----------------
-# One canonical URL (https://purffle.com/...) avoids duplicate-content
-# splitting your ranking signals across http/https and www/non-www.
-<IfModule mod_rewrite.c>
-  RewriteEngine On
+# ---- Custom 404 for this folder ----------------------------
+ErrorDocument 404 /claude-multi/404.html
 
-  # http -> https
-  RewriteCond %{HTTPS} off
-  RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
-
-  # www -> non-www  (change both lines to the opposite if you prefer www)
-  RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
-  RewriteRule ^(.*)$ https://%1/$1 [R=301,L]
-</IfModule>
-
-# ---- Custom error page -------------------------------------
-ErrorDocument 404 /404.html
-
-# ---- Gzip / Brotli compression (faster load = better SEO) ---
+# ---- Gzip / Brotli compression (faster load = better SEO) --
 <IfModule mod_deflate.c>
-  AddOutputFilterByType DEFLATE text/html text/plain text/css application/javascript application/json application/xml text/xml image/svg+xml application/rss+xml application/x-font-ttf font/opentype
+  AddOutputFilterByType DEFLATE text/html text/plain text/css application/javascript application/json application/xml text/xml image/svg+xml
 </IfModule>
 <IfModule mod_brotli.c>
   AddOutputFilterByType BROTLI_COMPRESS text/html text/css application/javascript application/json image/svg+xml
@@ -31,43 +19,31 @@ ErrorDocument 404 /404.html
 # ---- Browser caching (Core Web Vitals) ---------------------
 <IfModule mod_expires.c>
   ExpiresActive On
-  ExpiresDefault                          "access plus 1 month"
   ExpiresByType text/html                 "access plus 0 seconds"
   ExpiresByType image/webp                "access plus 1 year"
   ExpiresByType image/png                 "access plus 1 year"
   ExpiresByType image/jpeg                "access plus 1 year"
-  ExpiresByType image/gif                 "access plus 1 year"
   ExpiresByType image/x-icon              "access plus 1 year"
   ExpiresByType text/css                  "access plus 1 year"
   ExpiresByType application/javascript    "access plus 1 year"
   ExpiresByType application/xml           "access plus 1 day"
-  ExpiresByType text/xml                  "access plus 1 day"
 </IfModule>
 
 <IfModule mod_headers.c>
-  # Long cache for static assets
   <FilesMatch "\.(webp|png|jpe?g|gif|ico|css|js|woff2?)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
-  # Always-fresh HTML
   <FilesMatch "\.html$">
     Header set Cache-Control "public, max-age=0, must-revalidate"
   </FilesMatch>
 
   # ---- Security headers (Google favours secure sites) ------
   Header always set X-Content-Type-Options "nosniff"
-  Header always set X-Frame-Options "SAMEORIGIN"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
-  Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
 </IfModule>
 
-# ---- Correct MIME type for modern assets -------------------
+# ---- Correct MIME types ------------------------------------
 <IfModule mod_mime.c>
   AddType image/webp .webp
   AddType application/manifest+json .webmanifest
-</IfModule>
-
-# ---- Keep-alive --------------------------------------------
-<IfModule mod_headers.c>
-  Header set Connection keep-alive
 </IfModule>
