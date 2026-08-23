@@ -357,7 +357,11 @@ function statePayload() {
   const cur = state.currentConvoId ? findConvo(state.currentConvoId) : null;
   return {
     accounts: store.list(),
-    activeAccountId: (cur && cur.convo.lastAccount) || null,
+    // A brand-new chat has no bound account yet; fall back to the last account
+    // you used so the composer is ready and the first send "just works" instead
+    // of being blocked by a "choose an account" toast. The send handler already
+    // starts the session on this same lastAccountId fallback.
+    activeAccountId: (cur && cur.convo.lastAccount) || state.lastAccountId || null,
     projectDir: cur ? cur.folder : '',      // folder of the chat on screen
     running: state.sessions.has(state.currentConvoId),
     generating: state.genConvos.has(state.currentConvoId),
@@ -1729,8 +1733,14 @@ app.whenReady().then(() => {
   store = new Store(path.join(app.getPath('userData'), 'accounts.json'));
   state.lastFolder = store.get('lastProjectDir') || '';
   // Restore the most-recently-updated chat as the one on screen.
-  const first = conversationList().conversations[0];
+  const convosAtBoot = conversationList().conversations;
+  const first = convosAtBoot[0];
   state.currentConvoId = first ? first.id : '';
+  // Seed "last used account" from the most-recent chat that has one, so a fresh
+  // chat after a restart defaults to the account you last used rather than
+  // forcing a pick before you can send.
+  const seededAcc = convosAtBoot.find((c) => c.accountId)?.accountId;
+  if (seededAcc) state.lastAccountId = seededAcc;
   Menu.setApplicationMenu(null);
   applyLoginItem(store.getSettings().startOnLogin);
   registerIpc();
