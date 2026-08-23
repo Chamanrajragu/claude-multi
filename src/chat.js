@@ -108,6 +108,8 @@ class ChatSession {
     this._perms = new Map();
     this._permSeq = 0;
     this._sawError = false;
+    this._sawResult = false;   // a 'result' message = the turn ended normally
+    this._stderr = '';         // bounded tail of the engine's stderr, for diagnosing silent deaths
   }
 
   async start() {
@@ -152,7 +154,10 @@ class ChatSession {
       settingSources: ['user', 'project', 'local'],
       env: Object.assign({}, process.env, { CLAUDE_CONFIG_DIR: this.configDir, FORCE_COLOR: '0' }),
       canUseTool: (toolName, toolInput) => this._canUseTool(toolName, toolInput),
-      stderr: () => {},
+      // Keep a bounded tail of the engine's stderr. Previously fully discarded,
+      // which meant a process that died before replying failed silently — the
+      // user saw nothing. We surface this tail on an unexpected exit (see _loop).
+      stderr: (data) => { try { this._stderr = (this._stderr + String(data)).slice(-4000); } catch { /* noop */ } },
     };
     if (this.model) options.model = this.model;
     if (this.resumeId) options.resume = this.resumeId;
@@ -199,6 +204,13 @@ class ChatSession {
       // Reject any dangling permission prompts so the UI doesn't hang.
       for (const [, p] of this._perms) { try { p.resolve({ behavior: 'deny', message: 'Session ended' }); } catch { /* noop */ } }
       this._perms.clear();
+      // Silent-death guard: the loop ended without a result, without a surfaced
+      // error, and without the user stopping it — the engine died before Claude
+      // replied. Surface the stderr tail (if any) instead of failing invisibly.
+      if (!this._sawError && !this._sawResult && !this._ended) {
+        const tail = (this._stderr || '').trim();
+        this.onEvent({ type: 'error', text: tail ? ('The chat engine stopped unexpectedly:\n' + tail.slice(-800)) : 'The chat engine stopped unexpectedly before Claude replied. Try sending again.' });
+      }
       this.onEvent({ type: 'exit' });
     }
   }
@@ -335,6 +347,7 @@ class ChatSession {
         this._handleUser(msg.message || msg);
         break;
       case 'result':
+        this._sawResult = true;
         this._handleResult(msg);
         break;
       default:
