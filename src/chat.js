@@ -141,6 +141,15 @@ class ChatSession {
       cwd: this.cwd,
       includePartialMessages: true,
       permissionMode: this.permissionMode,
+      // Without this the SDK sends a MINIMAL system prompt, so the model behaves
+      // like a bare LLM instead of Claude Code — the whole reason chats felt
+      // "not as good as real Claude". The preset is Claude Code's own system
+      // prompt (tool guidance, coding conventions, agent behavior).
+      systemPrompt: { type: 'preset', preset: 'claude_code' },
+      // Load the same settings the CLI does — CLAUDE.md, user/project/local
+      // settings — so behavior matches the real `claude` command. The 0.3.x SDK
+      // does not load these unless asked.
+      settingSources: ['user', 'project', 'local'],
       env: Object.assign({}, process.env, { CLAUDE_CONFIG_DIR: this.configDir, FORCE_COLOR: '0' }),
       canUseTool: (toolName, toolInput) => this._canUseTool(toolName, toolInput),
       stderr: () => {},
