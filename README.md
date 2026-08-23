@@ -43,13 +43,14 @@ The core problem it solves: **Claude's 5-hour usage limit stops your work cold.*
 
 ---
 
-## 🆕 What's New in v1.30.0
+## 🆕 What's New in v1.30.4
 
-- **🧠 Claude Opus 5 + the full model line-up** — Fable 5, Opus 5, Opus 4.8/4.7/4.6, Sonnet 5/4.6, and Haiku 4.5, all in the model picker.
-- **⚡ Five effort levels** — Low, Medium, High, **Ultra think (xhigh)**, and **Max**, matching Anthropic's `effort` parameter exactly. Dial reasoning depth per chat.
-- **🎤 Offline voice-to-text** — dictate straight into the composer with a bundled ~40MB speech model. **Fully offline, no API key, no cloud, 100% private.**
-- **🎯 Redesigned account switcher** — bigger targets, clean stacked layout, a clear "Active" badge, and one-key switching (`Ctrl/Cmd + 1…9`).
-- **🧵 Background chats stay live** — switch away from a generating chat and back; its streaming response is preserved.
+- **💬 Answers like the Claude app** — replies now come back in the warm, thorough, well-formatted style of Claude Desktop, while keeping full Claude Code tools for hands-on tasks.
+- **🎯 New chats just work** — a fresh chat inherits your last-used account, so your first message sends without an extra "pick an account" step.
+- **🧰 Todo lists & subagents on** — the planning and fan-out tools Claude Code relies on for multi-step work are enabled.
+- **🛠 No more silent failures** — if the chat engine stops before replying, you now see the actual error instead of nothing.
+- **🧠 Full model line-up + five effort levels** — Fable 5, Opus 5, Opus 4.8/4.7/4.6, Sonnet 5/4.6, Haiku 4.5; Low → Max reasoning depth per chat.
+- **🎤 Offline voice-to-text** — dictate into the composer with a bundled ~40MB speech model. Fully offline, no API key, 100% private.
 
 > See the [full release notes](https://github.com/Chamanrajragu/claude-multi/releases/latest).
 
@@ -108,10 +109,10 @@ No telemetry, no analytics, no update pings, no servers. Everything stays on you
 
 | Platform | Direct download | Notes |
 |----------|-----------------|-------|
-| **Windows** | [⬇ Claude-Multi-Setup-1.30.0.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.0/Claude-Multi-Setup-1.30.0.exe) | Recommended — installs like any app |
-| **Windows Portable** | [⬇ Claude-Multi-1.30.0.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.0/Claude-Multi-1.30.0.exe) | No install needed, run from anywhere |
-| **macOS** | [⬇ Claude-Multi-1.30.0-arm64.dmg](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.0/Claude-Multi-1.30.0-arm64.dmg) | Apple Silicon + Intel |
-| **Linux** | [⬇ Claude-Multi-1.30.0.AppImage](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.0/Claude-Multi-1.30.0.AppImage) | Works on most distros |
+| **Windows** | [⬇ Claude-Multi-Setup-1.30.4.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.4/Claude-Multi-Setup-1.30.4.exe) | Recommended — installs like any app |
+| **Windows Portable** | [⬇ Claude-Multi-1.30.4.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.4/Claude-Multi-1.30.4.exe) | No install needed, run from anywhere |
+| **macOS** | [⬇ Claude-Multi-1.30.4-arm64.dmg](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.4/Claude-Multi-1.30.4-arm64.dmg) | Apple Silicon (M1–M4) |
+| **Linux** | [⬇ Claude-Multi-1.30.4.AppImage](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.4/Claude-Multi-1.30.4.AppImage) | Works on most distros |
 
 **Always-latest links:** [Windows installer](https://github.com/Chamanrajragu/claude-multi/releases/latest) · [all files & release notes](https://github.com/Chamanrajragu/claude-multi/releases/latest)
 
