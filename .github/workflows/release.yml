@@ -95,3 +95,40 @@ jobs:
             --draft \
             --generate-notes \
             artifacts/*
+
+  # Keep the README's version-pinned download links current, so they never lag
+  # behind the latest tag. Runs only after a release was actually created.
+  update-readme:
+    name: Bump README download links
+    needs: publish
+    if: needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Rewrite version in the download table
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Updating README download links to $VERSION"
+          sed -i -E \
+            -e "s#releases/download/v[0-9]+\.[0-9]+\.[0-9]+/#releases/download/v${VERSION}/#g" \
+            -e "s#Claude-Multi-Setup-[0-9]+\.[0-9]+\.[0-9]+\.exe#Claude-Multi-Setup-${VERSION}.exe#g" \
+            -e "s#Claude-Multi-[0-9]+\.[0-9]+\.[0-9]+\.exe#Claude-Multi-${VERSION}.exe#g" \
+            -e "s#Claude-Multi-[0-9]+\.[0-9]+\.[0-9]+-arm64\.dmg#Claude-Multi-${VERSION}-arm64.dmg#g" \
+            -e "s#Claude-Multi-[0-9]+\.[0-9]+\.[0-9]+\.AppImage#Claude-Multi-${VERSION}.AppImage#g" \
+            README.md
+      - name: Commit if the links changed
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "README already points at ${GITHUB_REF_NAME} — nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs: bump README download links to ${GITHUB_REF_NAME} [skip ci]"
+          git push origin main
