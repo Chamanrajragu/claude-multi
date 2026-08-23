@@ -1,6 +1,6 @@
 {
   "name": "claude-multi",
-  "version": "1.30.3",
+  "version": "1.30.4",
   "description": "Run Claude Code with multiple accounts and auto-switch when one hits its usage limit.",
   "main": "src/main.js",
   "scripts": {

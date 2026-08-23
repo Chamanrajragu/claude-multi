@@ -26,6 +26,25 @@
 // File-mutating tools that "Auto-accept edits" mode approves without asking.
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Update', 'ApplyPatch']);
 
+// Appended to the Claude Code system prompt so the app answers in the warm,
+// thorough, well-formatted style of the Claude assistant in the Claude apps
+// ("Claude Desktop") for conversation/explanation, while keeping full Claude
+// Code tool abilities for hands-on coding and system tasks. We can't reproduce
+// Anthropic's private claude.ai prompt verbatim, but this closes the gap in
+// tone and depth that made replies feel clipped compared to Claude Desktop.
+const DESKTOP_STYLE = [
+  'Response style: when you are chatting, explaining, answering a question,',
+  'teaching, brainstorming, or writing prose — anything other than directly',
+  'carrying out a hands-on coding or file/system task — reply in the warm,',
+  'thorough, conversational style of the Claude assistant in the Claude apps.',
+  'Give a complete, self-contained answer; use clear structure (short',
+  'paragraphs, and headings, lists, tables, code blocks, examples or analogies',
+  'where they help); and do not clip your reply just to be brief.',
+  'Keep terse, action-first responses only for when you are actively executing',
+  'a coding or system task with tools. Retain your full tool-using abilities',
+  'for those tasks.',
+].join(' ');
+
 let sdkPromise = null;
 let permCounter = 0; // globally-unique permission request ids across all sessions
 function loadSdk() {
@@ -147,7 +166,7 @@ class ChatSession {
       // like a bare LLM instead of Claude Code — the whole reason chats felt
       // "not as good as real Claude". The preset is Claude Code's own system
       // prompt (tool guidance, coding conventions, agent behavior).
-      systemPrompt: { type: 'preset', preset: 'claude_code' },
+      systemPrompt: { type: 'preset', preset: 'claude_code', append: DESKTOP_STYLE },
       // Load the same settings the CLI does — CLAUDE.md, user/project/local
       // settings — so behavior matches the real `claude` command. The 0.3.x SDK
       // does not load these unless asked.
