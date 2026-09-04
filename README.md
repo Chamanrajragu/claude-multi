@@ -109,10 +109,10 @@ No telemetry, no analytics, no update pings, no servers. Everything stays on you
 
 | Platform | Direct download | Notes |
 |----------|-----------------|-------|
-| **Windows** | [⬇ Claude-Multi-Setup-1.30.5.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.5/Claude-Multi-Setup-1.30.5.exe) | Recommended — installs like any app |
-| **Windows Portable** | [⬇ Claude-Multi-1.30.5.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.5/Claude-Multi-1.30.5.exe) | No install needed, run from anywhere |
-| **macOS** | [⬇ Claude-Multi-1.30.5-arm64.dmg](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.5/Claude-Multi-1.30.5-arm64.dmg) | Apple Silicon (M1–M4) |
-| **Linux** | [⬇ Claude-Multi-1.30.5.AppImage](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.5/Claude-Multi-1.30.5.AppImage) | Works on most distros |
+| **Windows** | [⬇ Claude-Multi-Setup-1.30.6.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.6/Claude-Multi-Setup-1.30.6.exe) | Recommended — installs like any app |
+| **Windows Portable** | [⬇ Claude-Multi-1.30.6.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.6/Claude-Multi-1.30.6.exe) | No install needed, run from anywhere |
+| **macOS** | [⬇ Claude-Multi-1.30.6-arm64.dmg](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.6/Claude-Multi-1.30.6-arm64.dmg) | Apple Silicon (M1–M4) |
+| **Linux** | [⬇ Claude-Multi-1.30.6.AppImage](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.6/Claude-Multi-1.30.6.AppImage) | Works on most distros |
 
 **Always-latest links:** [Windows installer](https://github.com/Chamanrajragu/claude-multi/releases/latest) · [all files & release notes](https://github.com/Chamanrajragu/claude-multi/releases/latest)
 
