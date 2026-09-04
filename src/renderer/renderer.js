@@ -1437,7 +1437,11 @@ window.addEventListener('keydown', (e) => {
 let loginTerm = null, loginFit = null;
 function openLogin(a) {
   if (!a) return;
-  $('loginTitle').textContent = 'Sign in — ' + a.name; $('loginStatus').textContent = ''; $('loginModal').classList.remove('hidden');
+  $('loginTitle').textContent = 'Sign in — ' + a.name;
+  // Tell the user we're actively watching for the browser sign-in to finish, so
+  // an auto-completing OAuth (no code to paste) doesn't look like it hung.
+  $('loginStatus').textContent = 'Waiting for you to finish signing in in your browser… this closes by itself when done.';
+  $('loginModal').classList.remove('hidden');
   // A URL from a previous attempt would be stale and point at the wrong account.
   loginUrl = ''; loginUrlBuf = ''; $('loginUrlRow').classList.add('hidden');
   if (!loginTerm) {
