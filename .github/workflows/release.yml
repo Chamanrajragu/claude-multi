@@ -119,6 +119,7 @@ jobs:
             -e "s#Claude-Multi-Setup-[0-9]+\.[0-9]+\.[0-9]+\.exe#Claude-Multi-Setup-${VERSION}.exe#g" \
             -e "s#Claude-Multi-[0-9]+\.[0-9]+\.[0-9]+\.exe#Claude-Multi-${VERSION}.exe#g" \
             -e "s#Claude-Multi-[0-9]+\.[0-9]+\.[0-9]+-arm64\.dmg#Claude-Multi-${VERSION}-arm64.dmg#g" \
+            -e "s#Claude-Multi-[0-9]+\.[0-9]+\.[0-9]+\.dmg#Claude-Multi-${VERSION}.dmg#g" \
             -e "s#Claude-Multi-[0-9]+\.[0-9]+\.[0-9]+\.AppImage#Claude-Multi-${VERSION}.AppImage#g" \
             README.md
       - name: Commit if the links changed
