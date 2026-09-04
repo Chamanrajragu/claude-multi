@@ -746,7 +746,7 @@ cc.onChat((ev) => {
     case 'permission': onPermission(ev.requestId, ev.tool, ev.input); break;
     case 'info': onInfoLine(ev.text); break;
     case 'turn_end': applyTurnUsage(ev.usage, ev.costUsd, ev.contextWindow); endTurn({ usage: ev.usage, costUsd: ev.costUsd }); break;
-    case 'auth_failed': endTurn(); onErrorLine('⚠ Not signed in — open the account switcher (bottom-left) and click Log in.'); break;
+    case 'auth_failed': endTurn(); onErrorLine('This account needs signing in again (its session expired) — open the account switcher (bottom-left) and click Log in.'); break;
     case 'error': endTurn(); onErrorLine(ev.text || 'Something went wrong.'); break;
     case 'limit': endTurn(); break;
     case 'exit': endTurn(); break;

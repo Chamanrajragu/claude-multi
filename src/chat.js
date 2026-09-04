@@ -73,7 +73,11 @@ function extractResetAt(text, now = Date.now()) {
 
 function classifyError(text) {
   const s = String(text || '');
-  if (/not logged in|authentication_failed|please run \/login|invalid api key/i.test(s)) return 'auth';
+  // Auth failures also arrive as an expired/unrefreshable OAuth session — e.g.
+  // "Failed to authenticate: OAuth session expired and could not be refreshed".
+  // Those used to fall through to a generic error, so the chat just showed a
+  // red line and never told the user their account needed signing in again.
+  if (/not logged in|authentication_failed|failed to authenticate|please run \/login|invalid api key|oauth (?:session|token)|session (?:has )?expired|refresh(?:ing)? (?:the )?token|token (?:has )?expired|\b401\b|unauthorized/i.test(s)) return 'auth';
   if (NOT_A_USAGE_LIMIT.test(s)) return 'error';
   return limits.classify(s).kind === 'reached' ? 'limit' : 'error';
 }
@@ -436,7 +440,12 @@ class ChatSession {
 
   _emitError(text, terminalReason) {
     // Prefer the CLI's structured reason; fall back to reading the message.
-    const kind = classifyTerminalReason(terminalReason) || classifyError(text);
+    // Exception: an auth failure recognised in the text always wins. The CLI
+    // reports an expired OAuth session with a generic terminal_reason, which
+    // classifyTerminalReason maps to 'error' — that short-circuit hid the one
+    // error the user can actually act on ("sign in again").
+    const byText = classifyError(text);
+    const kind = byText === 'auth' ? 'auth' : (classifyTerminalReason(terminalReason) || byText);
     if (kind === 'auth') this.onEvent({ type: 'auth_failed' });
     else if (kind === 'limit') this.onEvent({ type: 'limit', text, resetAt: extractResetAt(text) });
     else this.onEvent({ type: 'error', text: TERMINAL_REASON_TEXT[terminalReason] || text || 'Something went wrong.' });
