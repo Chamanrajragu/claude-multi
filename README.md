@@ -109,11 +109,11 @@ No telemetry, no analytics, no update pings, no servers. Everything stays on you
 
 | Platform | Direct download | Notes |
 |----------|-----------------|-------|
-| **Windows** | [⬇ Claude-Multi-Setup-1.30.6.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.6/Claude-Multi-Setup-1.30.6.exe) | Recommended — installs like any app |
-| **Windows Portable** | [⬇ Claude-Multi-1.30.6.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.6/Claude-Multi-1.30.6.exe) | No install needed, run from anywhere |
-| **macOS (Apple Silicon)** | [⬇ Claude-Multi-1.30.6-arm64.dmg](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.6/Claude-Multi-1.30.6-arm64.dmg) | M1–M4 Macs |
-| **macOS (Intel)** | [⬇ Claude-Multi-1.30.6.dmg](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.6/Claude-Multi-1.30.6.dmg) | Intel-based Macs |
-| **Linux** | [⬇ Claude-Multi-1.30.6.AppImage](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.6/Claude-Multi-1.30.6.AppImage) | Works on most distros |
+| **Windows** | [⬇ Claude-Multi-Setup-1.30.7.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.7/Claude-Multi-Setup-1.30.7.exe) | Recommended — installs like any app |
+| **Windows Portable** | [⬇ Claude-Multi-1.30.7.exe](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.7/Claude-Multi-1.30.7.exe) | No install needed, run from anywhere |
+| **macOS (Apple Silicon)** | [⬇ Claude-Multi-1.30.7-arm64.dmg](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.7/Claude-Multi-1.30.7-arm64.dmg) | M1–M4 Macs |
+| **macOS (Intel)** | [⬇ Claude-Multi-1.30.7.dmg](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.7/Claude-Multi-1.30.7.dmg) | Intel-based Macs |
+| **Linux** | [⬇ Claude-Multi-1.30.7.AppImage](https://github.com/Chamanrajragu/claude-multi/releases/download/v1.30.7/Claude-Multi-1.30.7.AppImage) | Works on most distros |
 
 **Always-latest links:** [Windows installer](https://github.com/Chamanrajragu/claude-multi/releases/latest) · [all files & release notes](https://github.com/Chamanrajragu/claude-multi/releases/latest)
 
