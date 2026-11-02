@@ -1,9 +1,7 @@
 # Security
 
-Please report security problems privately, not in a public issue: use
-**[Report a vulnerability](https://github.com/Chamanrajragu/claude-multi/security/advisories/new)**
-on this repository, or the support address in the footer of
-https://purffle.com/claude-multi/.
+Please report security problems privately, not in a public issue: email
+**[support@purffle.com](mailto:support@purffle.com)** with "Security" in the subject.
 
 Include the app version, your operating system, and steps to reproduce.
-Only the latest release is supported; please update before reporting.
+Only the latest version from https://purffle.com/claude-multi/download/ is supported; please update before reporting.

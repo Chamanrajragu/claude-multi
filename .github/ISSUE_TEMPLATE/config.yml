@@ -1,8 +1,11 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
+  - name: Download Claude Multi
+    url: https://purffle.com/claude-multi/download/
+    about: Installers are published only on purffle.com.
+  - name: Support, bugs and feature requests
+    url: https://purffle.com/claude-multi/#faq
+    about: Read the FAQ, or email support@purffle.com.
   - name: Billing or account question
     url: https://purffle.com/claude-multi/account/
     about: Plans, payments and computers signed in are managed on your account page.
-  - name: Security problem
-    url: https://github.com/Chamanrajragu/claude-multi/security/advisories/new
-    about: Please report security problems privately.
