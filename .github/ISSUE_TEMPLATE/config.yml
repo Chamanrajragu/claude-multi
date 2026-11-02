@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Billing or account question
+    url: https://purffle.com/claude-multi/account/
+    about: Plans, payments and computers signed in are managed on your account page.
+  - name: Security problem
+    url: https://github.com/Chamanrajragu/claude-multi/security/advisories/new
+    about: Please report security problems privately.
