@@ -6,7 +6,7 @@
 
 ### Run multiple Claude accounts in one desktop app. Auto-switch when one hits its usage limit.
 
-[![Version 1.31.0](https://img.shields.io/badge/Version-1.31.0-d97757)](https://purffle.com/claude-multi/download/)
+[![Version 1.36.0](https://img.shields.io/badge/Version-1.36.0-d97757)](https://purffle.com/claude-multi/download/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://purffle.com/claude-multi/download/)
 [![Plans from $5/month](https://img.shields.io/badge/Plans-from%20%245%2Fmonth-d97757)](https://purffle.com/claude-multi/pricing/)
 
@@ -14,7 +14,7 @@
 
 <br/>
 
-<a href="https://purffle.com/claude-multi/"><img src="docs/screenshot-main.png" width="860" alt="Claude Multi desktop app: a Claude Code chat with file edits, test runs and a sidebar of recent chats across several projects and accounts" /></a>
+<a href="https://purffle.com/claude-multi/"><img src="docs/screenshot-main.png" width="860" alt="Claude Multi desktop app: a Claude Code chat that reads, edits and tests a file, with a sidebar of chats grouped by project and the account switcher at the bottom" /></a>
 
 </div>
 
@@ -45,7 +45,7 @@ takes hours. No API key: it uses your normal Claude Pro, Max or Team subscriptio
 
 ### Work faster with Claude Code
 - **🧵 Parallel chats**: several projects at once, each with its own folder, account and session.
-- **🧠 Model and effort per chat**: Fable 5, Opus 5, Opus 4.8, Sonnet 5, Haiku 4.5 or your account default, effort from Low to Max.
+- **🧠 Model and effort per chat**: Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5, an older model or your account default, effort from Low to Max.
 - **⌨️ Command palette**: Ctrl+K searches every action, chat, model and account; Ctrl+1 to 9 jumps between accounts.
 - **🔎 @file autocomplete**: type @ to fuzzy-search any file in your project.
 - **💬 Full composer**: voice input, pasted images, drag-and-drop files, prompt templates, prompt history and a saved draft per chat.
@@ -72,21 +72,23 @@ takes hours. No API key: it uses your normal Claude Pro, Max or Team subscriptio
 |:---:|:---:|
 | <img src="docs/screenshot-limit.png" width="420" alt="Claude usage limit reached: Claude Multi offers to switch to another account and continue where Claude left off" /> | <img src="docs/screenshot-autoloop.png" width="420" alt="Claude Multi 24/7 auto-loop rotating one prompt across several Claude accounts" /> |
 
-| Activity dashboard | Usage at a glance |
+| Usage dashboard | Usage at a glance |
 |:---:|:---:|
-| <img src="docs/screenshot-dashboard.png" width="420" alt="Claude Multi dashboard with per-account status and cooldown countdowns" /> | <img src="docs/screenshot-usage.png" width="420" alt="Claude Multi usage popover with context left and usage left on every account" /> |
+| <img src="docs/screenshot-dashboard.png" width="420" alt="Claude Multi usage dashboard: plan usage limits for every Claude account, one cooling down with its reset time" /> | <img src="docs/screenshot-usage.png" width="420" alt="Claude Multi usage popover with context left and usage left on every account" /> |
 
 | Account switcher | Model per chat |
 |:---:|:---:|
-| <img src="docs/screenshot-accounts.png" width="420" alt="Claude Multi account switcher with several signed-in Claude accounts" /> | <img src="docs/screenshot-models.png" width="420" alt="Claude Multi model picker for a single chat" /> |
+| <img src="docs/screenshot-accounts.png" width="420" alt="Claude Multi account menu listing four signed-in Claude accounts with their plans" /> | <img src="docs/screenshot-models.png" width="420" alt="Claude Multi model picker for a single chat: the account default, Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5 and older models" /> |
 
 | Context inspector | Token savers |
 |:---:|:---:|
-| <img src="docs/screenshot-context.png" width="420" alt="Claude Multi context inspector showing what fills the context window" /> | <img src="docs/screenshot-tokens.png" width="420" alt="Claude Multi token-saving settings: auto-compact, step and spend caps" /> |
+| <img src="docs/screenshot-context.png" width="420" alt="Claude Multi context inspector showing which messages, tools, skills and CLAUDE.md files fill the context window" /> | <img src="docs/screenshot-tokens.png" width="420" alt="Claude Multi token-saving settings: auto-compact, step and spend caps" /> |
 
 | Command palette | Light theme |
 |:---:|:---:|
-| <img src="docs/screenshot-palette.png" width="420" alt="Claude Multi command palette with fuzzy search" /> | <img src="docs/screenshot-light.png" width="420" alt="Claude Multi light theme with inline diffs" /> |
+| <img src="docs/screenshot-palette.png" width="420" alt="Claude Multi command palette with fuzzy search" /> | <img src="docs/screenshot-light.png" width="420" alt="Claude Multi light theme with red and green diffs beside the chat" /> |
+
+Every screenshot is the real app, version 1.36.0, running with demo accounts and projects.
 
 **[See every feature on purffle.com →](https://purffle.com/claude-multi/)**
 
@@ -106,7 +108,7 @@ time and your plan stays active until the end of the period you paid for.
 
 ## Download
 
-**[Download Claude Multi 1.31.0 from purffle.com →](https://purffle.com/claude-multi/download/)**
+**[Download Claude Multi 1.36.0 from purffle.com →](https://purffle.com/claude-multi/download/)**
 
 The download page picks the right file for your computer:
 
@@ -117,7 +119,7 @@ The download page picks the right file for your computer:
 | **macOS 11+, Intel** | `.dmg` |
 | **Linux, 64-bit** | `.AppImage` |
 
-**You also need:** [Node.js 18+](https://nodejs.org) and the [Claude Code CLI](https://claude.com/claude-code).
+**You also need:** the [Claude Code CLI](https://claude.com/claude-code). No Node.js install is needed.
 
 ## Quick start
 
